@@ -8,6 +8,7 @@ struct SettingsView: View {
 
         Form {
             Section("General") {
+                Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Persist history across reboots", isOn: $settings.persistAcrossReboots)
                 Stepper(
                     "History size: \(settings.maxHistorySize)",

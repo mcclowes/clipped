@@ -1,4 +1,5 @@
 import Observation
+import ServiceManagement
 import SwiftUI
 
 @MainActor
@@ -21,6 +22,20 @@ final class SettingsManager {
         didSet { UserDefaults.standard.set(secureTimeout, forKey: "secureTimeout") }
     }
 
+    var launchAtLogin: Bool {
+        didSet {
+            do {
+                if launchAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                launchAtLogin = !launchAtLogin
+            }
+        }
+    }
+
     init() {
         self.persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
         self.maxHistorySize = max(UserDefaults.standard.integer(forKey: "maxHistorySize"), 10)
@@ -30,5 +45,6 @@ final class SettingsManager {
         self.secureTimeout = UserDefaults.standard.object(forKey: "secureTimeout") == nil
             ? 0
             : UserDefaults.standard.integer(forKey: "secureTimeout")
+        self.launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }
