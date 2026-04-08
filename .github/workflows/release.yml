@@ -48,7 +48,7 @@ jobs:
 
       - name: Update Homebrew tap
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           CASK_CONTENT=$(cat <<CASKEOF
           cask "clipped" do
