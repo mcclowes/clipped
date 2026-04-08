@@ -21,7 +21,7 @@ struct ClippersApp: App {
                     }
                 }
         } label: {
-            Label("Clippers", systemImage: clipboardManager.items.isEmpty ? "clipboard" : "clipboard.fill")
+            Image(systemName: clipboardManager.items.isEmpty ? "clipboard" : "clipboard.fill")
         }
         .menuBarExtraStyle(.window)
 
