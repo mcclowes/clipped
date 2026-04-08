@@ -2,6 +2,10 @@ import SwiftUI
 
 struct SearchBar: View {
     @Binding var text: String
+    var onArrowUp: (() -> Void)?
+    var onArrowDown: (() -> Void)?
+    var onReturnKey: (() -> Void)?
+    var onEscapeKey: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 6) {
@@ -12,6 +16,22 @@ struct SearchBar: View {
             TextField("Search clipboard...", text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
+                .onKeyPress(.upArrow) {
+                    onArrowUp?()
+                    return onArrowUp != nil ? .handled : .ignored
+                }
+                .onKeyPress(.downArrow) {
+                    onArrowDown?()
+                    return onArrowDown != nil ? .handled : .ignored
+                }
+                .onKeyPress(.return) {
+                    onReturnKey?()
+                    return onReturnKey != nil ? .handled : .ignored
+                }
+                .onKeyPress(.escape) {
+                    onEscapeKey?()
+                    return onEscapeKey != nil ? .handled : .ignored
+                }
 
             if !text.isEmpty {
                 Button {

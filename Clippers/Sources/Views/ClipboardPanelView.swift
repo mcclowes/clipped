@@ -7,6 +7,7 @@ struct ClipboardPanelView: View {
     @State private var recentlyClearedItems: [ClipboardItem]?
     @State private var selectedIndex: Int?
     @State private var showQuickMenu = false
+    @State private var showCopiedToast = false
 
     private var allVisibleItems: [ClipboardItem] {
         manager.pinnedItems + manager.filteredItems
@@ -75,10 +76,7 @@ struct ClipboardPanelView: View {
                 quickMenuButton(
                     title: "Settings...",
                     icon: "gear",
-                    action: {
-                        NSApp.activate()
-                        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                    }
+                    action: openSettings
                 )
 
                 quickMenuButton(
@@ -117,7 +115,13 @@ struct ClipboardPanelView: View {
         @Bindable var manager = manager
 
         return VStack(spacing: 0) {
-            SearchBar(text: $manager.searchQuery)
+            SearchBar(
+                text: $manager.searchQuery,
+                onArrowUp: { moveSelection(by: -1) },
+                onArrowDown: { moveSelection(by: 1) },
+                onReturnKey: { copySelectedItem() },
+                onEscapeKey: { handleEscape() }
+            )
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
                 .padding(.bottom, 8)
@@ -131,38 +135,50 @@ struct ClipboardPanelView: View {
             if manager.pinnedItems.isEmpty && manager.filteredItems.isEmpty {
                 emptyState
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 2) {
-                        if !manager.pinnedItems.isEmpty {
-                            Section {
-                                ForEach(manager.pinnedItems) { item in
-                                    ClipboardItemRow(
-                                        item: item,
-                                        isSelected: indexOf(item) == selectedIndex
-                                    )
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            if !manager.pinnedItems.isEmpty {
+                                Section {
+                                    ForEach(manager.pinnedItems) { item in
+                                        ClipboardItemRow(
+                                            item: item,
+                                            isSelected: indexOf(item) == selectedIndex,
+                                            onCopy: { dismissAfterCopy() }
+                                        )
+                                        .id(item.id)
+                                    }
+                                } header: {
+                                    sectionHeader("Pinned")
                                 }
-                            } header: {
-                                sectionHeader("Pinned")
                             }
-                        }
 
-                        if !manager.filteredItems.isEmpty {
-                            Section {
-                                ForEach(manager.filteredItems) { item in
-                                    ClipboardItemRow(
-                                        item: item,
-                                        isSelected: indexOf(item) == selectedIndex
-                                    )
-                                }
-                            } header: {
-                                if !manager.pinnedItems.isEmpty {
-                                    sectionHeader("Recent")
+                            if !manager.filteredItems.isEmpty {
+                                Section {
+                                    ForEach(manager.filteredItems) { item in
+                                        ClipboardItemRow(
+                                            item: item,
+                                            isSelected: indexOf(item) == selectedIndex,
+                                            onCopy: { dismissAfterCopy() }
+                                        )
+                                        .id(item.id)
+                                    }
+                                } header: {
+                                    if !manager.pinnedItems.isEmpty {
+                                        sectionHeader("Recent")
+                                    }
                                 }
                             }
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .onChange(of: selectedIndex) { _, newIndex in
+                        scrollToSelected(proxy: proxy, index: newIndex)
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: NSPopover.didShowNotification)) { _ in
+                        scrollToSelected(proxy: proxy, index: selectedIndex)
+                    }
                 }
             }
 
@@ -180,26 +196,21 @@ struct ClipboardPanelView: View {
             return .handled
         }
         .onKeyPress(.return) {
-            if let index = selectedIndex, index < allVisibleItems.count {
-                manager.copyToClipboard(allVisibleItems[index])
-                return .handled
-            }
-            return .ignored
+            copySelectedItem()
+            return selectedIndex != nil ? .handled : .ignored
         }
         .onKeyPress(.escape) {
-            if selectedIndex != nil {
-                selectedIndex = nil
-                return .handled
-            }
-            if !manager.searchQuery.isEmpty {
-                manager.searchQuery = ""
-                return .handled
-            }
-            dismissPanel()
+            handleEscape()
             return .handled
         }
         .onChange(of: manager.searchQuery) {
             selectedIndex = nil
+        }
+        .overlay {
+            if showCopiedToast {
+                copiedToastView
+                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+            }
         }
         .overlay {
             if showOnboarding {
@@ -268,10 +279,7 @@ struct ClipboardPanelView: View {
             .help("Export all visible items to clipboard")
             .disabled(manager.pinnedItems.isEmpty && manager.filteredItems.isEmpty)
 
-            Button {
-                NSApp.activate()
-                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-            } label: {
+            Button(action: openSettings) {
                 Image(systemName: "gear")
                     .foregroundStyle(.secondary)
             }
@@ -301,6 +309,23 @@ struct ClipboardPanelView: View {
             .padding(.top, 6)
     }
 
+    private func copySelectedItem() {
+        if let index = selectedIndex, index < allVisibleItems.count {
+            manager.copyToClipboard(allVisibleItems[index])
+            dismissAfterCopy()
+        }
+    }
+
+    private func handleEscape() {
+        if selectedIndex != nil {
+            selectedIndex = nil
+        } else if !manager.searchQuery.isEmpty {
+            manager.searchQuery = ""
+        } else {
+            dismissPanel()
+        }
+    }
+
     private func moveSelection(by delta: Int) {
         let count = allVisibleItems.count
         guard count > 0 else { return }
@@ -315,12 +340,55 @@ struct ClipboardPanelView: View {
         }
     }
 
+    private func scrollToSelected(proxy: ScrollViewProxy, index: Int?) {
+        guard let index, index >= 0, index < allVisibleItems.count else { return }
+        withAnimation(.easeInOut(duration: 0.15)) {
+            proxy.scrollTo(allVisibleItems[index].id, anchor: .center)
+        }
+    }
+
     private func indexOf(_ item: ClipboardItem) -> Int? {
         allVisibleItems.firstIndex(where: { $0.id == item.id })
     }
 
+    private var copiedToastView: some View {
+        VStack {
+            Spacer()
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Copied")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
+            Spacer()
+        }
+    }
+
+    private func dismissAfterCopy() {
+        withAnimation(.easeIn(duration: 0.15)) {
+            showCopiedToast = true
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            showCopiedToast = false
+            dismissPanel()
+        }
+    }
+
     private func dismissPanel() {
         StatusBarController.shared.close()
+    }
+
+    private func openSettings() {
+        let state = AppState.shared
+        let settingsContent = SettingsView()
+            .environment(state.clipboardManager)
+            .environment(state.settingsManager)
+            .environment(state.screenshotWatcher)
+        StatusBarController.shared.openSettings(contentView: settingsContent)
     }
 }
 

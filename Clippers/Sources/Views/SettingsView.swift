@@ -25,10 +25,15 @@ struct SettingsView: View {
                         if enabled {
                             if let folder = screenshotWatcher.resolveBookmark() {
                                 screenshotWatcher.startWatching(folder: folder)
-                            } else if let folder = screenshotWatcher.promptForFolder() {
-                                screenshotWatcher.startWatching(folder: folder)
                             } else {
-                                settings.captureScreenshots = false
+                                // Defer modal panel out of SwiftUI view update cycle
+                                DispatchQueue.main.async {
+                                    if let folder = screenshotWatcher.promptForFolder() {
+                                        screenshotWatcher.startWatching(folder: folder)
+                                    } else {
+                                        settings.captureScreenshots = false
+                                    }
+                                }
                             }
                         } else {
                             screenshotWatcher.stopWatching()
@@ -42,8 +47,10 @@ struct SettingsView: View {
                             .font(.caption)
                         Spacer()
                         Button("Change…") {
-                            if let newFolder = screenshotWatcher.promptForFolder() {
-                                screenshotWatcher.startWatching(folder: newFolder)
+                            DispatchQueue.main.async {
+                                if let newFolder = screenshotWatcher.promptForFolder() {
+                                    screenshotWatcher.startWatching(folder: newFolder)
+                                }
                             }
                         }
                         .font(.caption)

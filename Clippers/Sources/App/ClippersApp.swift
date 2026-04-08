@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
         cm.settingsManager = sm
         cm.loadPersistedHistory()
         sw.clipboardManager = cm
+        sw.requestNotificationPermission()
         if sm.captureScreenshots,
            let folder = sw.resolveBookmark()
         {

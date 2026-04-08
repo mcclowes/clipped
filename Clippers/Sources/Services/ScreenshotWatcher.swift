@@ -1,5 +1,6 @@
 import AppKit
 import Observation
+import UserNotifications
 
 @MainActor
 @Observable
@@ -61,6 +62,10 @@ final class ScreenshotWatcher {
         return url
     }
 
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
     func startWatching(folder: URL) {
         stopWatching()
 
@@ -110,6 +115,9 @@ final class ScreenshotWatcher {
             )
             clipboardManager?.items.insert(item, at: 0)
 
+            // Copy screenshot to system clipboard so user can paste immediately
+            clipboardManager?.copyToClipboard(item)
+
             let maxSize = ClipboardManager.maxHistorySize
             while clipboardManager?.items.filter({ !$0.isPinned }).count ?? 0 > maxSize {
                 if let lastUnpinned = clipboardManager?.items.lastIndex(where: { !$0.isPinned }) {
@@ -118,9 +126,25 @@ final class ScreenshotWatcher {
             }
 
             clipboardManager?.saveHistory()
+
+            // Show a disappearing notification
+            sendScreenshotNotification(fileName: fileName)
         }
 
         knownFiles = currentFiles
+    }
+
+    private func sendScreenshotNotification(fileName: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "Screenshot captured"
+        content.body = "Copied to clipboard — ready to paste"
+
+        let request = UNNotificationRequest(
+            identifier: "screenshot-\(fileName)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func imageFiles(in folder: URL) -> [String] {
