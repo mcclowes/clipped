@@ -1,9 +1,10 @@
 cask "clipped" do
   version :latest
-  url "https://github.com/mcclowes/clippers/releases/latest/download/Clipped.zip"
+  sha256 :no_check
+  url "https://github.com/mcclowes/clipped/releases/latest/download/Clipped.zip"
   name "Clipped"
   desc "Native macOS clipboard manager"
-  homepage "https://github.com/mcclowes/clippers"
+  homepage "https://github.com/mcclowes/clipped"
 
   app "Clipped.app"
 

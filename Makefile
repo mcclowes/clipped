@@ -14,7 +14,7 @@ test:
 	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug test
 
 release:
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Release build
+	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Release CODE_SIGN_IDENTITY="-" CODE_SIGNING_ALLOWED=YES build
 	@echo "Built to: $(BUILD_DIR)/../Release/Clipped.app"
 
 package: release

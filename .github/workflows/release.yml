@@ -45,3 +45,42 @@ jobs:
             **SHA256:** `${{ steps.artifact.outputs.sha256 }}`
           draft: false
           prerelease: false
+
+      - name: Update Homebrew tap
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CASK_CONTENT=$(cat <<CASKEOF
+          cask "clipped" do
+            version "${{ github.ref_name }}"
+            sha256 "${{ steps.artifact.outputs.sha256 }}"
+            url "https://github.com/mcclowes/clipped/releases/download/${{ github.ref_name }}/Clipped.zip"
+            name "Clipped"
+            desc "Native macOS clipboard manager"
+            homepage "https://github.com/mcclowes/clipped"
+
+            app "Clipped.app"
+
+            zap trash: [
+              "~/Library/Application Support/Clipped",
+              "~/Library/Preferences/com.mcclowes.Clipped.plist",
+            ]
+          end
+          CASKEOF
+          )
+
+          # Get current file SHA for the update API call
+          FILE_SHA=$(gh api repos/mcclowes/homebrew-clipped/contents/Casks/clipped.rb -q .sha 2>/dev/null || echo "")
+
+          if [ -n "$FILE_SHA" ]; then
+            gh api repos/mcclowes/homebrew-clipped/contents/Casks/clipped.rb \
+              -X PUT \
+              -f message="Update clipped to ${{ github.ref_name }}" \
+              -f content="$(echo "$CASK_CONTENT" | base64)" \
+              -f sha="$FILE_SHA"
+          else
+            gh api repos/mcclowes/homebrew-clipped/contents/Casks/clipped.rb \
+              -X PUT \
+              -f message="Add clipped ${{ github.ref_name }}" \
+              -f content="$(echo "$CASK_CONTENT" | base64)"
+          fi

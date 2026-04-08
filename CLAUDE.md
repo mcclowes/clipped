@@ -46,6 +46,7 @@ Clipped/
   Resources/
     Info.plist
     Clipped.entitlements
+    Assets.xcassets/         # App icon
 ```
 
 ## Key conventions
@@ -55,7 +56,7 @@ Clipped/
 - `@Observable` macro (not `ObservableObject`)
 - Environment-based DI via `.environment()` in SwiftUI
 - No third-party dependencies
-- App-sandboxed with network client entitlement (for link metadata fetching)
+- App-sandboxed with entitlements: network client, user-selected read-only files, app-scope bookmarks
 
 ## Testing
 

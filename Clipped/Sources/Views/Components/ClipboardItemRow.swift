@@ -24,6 +24,7 @@ struct ClipboardItemRow: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(isSelected ? Color.accentColor.opacity(0.15) : isHovered ? Color.primary.opacity(0.06) : .clear)
+        .contentShape(Rectangle())
         .clipShape(.rect(cornerRadius: 6))
         .onHover { isHovered = $0 }
         .onTapGesture {
