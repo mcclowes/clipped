@@ -13,6 +13,7 @@
 		1DBEA970275D4B3ADE0DA981 /* ClipboardManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22C6E332241D4A9B8F5C83E0 /* ClipboardManagerTests.swift */; };
 		1E838B0133880CD807A94312 /* ClipboardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E042705010E6DA18CABCD1C /* ClipboardItem.swift */; };
 		24740F74CC919018070361AE /* ClipboardPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55BEA8F6FB46DB8FD82C7F25 /* ClipboardPanelView.swift */; };
+		284AB0A2598E24E620D28386 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BFACBF0286EE7A3CF00E7DB2 /* Assets.xcassets */; };
 		2D346817F2AEDFEF3DB81C2F /* ScreenshotWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = E81BE8E2D0C7FAC791BA7ED4 /* ScreenshotWatcher.swift */; };
 		32DCE955E363AFBFF8DBBA02 /* ClipboardItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C28878F7397D3E86EAFB5E3 /* ClipboardItemRow.swift */; };
 		4CEA79822B7BADFEDE44CF3A /* LinkMetadataFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7505E522490CDE6FA855BC02 /* LinkMetadataFetcher.swift */; };
@@ -54,6 +55,7 @@
 		9E042705010E6DA18CABCD1C /* ClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItem.swift; sourceTree = "<group>"; };
 		A02C2BE0BB3F651DB8914787 /* Clipped.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clipped.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0FA192D4C50CD0A8CDAC59A /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		BFACBF0286EE7A3CF00E7DB2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E0BD8EEAD1418A244C4688D6 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		E1559047A8273D742321C001 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		E6B976EDC7FE5D9BD3742088 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
@@ -93,6 +95,14 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		6A2AE9F39696EB62C6EC366F /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				BFACBF0286EE7A3CF00E7DB2 /* Assets.xcassets */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
 		90636D886BE7B12512799141 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -113,6 +123,7 @@
 		B3C915C8CE83B83E173E839A = {
 			isa = PBXGroup;
 			children = (
+				6A2AE9F39696EB62C6EC366F /* Resources */,
 				3846041D2D626F7A52657093 /* Sources */,
 				AF6A0B9F72FD6719705FC3F7 /* Tests */,
 				90636D886BE7B12512799141 /* Products */,
@@ -180,6 +191,7 @@
 			buildConfigurationList = E495731162853B576E414730 /* Build configuration list for PBXNativeTarget "Clipped" */;
 			buildPhases = (
 				F41F3D00D69FCA8D07D03108 /* Sources */,
+				D3DB1F8A0E8868B88BCC8782 /* Resources */,
 			);
 			buildRules = (
 			);
@@ -222,6 +234,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D3DB1F8A0E8868B88BCC8782 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				284AB0A2598E24E620D28386 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		87D03F2E143551E1A29B96BC /* Sources */ = {
