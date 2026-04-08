@@ -125,11 +125,23 @@ struct ClipboardPanelView: View {
             .help("Export all visible items to clipboard")
             .disabled(manager.pinnedItems.isEmpty && manager.filteredItems.isEmpty)
 
-            SettingsLink {
+            Button {
+                NSApp.activate()
+                NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+            } label: {
                 Image(systemName: "gear")
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Quit Clippers")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

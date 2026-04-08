@@ -219,6 +219,10 @@ final class ClipboardManager {
 
         lastChangeCount = pasteboard.changeCount
 
+        if settingsManager?.playSoundOnCopy ?? true {
+            NSSound(named: "Tink")?.play()
+        }
+
         // Move item to top
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             let moved = items.remove(at: index)

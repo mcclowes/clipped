@@ -22,6 +22,10 @@ final class SettingsManager {
         didSet { UserDefaults.standard.set(secureTimeout, forKey: "secureTimeout") }
     }
 
+    var playSoundOnCopy: Bool {
+        didSet { UserDefaults.standard.set(playSoundOnCopy, forKey: "playSoundOnCopy") }
+    }
+
     var launchAtLogin: Bool {
         didSet {
             do {
@@ -45,6 +49,9 @@ final class SettingsManager {
         self.secureTimeout = UserDefaults.standard.object(forKey: "secureTimeout") == nil
             ? 0
             : UserDefaults.standard.integer(forKey: "secureTimeout")
+        self.playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

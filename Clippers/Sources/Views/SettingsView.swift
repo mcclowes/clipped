@@ -10,6 +10,7 @@ struct SettingsView: View {
             Section("General") {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Persist history across reboots", isOn: $settings.persistAcrossReboots)
+                Toggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
                 Stepper(
                     "History size: \(settings.maxHistorySize)",
                     value: $settings.maxHistorySize,

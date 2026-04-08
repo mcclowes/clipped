@@ -4,12 +4,18 @@ A lightweight, native macOS clipboard manager that fits the platform aesthetic a
 
 ## Features
 
-- **Clipboard history** — Tracks the last 10 clipboard entries with content type detection
+- **Clipboard history** — Tracks clipboard entries with content type detection (configurable history size, default 10)
 - **Format preservation** — Rich text, URLs, images, and code snippets retain their formatting
 - **Pinning** — Pin frequently used items so they persist above the history window
 - **Search & filter** — Filter by content type or search by text
-- **Secure mode** — Automatically skips clipboard entries from password managers
+- **Secure mode** — Automatically skips or auto-expires clipboard entries from password managers (configurable timeout)
 - **Global hotkey** — `⌘⇧V` to open the panel from anywhere
+- **Persistence** — Optionally persist clipboard history across app restarts
+- **Launch at login** — Start Clippers automatically via `SMAppService`
+- **Paste matching style** — Strip formatting and paste as plain text
+- **Markdown conversion** — Convert rich text clipboard items to Markdown
+- **Link previews** — Automatically fetches page titles for URL items
+- **Export** — Merge and copy multiple clipboard items at once
 
 ## Requirements
 
@@ -20,22 +26,39 @@ A lightweight, native macOS clipboard manager that fits the platform aesthetic a
 ## Building
 
 ```bash
+make generate  # Generate Xcode project from project.yml via XcodeGen
+make build     # Build the app
+make run       # Build and launch the app
+```
+
+Or manually:
+
+```bash
 cd Clippers
 xcodegen generate
-xcodebuild -project Clippers.xcodeproj -scheme Clippers -destination 'platform=macOS' build
+xcodebuild -project Clippers.xcodeproj -scheme Clippers -configuration Debug build
 ```
 
 ## Testing
 
 ```bash
-xcodebuild -project Clippers.xcodeproj -scheme ClippersTests -destination 'platform=macOS' test
+make test
+```
+
+Or manually:
+
+```bash
+xcodebuild -project Clippers.xcodeproj -scheme Clippers -configuration Debug test
 ```
 
 ## Architecture
 
-Menu bar-only app (`LSUIElement`) using SwiftUI's `MenuBarExtra` with MVVM:
+Menu bar-only app using SwiftUI's `MenuBarExtra` (no Dock icon, no app switcher entry):
 
 - `ClipboardManager` — `@Observable` service that polls `NSPasteboard` for changes
-- `SettingsManager` — `@Observable` wrapper around `UserDefaults`
+- `SettingsManager` — `@Observable` wrapper around `UserDefaults` and `SMAppService`
+- `HistoryStore` — JSON-based persistence to Application Support directory
 - `HotkeyManager` — Carbon-based global hotkey registration (`⌘⇧V`)
-- SwiftUI views for the panel, item rows, search, and filtering
+- `LinkMetadataFetcher` — Async page title resolution for URL items
+- `MarkdownConverter` — RTF-to-Markdown conversion
+- SwiftUI views for the panel, item rows, search, filtering, settings, and onboarding
