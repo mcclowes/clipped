@@ -220,7 +220,7 @@ final class ClipboardManager {
         lastChangeCount = pasteboard.changeCount
 
         if settingsManager?.playSoundOnCopy ?? true {
-            NSSound(named: "Tink")?.play()
+            NSSound(named: "Pop")?.play()
         }
 
         // Move item to top
