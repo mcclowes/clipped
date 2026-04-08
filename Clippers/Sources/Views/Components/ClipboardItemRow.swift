@@ -35,6 +35,10 @@ struct ClipboardItemRow: View {
                 }
             }
 
+            Button("Paste and match style") {
+                manager.pasteMatchingStyle(item)
+            }
+
             if case .url(let url) = item.content {
                 Button("Open URL") {
                     NSWorkspace.shared.open(url)

@@ -203,6 +203,29 @@ final class ClipboardManager {
         }
     }
 
+    func pasteMatchingStyle(_ item: ClipboardItem) {
+        // Copy as plain text, then simulate Cmd+V
+        copyToClipboard(item, asPlainText: true)
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(100))
+            simulatePaste()
+        }
+    }
+
+    private func simulatePaste() {
+        let source = CGEventSource(stateID: .hidSystemState)
+
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // V key
+        keyDown?.flags = .maskCommand
+
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+        keyUp?.flags = .maskCommand
+
+        keyDown?.post(tap: .cghidEventTap)
+        keyUp?.post(tap: .cghidEventTap)
+    }
+
     func copyAsMarkdown(_ item: ClipboardItem) {
         guard case .richText(let rtfData, let plain) = item.content,
               let markdown = MarkdownConverter.convert(rtfData: rtfData)
