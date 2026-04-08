@@ -4,12 +4,20 @@ import SwiftUI
 struct ClippersApp: App {
     @State private var clipboardManager = ClipboardManager()
     @State private var settingsManager = SettingsManager()
+    @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
+    @State private var showOnboarding = false
 
     var body: some Scene {
         MenuBarExtra {
-            ClipboardPanelView()
+            ClipboardPanelView(showOnboarding: $showOnboarding)
                 .environment(clipboardManager)
                 .environment(settingsManager)
+                .task {
+                    if !hasLaunchedBefore {
+                        showOnboarding = true
+                        hasLaunchedBefore = true
+                    }
+                }
         } label: {
             Label("Clippers", systemImage: clipboardManager.items.isEmpty ? "clipboard" : "clipboard.fill")
         }

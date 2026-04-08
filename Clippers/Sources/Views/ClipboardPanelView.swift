@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ClipboardPanelView: View {
     @Environment(ClipboardManager.self) private var manager
+    @Binding var showOnboarding: Bool
     @State private var showClearConfirmation = false
     @State private var recentlyClearedItems: [ClipboardItem]?
 
@@ -57,6 +58,11 @@ struct ClipboardPanelView: View {
             bottomBar
         }
         .frame(width: 320, height: 420)
+        .overlay {
+            if showOnboarding {
+                OnboardingOverlay(isPresented: $showOnboarding)
+            }
+        }
     }
 
     private var emptyState: some View {
