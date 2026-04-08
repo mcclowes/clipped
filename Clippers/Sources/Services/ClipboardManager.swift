@@ -223,6 +223,22 @@ final class ClipboardManager {
         }
     }
 
+    func exportItems(_ items: [ClipboardItem]) {
+        let merged = items.compactMap { $0.plainText }.joined(separator: "\n\n---\n\n")
+        guard !merged.isEmpty else { return }
+
+        stopMonitoring()
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(merged, forType: .string)
+        lastChangeCount = pasteboard.changeCount
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            startMonitoring()
+        }
+    }
+
     func togglePin(_ item: ClipboardItem) {
         item.isPinned.toggle()
         if item.isPinned {

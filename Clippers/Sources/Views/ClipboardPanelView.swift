@@ -108,6 +108,17 @@ struct ClipboardPanelView: View {
 
             Spacer()
 
+            Button {
+                let allTextItems = manager.pinnedItems + manager.filteredItems
+                manager.exportItems(allTextItems)
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Export all visible items to clipboard")
+            .disabled(manager.pinnedItems.isEmpty && manager.filteredItems.isEmpty)
+
             SettingsLink {
                 Image(systemName: "gear")
                     .foregroundStyle(.secondary)
