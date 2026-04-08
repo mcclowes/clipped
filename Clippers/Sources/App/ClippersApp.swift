@@ -14,6 +14,7 @@ struct ClippersApp: App {
                 .environment(settingsManager)
                 .task {
                     clipboardManager.settingsManager = settingsManager
+                    clipboardManager.loadPersistedHistory()
                     if !hasLaunchedBefore {
                         showOnboarding = true
                         hasLaunchedBefore = true

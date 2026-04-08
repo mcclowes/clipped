@@ -53,6 +53,18 @@ final class ClipboardManager {
         startMonitoring()
     }
 
+    func loadPersistedHistory() {
+        guard settingsManager?.persistAcrossReboots == true else { return }
+        let (loaded, pinned) = HistoryStore.shared.load()
+        if items.isEmpty { items = loaded }
+        if pinnedItems.isEmpty { pinnedItems = pinned }
+    }
+
+    func saveHistory() {
+        guard settingsManager?.persistAcrossReboots == true else { return }
+        HistoryStore.shared.save(items: items, pinnedItems: pinnedItems)
+    }
+
     func startMonitoring() {
         guard !isMonitoring else { return }
         isMonitoring = true
@@ -120,6 +132,8 @@ final class ClipboardManager {
                 items.remove(at: lastUnpinned)
             }
         }
+
+        saveHistory()
     }
 
     private func readClipboardItem(
@@ -288,11 +302,13 @@ final class ClipboardManager {
             pinnedItems.removeAll { $0.id == item.id }
             items.insert(item, at: 0)
         }
+        saveHistory()
     }
 
     func removeItem(_ item: ClipboardItem) {
         items.removeAll { $0.id == item.id }
         pinnedItems.removeAll { $0.id == item.id }
+        saveHistory()
     }
 
     func clearAll(includePinned: Bool = false) {
@@ -300,5 +316,6 @@ final class ClipboardManager {
         if includePinned {
             pinnedItems.removeAll()
         }
+        saveHistory()
     }
 }
