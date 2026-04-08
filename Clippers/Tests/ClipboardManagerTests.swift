@@ -120,4 +120,37 @@ struct ClipboardManagerTests {
         #expect(imageItem.preview.contains("100"))
         #expect(imageItem.preview.contains("200"))
     }
+
+    @Test("URL items support link title")
+    func linkTitle() {
+        let urlItem = ClipboardItem(
+            content: .url(URL(string: "https://example.com")!),
+            contentType: .url
+        )
+        #expect(urlItem.linkTitle == nil)
+
+        urlItem.linkTitle = "Example Domain"
+        #expect(urlItem.linkTitle == "Example Domain")
+    }
+}
+
+@Suite("LinkMetadataFetcher")
+struct LinkMetadataFetcherTests {
+    @Test("Parses title from HTML")
+    @MainActor
+    func parseTitle() async {
+        let fetcher = LinkMetadataFetcher.shared
+        // Test with a reliable public URL
+        let title = await fetcher.fetchTitle(for: URL(string: "https://example.com")!)
+        #expect(title != nil)
+        #expect(title?.contains("Example") == true)
+    }
+
+    @Test("Returns nil for non-HTTP URLs")
+    @MainActor
+    func nonHttpUrl() async {
+        let fetcher = LinkMetadataFetcher.shared
+        let title = await fetcher.fetchTitle(for: URL(string: "ftp://example.com")!)
+        #expect(title == nil)
+    }
 }

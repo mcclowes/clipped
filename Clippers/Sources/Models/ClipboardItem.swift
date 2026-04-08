@@ -30,6 +30,7 @@ final class ClipboardItem: Identifiable, Sendable {
     let sourceAppBundleID: String?
     let timestamp: Date
     var isPinned: Bool
+    var linkTitle: String?
 
     var plainText: String? {
         switch content {

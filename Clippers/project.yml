@@ -33,6 +33,7 @@ targets:
       path: Resources/Clippers.entitlements
       properties:
         com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
 
   ClippersTests:
     type: bundle.unit-test

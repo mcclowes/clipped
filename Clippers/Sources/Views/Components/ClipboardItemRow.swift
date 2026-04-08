@@ -71,10 +71,18 @@ struct ClipboardItemRow: View {
                     .clipShape(.rect(cornerRadius: 4))
             }
         case .url:
-            Text(item.preview)
-                .font(.system(size: 11))
-                .lineLimit(1)
-                .foregroundStyle(.blue)
+            VStack(alignment: .leading, spacing: 2) {
+                if let title = item.linkTitle {
+                    Text(title)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                }
+                Text(item.preview)
+                    .font(.system(size: item.linkTitle != nil ? 10 : 11))
+                    .lineLimit(1)
+                    .foregroundStyle(.blue)
+            }
         case .text, .richText:
             if item.contentType == .code {
                 Text(item.preview)

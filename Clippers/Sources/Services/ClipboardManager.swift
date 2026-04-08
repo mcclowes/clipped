@@ -92,6 +92,13 @@ final class ClipboardManager {
 
         items.insert(item, at: 0)
 
+        // Fetch link title for URLs
+        if case .url(let url) = item.content {
+            Task {
+                item.linkTitle = await LinkMetadataFetcher.shared.fetchTitle(for: url)
+            }
+        }
+
         // Trim to max size (excluding pinned)
         while items.filter({ !$0.isPinned }).count > Self.maxHistorySize {
             if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
