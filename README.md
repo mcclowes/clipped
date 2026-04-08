@@ -16,6 +16,8 @@ A lightweight, native macOS clipboard manager that fits the platform aesthetic a
 - **Markdown conversion** — Convert rich text clipboard items to Markdown
 - **Link previews** — Automatically fetches page titles for URL items
 - **Export** — Merge and copy multiple clipboard items at once
+- **Screenshot capture** — Automatically detects and captures new screenshots
+- **Sticky notes** — Pin clipboard items as floating sticky notes on your desktop
 
 ## Requirements
 
@@ -61,4 +63,6 @@ Menu bar-only app using SwiftUI's `MenuBarExtra` (no Dock icon, no app switcher 
 - `HotkeyManager` — Carbon-based global hotkey registration (`⌘⇧V`)
 - `LinkMetadataFetcher` — Async page title resolution for URL items
 - `MarkdownConverter` — RTF-to-Markdown conversion
-- SwiftUI views for the panel, item rows, search, filtering, settings, and onboarding
+- `ScreenshotWatcher` — Monitors for new screenshots and adds them to clipboard history
+- `StatusBarController` — NSPopover-based menu bar panel controller
+- SwiftUI views for the panel, item rows, search, filtering, settings, sticky notes, and onboarding

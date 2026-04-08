@@ -9,6 +9,8 @@ make generate  # XcodeGen from project.yml
 make build     # Debug build
 make run       # Build + launch
 make test      # Run unit tests
+make release   # Release build
+make package   # Release build + zip for distribution
 make clean     # Clean build artifacts
 ```
 
@@ -27,13 +29,17 @@ Clipped/
       HotkeyManager.swift      # Carbon global hotkey (Cmd+Shift+V)
       LinkMetadataFetcher.swift # Async URL title fetching
       MarkdownConverter.swift   # RTF -> Markdown
+      ScreenshotWatcher.swift   # Monitors for new screenshots
+      StatusBarController.swift # NSPopover-based menu bar controller
     Views/
       ClipboardPanelView.swift
       SettingsView.swift
+      StickyNoteView.swift
       Components/
         ClipboardItemRow.swift
         SearchBar.swift
         ContentTypeFilterBar.swift
+        FloatingPanelModifier.swift
         OnboardingOverlay.swift
   Tests/
     ClipboardManagerTests.swift
