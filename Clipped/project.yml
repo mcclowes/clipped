@@ -1,4 +1,4 @@
-name: Clippers
+name: Clipped
 options:
   bundleIdPrefix: com.mcclowes
   deploymentTarget:
@@ -13,7 +13,7 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
 
 targets:
-  Clippers:
+  Clipped:
     type: application
     platform: macOS
     sources:
@@ -22,29 +22,29 @@ targets:
       - Resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.clippers
+        PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.clipped
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: 1
         INFOPLIST_FILE: Resources/Info.plist
-        CODE_SIGN_ENTITLEMENTS: Resources/Clippers.entitlements
+        CODE_SIGN_ENTITLEMENTS: Resources/Clipped.entitlements
         GENERATE_INFOPLIST_FILE: false
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     entitlements:
-      path: Resources/Clippers.entitlements
+      path: Resources/Clipped.entitlements
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
         com.apple.security.files.user-selected.read-only: true
         com.apple.security.files.bookmarks.app-scope: true
 
-  ClippersTests:
+  ClippedTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - Tests
     dependencies:
-      - target: Clippers
+      - target: Clipped
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.clippers.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.clipped.tests
         GENERATE_INFOPLIST_FILE: true

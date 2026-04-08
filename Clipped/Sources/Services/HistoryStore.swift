@@ -10,7 +10,7 @@ final class HistoryStore {
 
     private init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let appDir = appSupport.appendingPathComponent("Clippers", isDirectory: true)
+        let appDir = appSupport.appendingPathComponent("Clipped", isDirectory: true)
         try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
         self.fileURL = appDir.appendingPathComponent("history.json")
     }

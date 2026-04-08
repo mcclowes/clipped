@@ -13,7 +13,7 @@ struct OnboardingOverlay: View {
                     .font(.system(size: 36))
                     .foregroundStyle(.blue)
 
-                Text("Welcome to Clippers")
+                Text("Welcome to Clipped")
                     .font(.headline)
 
                 Text("Your clipboard history lives up here in the menu bar. Copy anything and it'll appear in this panel.\n\nUse ⌘⇧V to open from anywhere.")

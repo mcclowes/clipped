@@ -1,4 +1,4 @@
-# Clippers
+# Clipped
 
 Native macOS clipboard manager. Swift 6 + SwiftUI, menu bar-only app.
 
@@ -15,15 +15,15 @@ make clean     # Clean build artifacts
 ## Project structure
 
 ```
-Clippers/
+Clipped/
   project.yml              # XcodeGen spec (source of truth for Xcode project)
   Sources/
-    App/ClippersApp.swift   # Entry point, MenuBarExtra setup
+    App/ClippedApp.swift   # Entry point, MenuBarExtra setup
     Models/ClipboardItem.swift
     Services/
       ClipboardManager.swift    # Core clipboard polling + item management
       SettingsManager.swift     # UserDefaults + SMAppService wrapper
-      HistoryStore.swift        # JSON persistence to ~/Library/Application Support/Clippers/
+      HistoryStore.swift        # JSON persistence to ~/Library/Application Support/Clipped/
       HotkeyManager.swift      # Carbon global hotkey (Cmd+Shift+V)
       LinkMetadataFetcher.swift # Async URL title fetching
       MarkdownConverter.swift   # RTF -> Markdown
@@ -39,7 +39,7 @@ Clippers/
     ClipboardManagerTests.swift
   Resources/
     Info.plist
-    Clippers.entitlements
+    Clipped.entitlements
 ```
 
 ## Key conventions
@@ -53,7 +53,7 @@ Clippers/
 
 ## Testing
 
-Tests use the `Clippers` scheme (not a separate test scheme). The test target is `ClippersTests`.
+Tests use the `Clipped` scheme (not a separate test scheme). The test target is `ClippedTests`.
 
 ## Deployment target
 

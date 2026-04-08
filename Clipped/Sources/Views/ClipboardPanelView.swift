@@ -39,7 +39,7 @@ struct ClipboardPanelView: View {
             HStack {
                 Image(systemName: "clipboard")
                     .foregroundStyle(.secondary)
-                Text("Clippers")
+                Text("Clipped")
                     .font(.headline)
                 Spacer()
             }
@@ -80,7 +80,7 @@ struct ClipboardPanelView: View {
                 )
 
                 quickMenuButton(
-                    title: "Quit Clippers",
+                    title: "Quit Clipped",
                     icon: "power",
                     action: {
                         NSApplication.shared.terminate(nil)
@@ -292,7 +292,7 @@ struct ClipboardPanelView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Quit Clippers")
+            .help("Quit Clipped")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

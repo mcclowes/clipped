@@ -16,7 +16,7 @@ final class StatusBarController {
         self.statusItem = statusItem
 
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clippers")
+            button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clipped")
             button.action = #selector(statusBarButtonClicked(_:))
             button.target = self
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -34,7 +34,7 @@ final class StatusBarController {
     func updateIcon(hasItems: Bool) {
         statusItem?.button?.image = NSImage(
             systemSymbolName: hasItems ? "clipboard.fill" : "clipboard",
-            accessibilityDescription: "Clippers"
+            accessibilityDescription: "Clipped"
         )
     }
 
@@ -78,7 +78,7 @@ final class StatusBarController {
 
         let hostingController = NSHostingController(rootView: contentView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Clippers Settings"
+        window.title = "Clipped Settings"
         window.styleMask = [.titled, .closable]
         window.center()
         window.isReleasedWhenClosed = false

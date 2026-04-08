@@ -72,13 +72,13 @@ struct SettingsView: View {
             }
 
             Section("Keyboard shortcut") {
-                Text("⌘⇧V — Open clipboard panel")
+                Text("⌥C — Open clipboard panel")
                     .foregroundStyle(.secondary)
                     .font(.callout)
             }
 
             Section("About") {
-                Text("Clippers v1.0.0")
+                Text("Clipped v1.0.0")
                     .foregroundStyle(.secondary)
                 Text("Clipboard history never leaves your device.")
                     .font(.caption)

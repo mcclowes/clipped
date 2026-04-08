@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 import Testing
-@testable import Clippers
+@testable import Clipped
 
 @MainActor
 @Suite("ClipboardManager")

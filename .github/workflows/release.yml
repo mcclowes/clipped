@@ -1,0 +1,44 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: make generate
+
+      - name: Build release
+        run: make package
+
+      - name: Find artifact
+        id: artifact
+        run: |
+          BUILD_DIR=$(xcodebuild -project Clipped/Clipped.xcodeproj -scheme Clipped -configuration Release -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $NF}')
+          echo "zip_path=${BUILD_DIR}/Clipped.zip" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "${BUILD_DIR}/Clipped.zip" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.zip_path }}
+          body: |
+            ## Clipped ${{ github.ref_name }}
+
+            **Install via Homebrew:**
+            ```
+            brew install mcclowes/clipped/clipped
+            ```
+
+            **SHA256:** `${{ steps.artifact.outputs.sha256 }}`
+          draft: false
+          prerelease: false

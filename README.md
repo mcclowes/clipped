@@ -1,4 +1,4 @@
-# Clippers
+# Clipped
 
 A lightweight, native macOS clipboard manager that fits the platform aesthetic and gets out of the way.
 
@@ -11,7 +11,7 @@ A lightweight, native macOS clipboard manager that fits the platform aesthetic a
 - **Secure mode** — Automatically skips or auto-expires clipboard entries from password managers (configurable timeout)
 - **Global hotkey** — `⌘⇧V` to open the panel from anywhere
 - **Persistence** — Optionally persist clipboard history across app restarts
-- **Launch at login** — Start Clippers automatically via `SMAppService`
+- **Launch at login** — Start Clipped automatically via `SMAppService`
 - **Paste matching style** — Strip formatting and paste as plain text
 - **Markdown conversion** — Convert rich text clipboard items to Markdown
 - **Link previews** — Automatically fetches page titles for URL items
@@ -34,9 +34,9 @@ make run       # Build and launch the app
 Or manually:
 
 ```bash
-cd Clippers
+cd Clipped
 xcodegen generate
-xcodebuild -project Clippers.xcodeproj -scheme Clippers -configuration Debug build
+xcodebuild -project Clipped.xcodeproj -scheme Clipped -configuration Debug build
 ```
 
 ## Testing
@@ -48,7 +48,7 @@ make test
 Or manually:
 
 ```bash
-xcodebuild -project Clippers.xcodeproj -scheme Clippers -configuration Debug test
+xcodebuild -project Clipped.xcodeproj -scheme Clipped -configuration Debug test
 ```
 
 ## Architecture

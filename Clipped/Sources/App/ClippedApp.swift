@@ -52,7 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
 }
 
 @main
-struct ClippersApp: App {
+struct ClippedApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     private var state = AppState.shared
 
