@@ -7,11 +7,11 @@ final class HotkeyManager {
 
     private var eventHandler: EventHandlerRef?
     private var hotkeyRef: EventHotKeyRef?
-    private var callback: (() -> Void)?
+    private var callback: (@MainActor @Sendable () -> Void)?
 
     private init() {}
 
-    func register(callback: @escaping @Sendable () -> Void) {
+    func register(callback: @escaping @MainActor @Sendable () -> Void) {
         self.callback = callback
 
         var eventType = EventTypeSpec(

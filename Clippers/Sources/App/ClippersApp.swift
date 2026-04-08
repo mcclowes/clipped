@@ -1,39 +1,65 @@
 import SwiftUI
 
+@MainActor
+final class AppState: Observable {
+    static let shared = AppState()
+
+    let clipboardManager = ClipboardManager()
+    let settingsManager = SettingsManager()
+    let screenshotWatcher = ScreenshotWatcher()
+    var showOnboarding = false
+
+    private init() {}
+}
+
+@MainActor
+final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let state = AppState.shared
+        let cm = state.clipboardManager
+        let sm = state.settingsManager
+        let sw = state.screenshotWatcher
+
+        cm.settingsManager = sm
+        cm.loadPersistedHistory()
+        sw.clipboardManager = cm
+        if sm.captureScreenshots,
+           let folder = sw.resolveBookmark()
+        {
+            sw.startWatching(folder: folder)
+        }
+
+        if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
+            state.showOnboarding = true
+            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+        }
+
+        let panelContent = ClipboardPanelView(showOnboarding: Binding(
+            get: { AppState.shared.showOnboarding },
+            set: { AppState.shared.showOnboarding = $0 }
+        ))
+        .environment(cm)
+        .environment(sm)
+
+        StatusBarController.shared.setup(contentView: panelContent)
+
+        HotkeyManager.shared.register {
+            cm.openedViaHotkey = true
+            StatusBarController.shared.toggle()
+        }
+    }
+}
+
 @main
 struct ClippersApp: App {
-    @State private var clipboardManager = ClipboardManager()
-    @State private var settingsManager = SettingsManager()
-    @AppStorage("hasLaunchedBefore") private var hasLaunchedBefore = false
-    @State private var showOnboarding = false
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    private var state = AppState.shared
 
     var body: some Scene {
-        MenuBarExtra {
-            ClipboardPanelView(showOnboarding: $showOnboarding)
-                .environment(clipboardManager)
-                .environment(settingsManager)
-                .task {
-                    clipboardManager.settingsManager = settingsManager
-                    clipboardManager.loadPersistedHistory()
-                    if !hasLaunchedBefore {
-                        showOnboarding = true
-                        hasLaunchedBefore = true
-                    }
-                    HotkeyManager.shared.register {
-                        clipboardManager.openedViaHotkey = true
-                        togglePanel()
-                    }
-                }
-        } label: {
-            Image(systemName: clipboardManager.items.isEmpty ? "clipboard" : "clipboard.fill")
-        }
-        .menuBarExtraStyle(.window)
-        .defaultSize(width: 320, height: 420)
-
         WindowGroup("Sticky Note", for: UUID.self) { $itemID in
             if let itemID {
                 StickyNoteView(itemID: itemID)
-                    .environment(clipboardManager)
+                    .environment(state.clipboardManager)
             }
         }
         .windowStyle(.hiddenTitleBar)
@@ -42,31 +68,9 @@ struct ClippersApp: App {
 
         Settings {
             SettingsView()
-                .environment(clipboardManager)
-                .environment(settingsManager)
-        }
-    }
-
-    private func togglePanel() {
-        // Find the NSStatusBarButton and click it to go through SwiftUI's MenuBarExtra path
-        for window in NSApp.windows where window.className.contains("NSStatusBarWindow") {
-            if let button = window.contentView?.subviews.first as? NSStatusBarButton {
-                button.performClick(nil)
-                return
-            }
-        }
-
-        // Fallback: directly toggle the panel window
-        if let panel = NSApp.windows.first(where: {
-            $0 is NSPanel && ($0.className.contains("StatusBarWindow")
-                || $0.className.contains("MenuBarExtra"))
-        }) {
-            if panel.isVisible {
-                panel.orderOut(nil)
-            } else {
-                panel.makeKeyAndOrderFront(nil)
-                NSApp.activate(ignoringOtherApps: true)
-            }
+                .environment(state.clipboardManager)
+                .environment(state.settingsManager)
+                .environment(state.screenshotWatcher)
         }
     }
 }

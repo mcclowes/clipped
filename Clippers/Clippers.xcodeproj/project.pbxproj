@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0702EA764F9C197AFDE912F0 /* ScreenshotWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A293DC76F189E2141CBED85 /* ScreenshotWatcher.swift */; };
 		1558F5421EE0B6636E161EA6 /* LinkMetadataFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */; };
 		1EC6566BD659F37DDBCE50C4 /* ClippersApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691883689BB99823921C0CF5 /* ClippersApp.swift */; };
 		29A3705505832E8CFE6F65DB /* StickyNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4522FF471251AC9013467C9 /* StickyNoteView.swift */; };
@@ -20,6 +21,7 @@
 		689C1B225B68E2DBE04972A0 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE8E785CE35559EBCD3E640 /* HotkeyManager.swift */; };
 		8205535321546E4E76CC5E0D /* ContentTypeFilterBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731D68FF7F73537251AFE719 /* ContentTypeFilterBar.swift */; };
 		AB7AAED5D39723CC9C733F89 /* OnboardingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44D62DCDCE99C7799DF2554 /* OnboardingOverlay.swift */; };
+		B0BBD1E9661CF37BD2F575FF /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B81F72F5C55BC0D28EEC913 /* StatusBarController.swift */; };
 		E8EC6E0B6F32379D2049B001 /* FloatingPanelModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F56DF2E7910CF1E6A2C4430 /* FloatingPanelModifier.swift */; };
 		E968544E26A95FC6E50337A9 /* ClipboardItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077793B9AF1FB260D80A3B54 /* ClipboardItemRow.swift */; };
 		FB5A2CF829448A6BD2125DC3 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD6E30DBC8DBAE4E9EB4E9D /* ClipboardManager.swift */; };
@@ -38,6 +40,7 @@
 
 /* Begin PBXFileReference section */
 		077793B9AF1FB260D80A3B54 /* ClipboardItemRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItemRow.swift; sourceTree = "<group>"; };
+		2A293DC76F189E2141CBED85 /* ScreenshotWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotWatcher.swift; sourceTree = "<group>"; };
 		2AD6E30DBC8DBAE4E9EB4E9D /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		39C3802A666733875DEB1066 /* ClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItem.swift; sourceTree = "<group>"; };
 		4F56DF2E7910CF1E6A2C4430 /* FloatingPanelModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelModifier.swift; sourceTree = "<group>"; };
@@ -46,6 +49,7 @@
 		691883689BB99823921C0CF5 /* ClippersApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClippersApp.swift; sourceTree = "<group>"; };
 		6A7D2FEAFC2A8FC7FDC6580F /* ClipboardPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPanelView.swift; sourceTree = "<group>"; };
 		731D68FF7F73537251AFE719 /* ContentTypeFilterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentTypeFilterBar.swift; sourceTree = "<group>"; };
+		9B81F72F5C55BC0D28EEC913 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		9EE8E785CE35559EBCD3E640 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		A4522FF471251AC9013467C9 /* StickyNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyNoteView.swift; sourceTree = "<group>"; };
 		B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkMetadataFetcher.swift; sourceTree = "<group>"; };
@@ -115,7 +119,9 @@
 				9EE8E785CE35559EBCD3E640 /* HotkeyManager.swift */,
 				B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */,
 				F4C09501A59D072D3C1A46AD /* MarkdownConverter.swift */,
+				2A293DC76F189E2141CBED85 /* ScreenshotWatcher.swift */,
 				F21629E591D92B9592DF8D96 /* SettingsManager.swift */,
+				9B81F72F5C55BC0D28EEC913 /* StatusBarController.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -234,9 +240,11 @@
 				1558F5421EE0B6636E161EA6 /* LinkMetadataFetcher.swift in Sources */,
 				2C4EBABC1A19F3EA15500E0C /* MarkdownConverter.swift in Sources */,
 				AB7AAED5D39723CC9C733F89 /* OnboardingOverlay.swift in Sources */,
+				0702EA764F9C197AFDE912F0 /* ScreenshotWatcher.swift in Sources */,
 				54C4066A4BD53D9D899F75CA /* SearchBar.swift in Sources */,
 				34550CD7E77C742DF8619ADB /* SettingsManager.swift in Sources */,
 				4FB7AC1C8B1377AEF20BD462 /* SettingsView.swift in Sources */,
+				B0BBD1E9661CF37BD2F575FF /* StatusBarController.swift in Sources */,
 				29A3705505832E8CFE6F65DB /* StickyNoteView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

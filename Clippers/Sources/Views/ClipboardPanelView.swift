@@ -20,12 +20,7 @@ struct ClipboardPanelView: View {
                 mainPanelView
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
-            guard let window = notification.object as? NSWindow,
-                  window is NSPanel,
-                  window.className.contains("StatusBarWindow") || window.className.contains("MenuBarExtra")
-            else { return }
-
+        .onReceive(NotificationCenter.default.publisher(for: NSPopover.willShowNotification)) { _ in
             if manager.openedViaHotkey {
                 manager.openedViaHotkey = false
                 showQuickMenu = false
@@ -33,14 +28,8 @@ struct ClipboardPanelView: View {
                 showQuickMenu = NSEvent.modifierFlags.contains(.option)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notification in
-            guard let window = notification.object as? NSWindow,
-                  window is NSPanel,
-                  window.className.contains("StatusBarWindow") || window.className.contains("MenuBarExtra")
-            else { return }
-
+        .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { _ in
             showQuickMenu = false
-            dismissPanel()
         }
     }
 
@@ -89,6 +78,14 @@ struct ClipboardPanelView: View {
                     action: {
                         NSApp.activate()
                         NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+                    }
+                )
+
+                quickMenuButton(
+                    title: "Quit Clippers",
+                    icon: "power",
+                    action: {
+                        NSApplication.shared.terminate(nil)
                     }
                 )
             }
@@ -323,12 +320,7 @@ struct ClipboardPanelView: View {
     }
 
     private func dismissPanel() {
-        if let panel = NSApp.windows.first(where: {
-            $0 is NSPanel && $0.className.contains("StatusBarWindow")
-                || $0.className.contains("MenuBarExtra")
-        }) {
-            panel.orderOut(nil)
-        }
+        StatusBarController.shared.close()
     }
 }
 

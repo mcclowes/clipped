@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(SettingsManager.self) private var settings
+    @Environment(ScreenshotWatcher.self) private var screenshotWatcher
 
     var body: some View {
         @Bindable var settings = settings
@@ -16,6 +17,38 @@ struct SettingsView: View {
                     value: $settings.maxHistorySize,
                     in: 5...50
                 )
+            }
+
+            Section("Screenshots") {
+                Toggle("Capture screenshots to history", isOn: $settings.captureScreenshots)
+                    .onChange(of: settings.captureScreenshots) { _, enabled in
+                        if enabled {
+                            if let folder = screenshotWatcher.resolveBookmark() {
+                                screenshotWatcher.startWatching(folder: folder)
+                            } else if let folder = screenshotWatcher.promptForFolder() {
+                                screenshotWatcher.startWatching(folder: folder)
+                            } else {
+                                settings.captureScreenshots = false
+                            }
+                        } else {
+                            screenshotWatcher.stopWatching()
+                        }
+                    }
+
+                if settings.captureScreenshots, let folder = screenshotWatcher.watchedFolder {
+                    HStack {
+                        Text(folder.lastPathComponent)
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                        Spacer()
+                        Button("Change…") {
+                            if let newFolder = screenshotWatcher.promptForFolder() {
+                                screenshotWatcher.startWatching(folder: newFolder)
+                            }
+                        }
+                        .font(.caption)
+                    }
+                }
             }
 
             Section("Security") {
@@ -46,6 +79,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 320)
+        .frame(width: 380, height: 400)
     }
 }

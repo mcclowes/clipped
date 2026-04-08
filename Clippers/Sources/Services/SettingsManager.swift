@@ -26,6 +26,10 @@ final class SettingsManager {
         didSet { UserDefaults.standard.set(playSoundOnCopy, forKey: "playSoundOnCopy") }
     }
 
+    var captureScreenshots: Bool {
+        didSet { UserDefaults.standard.set(captureScreenshots, forKey: "captureScreenshots") }
+    }
+
     var launchAtLogin: Bool {
         didSet {
             do {
@@ -52,6 +56,7 @@ final class SettingsManager {
         self.playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
+        self.captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }
