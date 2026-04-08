@@ -17,7 +17,16 @@ struct SettingsView: View {
             }
 
             Section("Security") {
-                Toggle("Secure mode (skip password manager entries)", isOn: $settings.secureMode)
+                Toggle("Secure mode (password manager entries)", isOn: $settings.secureMode)
+
+                if settings.secureMode {
+                    Picker("Password items", selection: $settings.secureTimeout) {
+                        Text("Skip entirely").tag(0)
+                        Text("Remove after 10s").tag(10)
+                        Text("Remove after 30s").tag(30)
+                        Text("Remove after 60s").tag(60)
+                    }
+                }
             }
 
             Section("Keyboard shortcut") {

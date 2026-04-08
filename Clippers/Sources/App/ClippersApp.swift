@@ -13,6 +13,7 @@ struct ClippersApp: App {
                 .environment(clipboardManager)
                 .environment(settingsManager)
                 .task {
+                    clipboardManager.settingsManager = settingsManager
                     if !hasLaunchedBefore {
                         showOnboarding = true
                         hasLaunchedBefore = true

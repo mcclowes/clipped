@@ -27,6 +27,8 @@ final class ClipboardManager {
     var searchQuery = ""
     var selectedContentType: ContentType?
 
+    var settingsManager: SettingsManager?
+
     private(set) var isMonitoring = false
     private var pollTimer: Timer?
     private var lastChangeCount: Int = 0
@@ -76,8 +78,12 @@ final class ClipboardManager {
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         let bundleID = frontmostApp?.bundleIdentifier
 
-        // Secure mode: skip items from password managers
-        if let bundleID, passwordManagerBundleIDs.contains(bundleID) {
+        let isFromPasswordManager = bundleID.map { passwordManagerBundleIDs.contains($0) } ?? false
+        let secureMode = settingsManager?.secureMode ?? true
+        let secureTimeout = settingsManager?.secureTimeout ?? 0
+
+        // Secure mode: skip or auto-expire items from password managers
+        if isFromPasswordManager && secureMode && secureTimeout == 0 {
             return
         }
 
@@ -91,6 +97,15 @@ final class ClipboardManager {
         items.removeAll { $0.preview == item.preview && !$0.isPinned }
 
         items.insert(item, at: 0)
+
+        // Schedule auto-removal for password manager items
+        if isFromPasswordManager && secureMode && secureTimeout > 0 {
+            let itemID = item.id
+            Task {
+                try? await Task.sleep(for: .seconds(secureTimeout))
+                items.removeAll { $0.id == itemID }
+            }
+        }
 
         // Fetch link title for URLs
         if case .url(let url) = item.content {
