@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1558F5421EE0B6636E161EA6 /* LinkMetadataFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */; };
 		1EC6566BD659F37DDBCE50C4 /* ClippersApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691883689BB99823921C0CF5 /* ClippersApp.swift */; };
+		2C4EBABC1A19F3EA15500E0C /* MarkdownConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C09501A59D072D3C1A46AD /* MarkdownConverter.swift */; };
 		34550CD7E77C742DF8619ADB /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21629E591D92B9592DF8D96 /* SettingsManager.swift */; };
 		37FF0A3563209C61BE8B4BF9 /* ClipboardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39C3802A666733875DEB1066 /* ClipboardItem.swift */; };
 		47CB1E46A42F0912029D18E9 /* ClipboardPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7D2FEAFC2A8FC7FDC6580F /* ClipboardPanelView.swift */; };
@@ -46,6 +47,7 @@
 		D6DF6E943EA065F1515B1E19 /* ClippersTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClippersTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E1818FE418341BD75F1205C4 /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		F21629E591D92B9592DF8D96 /* SettingsManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManager.swift; sourceTree = "<group>"; };
+		F4C09501A59D072D3C1A46AD /* MarkdownConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownConverter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -100,6 +102,7 @@
 				2AD6E30DBC8DBAE4E9EB4E9D /* ClipboardManager.swift */,
 				9EE8E785CE35559EBCD3E640 /* HotkeyManager.swift */,
 				B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */,
+				F4C09501A59D072D3C1A46AD /* MarkdownConverter.swift */,
 				F21629E591D92B9592DF8D96 /* SettingsManager.swift */,
 			);
 			path = Services;
@@ -215,6 +218,7 @@
 				8205535321546E4E76CC5E0D /* ContentTypeFilterBar.swift in Sources */,
 				689C1B225B68E2DBE04972A0 /* HotkeyManager.swift in Sources */,
 				1558F5421EE0B6636E161EA6 /* LinkMetadataFetcher.swift in Sources */,
+				2C4EBABC1A19F3EA15500E0C /* MarkdownConverter.swift in Sources */,
 				54C4066A4BD53D9D899F75CA /* SearchBar.swift in Sources */,
 				34550CD7E77C742DF8619ADB /* SettingsManager.swift in Sources */,
 				4FB7AC1C8B1377AEF20BD462 /* SettingsView.swift in Sources */,

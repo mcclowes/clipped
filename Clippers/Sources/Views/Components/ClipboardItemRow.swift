@@ -30,6 +30,9 @@ struct ClipboardItemRow: View {
                 Button("Copy as plain text") {
                     manager.copyToClipboard(item, asPlainText: true)
                 }
+                Button("Copy as Markdown") {
+                    manager.copyAsMarkdown(item)
+                }
             }
 
             if case .url(let url) = item.content {

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import Clippers
@@ -131,6 +132,36 @@ struct ClipboardManagerTests {
 
         urlItem.linkTitle = "Example Domain"
         #expect(urlItem.linkTitle == "Example Domain")
+    }
+}
+
+@MainActor
+@Suite("MarkdownConverter")
+struct MarkdownConverterTests {
+    @Test("Converts bold text to Markdown")
+    func boldConversion() {
+        let attributed = NSMutableAttributedString(string: "hello bold world")
+        let boldFont = NSFont.boldSystemFont(ofSize: 12)
+        attributed.addAttribute(.font, value: boldFont, range: NSRange(location: 6, length: 4))
+
+        let markdown = MarkdownConverter.convert(attributedString: attributed)
+        #expect(markdown.contains("**bold**"))
+    }
+
+    @Test("Converts links to Markdown")
+    func linkConversion() {
+        let attributed = NSMutableAttributedString(string: "click here")
+        let url = URL(string: "https://example.com")!
+        attributed.addAttribute(.link, value: url, range: NSRange(location: 0, length: 10))
+
+        let markdown = MarkdownConverter.convert(attributedString: attributed)
+        #expect(markdown.contains("[click here](https://example.com)"))
+    }
+
+    @Test("Returns nil for invalid RTF data")
+    func invalidRtf() {
+        let result = MarkdownConverter.convert(rtfData: Data([0x00, 0x01, 0x02]))
+        #expect(result == nil)
     }
 }
 

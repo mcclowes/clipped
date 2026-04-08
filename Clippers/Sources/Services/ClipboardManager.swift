@@ -203,6 +203,26 @@ final class ClipboardManager {
         }
     }
 
+    func copyAsMarkdown(_ item: ClipboardItem) {
+        guard case .richText(let rtfData, let plain) = item.content,
+              let markdown = MarkdownConverter.convert(rtfData: rtfData)
+        else {
+            copyToClipboard(item, asPlainText: true)
+            return
+        }
+
+        stopMonitoring()
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
+        lastChangeCount = pasteboard.changeCount
+
+        Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            startMonitoring()
+        }
+    }
+
     func togglePin(_ item: ClipboardItem) {
         item.isPinned.toggle()
         if item.isPinned {
