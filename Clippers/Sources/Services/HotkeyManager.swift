@@ -35,10 +35,10 @@ final class HotkeyManager {
             &eventHandler
         )
 
-        // Cmd+Option+V
+        // Option+C
         let hotkeyID = EventHotKeyID(signature: 0x434C_4950, id: 1) // "CLIP"
-        let modifiers = UInt32(cmdKey | optionKey)
-        let keyCode: UInt32 = 9 // 'V' key
+        let modifiers = UInt32(optionKey)
+        let keyCode: UInt32 = 8 // 'C' key
 
         RegisterEventHotKey(
             keyCode,

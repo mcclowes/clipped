@@ -26,6 +26,7 @@ final class ClipboardManager {
     var pinnedItems: [ClipboardItem] = []
     var searchQuery = ""
     var selectedContentType: ContentType?
+    var openedViaHotkey = false
 
     var settingsManager: SettingsManager?
 
@@ -246,7 +247,7 @@ final class ClipboardManager {
         }
     }
 
-    private func simulatePaste() {
+    func simulatePaste() {
         let source = CGEventSource(stateID: .hidSystemState)
 
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // V key

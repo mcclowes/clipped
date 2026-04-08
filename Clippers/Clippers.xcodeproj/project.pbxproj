@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1558F5421EE0B6636E161EA6 /* LinkMetadataFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */; };
 		1EC6566BD659F37DDBCE50C4 /* ClippersApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 691883689BB99823921C0CF5 /* ClippersApp.swift */; };
+		29A3705505832E8CFE6F65DB /* StickyNoteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4522FF471251AC9013467C9 /* StickyNoteView.swift */; };
 		2C4EBABC1A19F3EA15500E0C /* MarkdownConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4C09501A59D072D3C1A46AD /* MarkdownConverter.swift */; };
 		34550CD7E77C742DF8619ADB /* SettingsManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21629E591D92B9592DF8D96 /* SettingsManager.swift */; };
 		37FF0A3563209C61BE8B4BF9 /* ClipboardItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39C3802A666733875DEB1066 /* ClipboardItem.swift */; };
@@ -19,6 +20,7 @@
 		689C1B225B68E2DBE04972A0 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EE8E785CE35559EBCD3E640 /* HotkeyManager.swift */; };
 		8205535321546E4E76CC5E0D /* ContentTypeFilterBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 731D68FF7F73537251AFE719 /* ContentTypeFilterBar.swift */; };
 		AB7AAED5D39723CC9C733F89 /* OnboardingOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = E44D62DCDCE99C7799DF2554 /* OnboardingOverlay.swift */; };
+		E8EC6E0B6F32379D2049B001 /* FloatingPanelModifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F56DF2E7910CF1E6A2C4430 /* FloatingPanelModifier.swift */; };
 		E968544E26A95FC6E50337A9 /* ClipboardItemRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 077793B9AF1FB260D80A3B54 /* ClipboardItemRow.swift */; };
 		FB5A2CF829448A6BD2125DC3 /* ClipboardManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AD6E30DBC8DBAE4E9EB4E9D /* ClipboardManager.swift */; };
 		FB6EBB94690154C46FE91EB4 /* ClipboardManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56EF15F89293B4534DB991F6 /* ClipboardManagerTests.swift */; };
@@ -38,12 +40,14 @@
 		077793B9AF1FB260D80A3B54 /* ClipboardItemRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItemRow.swift; sourceTree = "<group>"; };
 		2AD6E30DBC8DBAE4E9EB4E9D /* ClipboardManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManager.swift; sourceTree = "<group>"; };
 		39C3802A666733875DEB1066 /* ClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItem.swift; sourceTree = "<group>"; };
+		4F56DF2E7910CF1E6A2C4430 /* FloatingPanelModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelModifier.swift; sourceTree = "<group>"; };
 		56EF15F89293B4534DB991F6 /* ClipboardManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManagerTests.swift; sourceTree = "<group>"; };
 		62BEE1020663D098C6C0CDB3 /* Clippers.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clippers.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		691883689BB99823921C0CF5 /* ClippersApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClippersApp.swift; sourceTree = "<group>"; };
 		6A7D2FEAFC2A8FC7FDC6580F /* ClipboardPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardPanelView.swift; sourceTree = "<group>"; };
 		731D68FF7F73537251AFE719 /* ContentTypeFilterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentTypeFilterBar.swift; sourceTree = "<group>"; };
 		9EE8E785CE35559EBCD3E640 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
+		A4522FF471251AC9013467C9 /* StickyNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyNoteView.swift; sourceTree = "<group>"; };
 		B9B7C4A18BB00B6D05660026 /* LinkMetadataFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkMetadataFetcher.swift; sourceTree = "<group>"; };
 		C7FEE8EAED5439265B58135B /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		D6DF6E943EA065F1515B1E19 /* ClippersTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClippersTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -60,6 +64,7 @@
 			children = (
 				077793B9AF1FB260D80A3B54 /* ClipboardItemRow.swift */,
 				731D68FF7F73537251AFE719 /* ContentTypeFilterBar.swift */,
+				4F56DF2E7910CF1E6A2C4430 /* FloatingPanelModifier.swift */,
 				E44D62DCDCE99C7799DF2554 /* OnboardingOverlay.swift */,
 				E1818FE418341BD75F1205C4 /* SearchBar.swift */,
 			);
@@ -71,6 +76,7 @@
 			children = (
 				6A7D2FEAFC2A8FC7FDC6580F /* ClipboardPanelView.swift */,
 				C7FEE8EAED5439265B58135B /* SettingsView.swift */,
+				A4522FF471251AC9013467C9 /* StickyNoteView.swift */,
 				063FB0FC064880805C8432A3 /* Components */,
 			);
 			path = Views;
@@ -222,6 +228,7 @@
 				47CB1E46A42F0912029D18E9 /* ClipboardPanelView.swift in Sources */,
 				1EC6566BD659F37DDBCE50C4 /* ClippersApp.swift in Sources */,
 				8205535321546E4E76CC5E0D /* ContentTypeFilterBar.swift in Sources */,
+				E8EC6E0B6F32379D2049B001 /* FloatingPanelModifier.swift in Sources */,
 				3CBBA2F67567017D105B4144 /* HistoryStore.swift in Sources */,
 				689C1B225B68E2DBE04972A0 /* HotkeyManager.swift in Sources */,
 				1558F5421EE0B6636E161EA6 /* LinkMetadataFetcher.swift in Sources */,
@@ -230,6 +237,7 @@
 				54C4066A4BD53D9D899F75CA /* SearchBar.swift in Sources */,
 				34550CD7E77C742DF8619ADB /* SettingsManager.swift in Sources */,
 				4FB7AC1C8B1377AEF20BD462 /* SettingsView.swift in Sources */,
+				29A3705505832E8CFE6F65DB /* StickyNoteView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

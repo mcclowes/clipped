@@ -55,13 +55,14 @@ final class ClipboardItem: Identifiable, Sendable {
     }
 
     init(
+        id: UUID = UUID(),
         content: ClipboardContent,
         contentType: ContentType,
         sourceAppName: String? = nil,
         sourceAppBundleID: String? = nil,
         isPinned: Bool = false
     ) {
-        self.id = UUID()
+        self.id = id
         self.content = content
         self.contentType = contentType
         self.sourceAppName = sourceAppName

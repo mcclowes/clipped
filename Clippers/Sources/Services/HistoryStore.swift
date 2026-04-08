@@ -56,6 +56,7 @@ final class HistoryStore {
 
 @MainActor
 private struct StoredEntry: Codable {
+    let id: UUID
     let contentType: String
     let textContent: String?
     let rtfData: Data?
@@ -70,6 +71,7 @@ private struct StoredEntry: Codable {
     let linkTitle: String?
 
     init(from item: ClipboardItem) {
+        self.id = item.id
         self.contentType = item.contentType.rawValue
         self.sourceAppName = item.sourceAppName
         self.sourceAppBundleID = item.sourceAppBundleID
@@ -135,6 +137,7 @@ private struct StoredEntry: Codable {
         }
 
         let item = ClipboardItem(
+            id: id,
             content: content,
             contentType: type,
             sourceAppName: sourceAppName,
