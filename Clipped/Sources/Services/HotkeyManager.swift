@@ -4,13 +4,15 @@ import os
 
 @MainActor
 final class HotkeyManager {
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "HotkeyManager")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "HotkeyManager")
 
     static let shared = HotkeyManager()
 
     private var eventHandler: EventHandlerRef?
     private var hotkeyRef: EventHotKeyRef?
     private var callback: (@MainActor @Sendable () -> Void)?
+
+    static let displayString = "⌥C"
 
     private init() {}
 

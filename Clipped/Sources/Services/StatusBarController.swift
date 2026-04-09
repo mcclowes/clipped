@@ -4,7 +4,11 @@ import SwiftUI
 
 @MainActor
 final class StatusBarController {
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "StatusBarController")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "StatusBarController")
+
+    static let panelWidth: CGFloat = 320
+    static let panelHeight: CGFloat = 420
+    static var panelSize: NSSize { NSSize(width: panelWidth, height: panelHeight) }
 
     static let shared = StatusBarController()
 
@@ -27,9 +31,9 @@ final class StatusBarController {
         }
 
         let hostingController = NSHostingController(rootView: contentView)
-        hostingController.view.frame = NSRect(x: 0, y: 0, width: 320, height: 420)
+        hostingController.view.frame = NSRect(origin: .zero, size: Self.panelSize)
 
-        popover.contentSize = NSSize(width: 320, height: 420)
+        popover.contentSize = Self.panelSize
         popover.behavior = .transient
         popover.animates = true
         popover.contentViewController = hostingController
@@ -78,7 +82,7 @@ final class StatusBarController {
 
         if floatingPanel == nil {
             let panel = NSPanel(
-                contentRect: NSRect(x: 0, y: 0, width: 320, height: 420),
+                contentRect: NSRect(origin: .zero, size: Self.panelSize),
                 styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -93,11 +97,11 @@ final class StatusBarController {
             floatingPanel = panel
         }
 
-        let panelSize = NSSize(width: 320, height: 420)
+        let size = Self.panelSize
         let screenFrame = screen.visibleFrame
-        let x = screenFrame.midX - panelSize.width / 2
-        let y = screenFrame.midY - panelSize.height / 2
-        floatingPanel?.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
+        let x = screenFrame.midX - size.width / 2
+        let y = screenFrame.midY - size.height / 2
+        floatingPanel?.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
         floatingPanel?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         floatingPanel?.makeKey()

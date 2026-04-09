@@ -43,6 +43,12 @@ Clipped/
         OnboardingOverlay.swift
   Tests/
     ClipboardManagerTests.swift
+    HexColorParserTests.swift
+    HistoryStoreTests.swift
+    LinkMetadataFetcherTests.swift
+    MarkdownConverterTests.swift
+    SettingsManagerTests.swift
+    Mocks.swift
   Resources/
     Info.plist
     Clipped.entitlements

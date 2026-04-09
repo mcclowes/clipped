@@ -6,7 +6,7 @@ import UserNotifications
 @MainActor
 @Observable
 final class ScreenshotWatcher {
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "ScreenshotWatcher")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ScreenshotWatcher")
 
     private(set) var isWatching = false
     private(set) var watchedFolder: URL?
@@ -150,11 +150,13 @@ final class ScreenshotWatcher {
         UNUserNotificationCenter.current().add(request)
     }
 
+    private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic"]
+
     private func imageFiles(in folder: URL) -> [String] {
         let contents = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
-        return contents.filter {
-            let lower = $0.lowercased()
-            return lower.hasSuffix(".png") || lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg")
+        return contents.filter { filename in
+            let ext = (filename as NSString).pathExtension.lowercased()
+            return Self.imageExtensions.contains(ext)
         }
     }
 }

@@ -186,7 +186,7 @@ struct ClipboardPanelView: View {
 
             bottomBar
         }
-        .frame(width: 320, height: 420)
+        .frame(width: StatusBarController.panelWidth, height: StatusBarController.panelHeight)
         .onKeyPress(.upArrow) {
             moveSelection(by: -1)
             return .handled
@@ -292,6 +292,7 @@ struct ClipboardPanelView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .help("Settings")
 
             Button {
                 NSApplication.shared.terminate(nil)

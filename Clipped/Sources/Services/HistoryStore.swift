@@ -14,7 +14,7 @@ protocol HistoryStoring: AnyObject {
 final class HistoryStore: HistoryStoring {
     static let shared = HistoryStore()
 
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "HistoryStore")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "HistoryStore")
 
     private let fileURL: URL
 

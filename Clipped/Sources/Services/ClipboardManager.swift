@@ -28,7 +28,7 @@ private let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.Concea
 @MainActor
 @Observable
 final class ClipboardManager {
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "ClipboardManager")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ClipboardManager")
 
     var items: [ClipboardItem] = []
     var pinnedItems: [ClipboardItem] = []

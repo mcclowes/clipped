@@ -17,7 +17,7 @@ protocol SettingsManaging: AnyObject {
 @MainActor
 @Observable
 final class SettingsManager: SettingsManaging {
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "SettingsManager")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "SettingsManager")
 
     var persistAcrossReboots: Bool {
         didSet { UserDefaults.standard.set(persistAcrossReboots, forKey: "persistAcrossReboots") }

@@ -8,7 +8,7 @@ protocol LinkMetadataFetching: AnyObject {
 
 @MainActor
 final class LinkMetadataFetcher: LinkMetadataFetching {
-    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "LinkMetadataFetcher")
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "LinkMetadataFetcher")
 
     static let shared = LinkMetadataFetcher()
     private var cache: [URL: String] = [:]

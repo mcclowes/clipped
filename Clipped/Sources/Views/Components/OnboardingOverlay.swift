@@ -17,7 +17,7 @@ struct OnboardingOverlay: View {
                     .font(.headline)
 
                 Text(
-                    "Your clipboard history lives up here in the menu bar. Copy anything and it'll appear in this panel.\n\nUse ⌘⇧V to open from anywhere."
+                    "Your clipboard history lives up here in the menu bar. Copy anything and it'll appear in this panel.\n\nUse \(HotkeyManager.displayString) to open from anywhere."
                 )
                 .font(.callout)
                 .foregroundStyle(.secondary)

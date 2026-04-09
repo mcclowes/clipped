@@ -212,6 +212,7 @@ struct ClipboardItemRow: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .help("Reveal sensitive content")
             }
         } else {
             switch item.content {
@@ -286,6 +287,7 @@ struct ClipboardItemRow: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("Actions")
         .opacity(isHovered ? 1 : 0)
     }
 }
