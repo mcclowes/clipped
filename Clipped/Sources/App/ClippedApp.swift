@@ -13,7 +13,7 @@ final class AppState: Observable {
 }
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, @unchecked Sendable {
+final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let state = AppState.shared
         let cm = state.clipboardManager

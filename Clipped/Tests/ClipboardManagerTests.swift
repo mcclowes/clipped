@@ -100,6 +100,44 @@ struct ClipboardManagerTests {
         #expect(manager.pinnedItems.count == 1)
     }
 
+    @Test("Trim to max size removes oldest unpinned items")
+    func trimToMaxSize() {
+        let manager = ClipboardManager()
+        manager.stopMonitoring()
+
+        for i in 0...15 {
+            manager.items.append(
+                ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
+            )
+        }
+
+        #expect(manager.items.count == 16)
+
+        manager.trimToMaxSize()
+
+        #expect(manager.items.count == ClipboardManager.maxHistorySize)
+        // First items should be preserved (they're at the front)
+        #expect(manager.items.first?.preview == "item 0")
+    }
+
+    @Test("Trim to max size preserves pinned items")
+    func trimPreservesPinned() {
+        let manager = ClipboardManager()
+        manager.stopMonitoring()
+
+        for i in 0...15 {
+            let item = ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
+            if i == 12 { item.isPinned = true }
+            manager.items.append(item)
+        }
+
+        manager.trimToMaxSize()
+
+        let pinnedInItems = manager.items.filter(\.isPinned)
+        #expect(pinnedInItems.count == 1)
+        #expect(pinnedInItems.first?.preview == "item 12")
+    }
+
     @Test("Content type detection")
     func contentTypes() throws {
         let textItem = ClipboardItem(content: .text("plain"), contentType: .plainText)
