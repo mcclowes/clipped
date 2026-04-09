@@ -72,7 +72,7 @@ final class ClipboardManager {
     private func applyFilters(to source: [ClipboardItem]) -> [ClipboardItem] {
         var result = source
         switch selectedFilter {
-        case .contentType(let type):
+        case let .contentType(type):
             result = result.filter { $0.contentType == type }
         case .developer:
             result = result.filter { $0.isDeveloperContent }

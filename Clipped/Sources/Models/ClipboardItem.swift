@@ -30,21 +30,21 @@ enum ClipboardFilter: Hashable, Identifiable {
 
     var id: String {
         switch self {
-        case .contentType(let type): type.rawValue
+        case let .contentType(type): type.rawValue
         case .developer: "Developer"
         }
     }
 
     var label: String {
         switch self {
-        case .contentType(let type): type.rawValue
+        case let .contentType(type): type.rawValue
         case .developer: "Dev"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .contentType(let type): type.systemImage
+        case let .contentType(type): type.systemImage
         case .developer: "curlybraces"
         }
     }

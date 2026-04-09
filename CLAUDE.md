@@ -55,6 +55,24 @@ Clipped/
     Assets.xcassets/         # App icon
 ```
 
+## Pre-PR checklist
+
+Always run these before committing or opening a pull request:
+
+```bash
+make lint      # SwiftFormat + SwiftLint — must pass with zero violations
+make build     # Debug build must succeed
+make test      # All unit tests must pass
+```
+
+If `make lint` fails, run `make format` to auto-fix SwiftFormat issues, then re-check with `make lint` (SwiftLint issues must be fixed manually).
+
+Key lint rules to watch:
+- **Max line width is 120 characters** (`.swiftformat` `--maxwidth 120`)
+- **Hoist pattern `let`**: use `case let .foo(bar)` not `case .foo(let bar)`
+- **Wrap long argument lists** `before-first` with balanced closing paren
+- **`force_try` / `force_unwrapping`** are warnings — use `swiftlint:disable:next` only where justified (e.g. compile-time-constant regexes)
+
 ## Key conventions
 
 - Swift 6 strict concurrency (`SWIFT_STRICT_CONCURRENCY: complete`)
