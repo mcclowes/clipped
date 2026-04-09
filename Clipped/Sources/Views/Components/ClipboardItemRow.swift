@@ -219,7 +219,8 @@ struct ClipboardItemRow: View {
                     .foregroundStyle(.orange)
             } else if case .url = item.content,
                       let faviconData = item.linkFavicon,
-                      let nsImage = NSImage(data: faviconData) {
+                      let nsImage = NSImage(data: faviconData)
+            {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)

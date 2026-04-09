@@ -115,7 +115,8 @@ final class LinkMetadataFetcher: LinkMetadataFetching {
             guard tagLower.contains("icon"),
                   tagLower.contains("rel="),
                   !tagLower.contains("apple-touch-icon"),
-                  !tagLower.contains("mask-icon") else { continue }
+                  !tagLower.contains("mask-icon")
+            else { continue }
 
             guard let hrefStart = tag.range(of: "href=", options: .caseInsensitive) else { continue }
             let afterHref = tag[hrefStart.upperBound...]
