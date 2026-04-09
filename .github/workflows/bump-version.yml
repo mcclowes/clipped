@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   bump:
@@ -51,23 +52,27 @@ jobs:
           # Update project.yml
           sed -i "s/MARKETING_VERSION: \"${CURRENT_VERSION}\"/MARKETING_VERSION: \"${NEW_VERSION}\"/" Clipped/project.yml
 
-      - name: Commit and tag
+      - name: Commit, push branch, and create PR
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          BRANCH="bump/v${{ steps.bump.outputs.new_version }}"
+          git checkout -b "$BRANCH"
           git add Clipped/project.yml
           git commit -m "Bump version to ${{ steps.bump.outputs.new_version }}"
-          git tag -a "${{ steps.bump.outputs.tag }}" -m "Release ${{ steps.bump.outputs.tag }}"
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "Bump version to ${{ steps.bump.outputs.new_version }}" \
+            --body "Automated version bump (${{ inputs.bump }}) to **${{ steps.bump.outputs.new_version }}**.
 
-      - name: Push
-        run: |
-          git push origin HEAD
-          git push origin "${{ steps.bump.outputs.tag }}"
+          Merging this PR will automatically tag and trigger the release workflow."
 
       - name: Summary
         run: |
-          echo "### Version bumped! :rocket:" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Version bump PR created :rocket:" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Bump type:** ${{ inputs.bump }}" >> "$GITHUB_STEP_SUMMARY"
           echo "- **New version:** ${{ steps.bump.outputs.new_version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Tag:** \`${{ steps.bump.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Branch:** \`bump/v${{ steps.bump.outputs.new_version }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "The [Release workflow](../actions/workflows/release.yml) will now build, sign, notarize, and publish the release." >> "$GITHUB_STEP_SUMMARY"
+          echo "Merge the PR to trigger the release." >> "$GITHUB_STEP_SUMMARY"

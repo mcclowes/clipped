@@ -1,0 +1,40 @@
+name: Tag Release on Version Bump Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'bump/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Extract version from branch name
+        id: version
+        run: |
+          BRANCH="${{ github.event.pull_request.head.ref }}"
+          TAG="${BRANCH#bump/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Tagging as $TAG"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create and push tag
+        run: |
+          git tag -a "${{ steps.version.outputs.tag }}" -m "Release ${{ steps.version.outputs.tag }}"
+          git push origin "${{ steps.version.outputs.tag }}"
+
+      - name: Delete bump branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin --delete "${{ github.event.pull_request.head.ref }}" || true
