@@ -50,8 +50,7 @@ final class LinkMetadataFetcher: LinkMetadataFetching {
 
                 metadata.title = parseTitle(from: html)
 
-                let faviconURL = parseFaviconURL(from: html, pageURL: url)
-                    ?? Self.faviconFallbackURL(for: url)
+                let faviconURL = parseFaviconURL(from: html, pageURL: url) ?? Self.faviconFallbackURL(for: url)
                 if let faviconURL {
                     metadata.favicon = await Self.fetchFaviconData(from: faviconURL)
                 }
