@@ -126,7 +126,7 @@ struct ClipboardPanelView: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
-            ContentTypeFilterBar(selection: $manager.selectedContentType)
+            ContentTypeFilterBar(selection: $manager.selectedFilter)
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 

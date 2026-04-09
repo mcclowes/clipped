@@ -13,6 +13,14 @@ private let codeEditorBundleIDs: Set<String> = [
     "com.todesktop.230313mzl4w4u92", // Cursor
 ]
 
+private let terminalBundleIDs: Set<String> = [
+    "com.apple.Terminal",
+    "com.googlecode.iterm2",
+    "io.alacritty",
+    "com.github.wez.wezterm",
+    "net.kovidgoyal.kitty",
+]
+
 private let passwordManagerBundleIDs: Set<String> = [
     "com.agilebits.onepassword7",
     "com.agilebits.onepassword-osx",
@@ -33,7 +41,7 @@ final class ClipboardManager {
     var items: [ClipboardItem] = []
     var pinnedItems: [ClipboardItem] = []
     var searchQuery = ""
-    var selectedContentType: ContentType?
+    var selectedFilter: ClipboardFilter?
     var openedViaHotkey = false
 
     var settingsManager: (any SettingsManaging)?
@@ -63,8 +71,13 @@ final class ClipboardManager {
 
     private func applyFilters(to source: [ClipboardItem]) -> [ClipboardItem] {
         var result = source
-        if let type = selectedContentType {
+        switch selectedFilter {
+        case .contentType(let type):
             result = result.filter { $0.contentType == type }
+        case .developer:
+            result = result.filter { $0.isDeveloperContent }
+        case nil:
+            break
         }
         if !searchQuery.isEmpty {
             result = result.filter { item in
@@ -253,12 +266,16 @@ final class ClipboardManager {
                 )
             }
 
-            let isCode = bundleID.map { codeEditorBundleIDs.contains($0) } ?? false
+            let isFromCodeEditor = bundleID.map { codeEditorBundleIDs.contains($0) } ?? false
+            let isFromTerminal = bundleID.map { terminalBundleIDs.contains($0) } ?? false
+            let isDevContent = isFromCodeEditor || isFromTerminal
+                || DeveloperContentDetector.isDeveloperContent(string)
             return ClipboardItem(
                 content: .text(string),
-                contentType: isCode ? .code : .plainText,
+                contentType: isFromCodeEditor ? .code : .plainText,
                 sourceAppName: appName,
-                sourceAppBundleID: bundleID
+                sourceAppBundleID: bundleID,
+                isDeveloperContent: isDevContent
             )
         }
 
@@ -394,11 +411,12 @@ final class ClipboardManager {
     }
 
     /// Remove oldest unpinned items beyond the configured max history size.
+    /// Pinned and developer-content items are exempt from the cap.
     func trimToMaxSize() {
         let limit = settingsManager?.maxHistorySize ?? Self.maxHistorySize
-        while items.count(where: { !$0.isPinned }) > limit {
-            if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
-                items.remove(at: lastUnpinned)
+        while items.count(where: { !$0.isPinned && !$0.isDeveloperContent }) > limit {
+            if let lastTrimmable = items.lastIndex(where: { !$0.isPinned && !$0.isDeveloperContent }) {
+                items.remove(at: lastTrimmable)
             }
         }
     }

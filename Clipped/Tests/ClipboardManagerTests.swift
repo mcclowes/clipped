@@ -40,7 +40,7 @@ struct ClipboardManagerTests {
         )
 
         manager.items = [textItem, urlItem]
-        manager.selectedContentType = .plainText
+        manager.selectedFilter = .contentType(.plainText)
 
         #expect(manager.filteredItems.count == 1)
         #expect(manager.filteredItems.first?.contentType == .plainText)
@@ -226,7 +226,7 @@ struct ClipboardManagerTests {
         )
 
         manager.pinnedItems = [textPinned, urlPinned]
-        manager.selectedContentType = .url
+        manager.selectedFilter = .contentType(.url)
 
         #expect(manager.filteredPinnedItems.count == 1)
         #expect(manager.filteredPinnedItems.first?.contentType == .url)
@@ -268,5 +268,38 @@ struct ClipboardManagerTests {
 
         urlItem.linkTitle = "Example Domain"
         #expect(urlItem.linkTitle == "Example Domain")
+    }
+
+    @Test("Dev filter returns only developer content items")
+    func devFilter() {
+        let (manager, _, _, _) = makeManager()
+
+        let devItem = ClipboardItem(content: .text("550e8400-e29b-41d4-a716-446655440000"), contentType: .plainText, isDeveloperContent: true)
+        let normalItem = ClipboardItem(content: .text("hello world"), contentType: .plainText)
+        let codeItem = ClipboardItem(content: .text("let x = 1"), contentType: .code, isDeveloperContent: true)
+
+        manager.items = [devItem, normalItem, codeItem]
+        manager.selectedFilter = .developer
+
+        #expect(manager.filteredItems.count == 2)
+        #expect(manager.filteredItems.allSatisfy(\.isDeveloperContent))
+    }
+
+    @Test("Trim to max size preserves developer content items")
+    func trimPreservesDevContent() {
+        let (manager, _, settings, _) = makeManager()
+        settings.maxHistorySize = 5
+
+        for i in 0..<8 {
+            manager.items.append(
+                ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
+            )
+        }
+        let devItem = ClipboardItem(content: .text("dev item"), contentType: .plainText, isDeveloperContent: true)
+        manager.items.append(devItem)
+
+        manager.trimToMaxSize()
+
+        #expect(manager.items.contains(where: { $0.id == devItem.id }))
     }
 }

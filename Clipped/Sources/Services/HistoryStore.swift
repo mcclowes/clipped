@@ -107,6 +107,7 @@ private struct StoredEntry: Codable {
     let sourceAppBundleID: String?
     let timestamp: Date
     let isPinned: Bool
+    let isDeveloperContent: Bool?
     let linkTitle: String?
     let linkFavicon: Data?
 
@@ -117,6 +118,7 @@ private struct StoredEntry: Codable {
         sourceAppBundleID = item.sourceAppBundleID
         timestamp = item.timestamp
         isPinned = item.isPinned
+        isDeveloperContent = item.isDeveloperContent
         linkTitle = item.linkTitle
         linkFavicon = item.linkFavicon
 
@@ -184,7 +186,8 @@ private struct StoredEntry: Codable {
             sourceAppName: sourceAppName,
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
-            isPinned: isPinned
+            isPinned: isPinned,
+            isDeveloperContent: isDeveloperContent ?? false
         )
         item.linkTitle = linkTitle
         item.linkFavicon = linkFavicon
