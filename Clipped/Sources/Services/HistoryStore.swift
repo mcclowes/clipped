@@ -16,7 +16,7 @@ final class HistoryStore {
     }
 
     func save(items: [ClipboardItem], pinnedItems: [ClipboardItem]) {
-        let entries = (items + pinnedItems).map { StoredEntry(from: $0) }
+        let entries = (items + pinnedItems).filter { !$0.isSensitive }.map { StoredEntry(from: $0) }
         do {
             let data = try JSONEncoder().encode(entries)
             try data.write(to: fileURL, options: .atomic)

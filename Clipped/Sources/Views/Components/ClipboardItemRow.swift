@@ -8,6 +8,7 @@ struct ClipboardItemRow: View {
     var onCopy: (() -> Void)?
 
     @State private var isHovered = false
+    @State private var isRevealed = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -166,47 +167,67 @@ struct ClipboardItemRow: View {
     }
 
     private var contentTypeIcon: some View {
-        Image(systemName: item.contentType.systemImage)
+        Image(systemName: shouldMask ? "lock.fill" : item.contentType.systemImage)
             .font(.system(size: 12))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(shouldMask ? .orange : .secondary)
             .frame(width: 20)
+    }
+
+    private var shouldMask: Bool {
+        item.isSensitive && !isRevealed
     }
 
     @ViewBuilder
     private var contentPreview: some View {
-        switch item.content {
-        case .image(let data, _):
-            if let nsImage = NSImage(data: data) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxHeight: 48)
-                    .clipShape(.rect(cornerRadius: 4))
+        if shouldMask {
+            HStack(spacing: 6) {
+                Text("••••••••")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Button {
+                    isRevealed = true
+                } label: {
+                    Image(systemName: "eye")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-        case .url:
-            VStack(alignment: .leading, spacing: 2) {
-                if let title = item.linkTitle {
-                    Text(title)
-                        .font(.system(size: 11, weight: .medium))
+        } else {
+            switch item.content {
+            case .image(let data, _):
+                if let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: 48)
+                        .clipShape(.rect(cornerRadius: 4))
+                }
+            case .url:
+                VStack(alignment: .leading, spacing: 2) {
+                    if let title = item.linkTitle {
+                        Text(title)
+                            .font(.system(size: 11, weight: .medium))
+                            .lineLimit(1)
+                            .foregroundStyle(.primary)
+                    }
+                    Text(item.preview)
+                        .font(.system(size: item.linkTitle != nil ? 10 : 11))
                         .lineLimit(1)
+                        .foregroundStyle(.blue)
+                }
+            case .text, .richText:
+                if item.contentType == .code {
+                    Text(item.preview)
+                        .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text(item.preview)
+                        .font(.system(size: 11))
+                        .lineLimit(2)
                         .foregroundStyle(.primary)
                 }
-                Text(item.preview)
-                    .font(.system(size: item.linkTitle != nil ? 10 : 11))
-                    .lineLimit(1)
-                    .foregroundStyle(.blue)
-            }
-        case .text, .richText:
-            if item.contentType == .code {
-                Text(item.preview)
-                    .font(.system(size: 11, design: .monospaced))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-            } else {
-                Text(item.preview)
-                    .font(.system(size: 11))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
             }
         }
     }

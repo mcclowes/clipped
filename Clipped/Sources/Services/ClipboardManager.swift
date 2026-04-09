@@ -106,6 +106,10 @@ final class ClipboardManager {
             bundleID: bundleID
         ) else { return }
 
+        if isFromPasswordManager && secureMode {
+            item.isSensitive = true
+        }
+
         // Deduplicate: remove existing item with same content preview
         items.removeAll { $0.preview == item.preview && !$0.isPinned }
 
