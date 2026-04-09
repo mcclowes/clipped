@@ -2,69 +2,59 @@
 
 [![Release](https://github.com/mcclowes/clipped/actions/workflows/release.yml/badge.svg)](https://github.com/mcclowes/clipped/actions/workflows/release.yml)
 
-A lightweight, native macOS clipboard manager that fits the platform aesthetic and gets out of the way.
+A lightweight, native macOS clipboard manager that lives in your menu bar, fits the platform aesthetic, and gets out of the way.
+
+Clipped keeps a searchable history of everything you copy — text, images, links, code — so you never lose something you copied earlier. No Dock icon, no clutter, just a quiet menu bar panel available whenever you need it.
+
+## Install
+
+**Homebrew** (recommended):
+
+```bash
+brew install mcclowes/clipped/clipped
+```
+
+**Manual download:** Grab the latest `Clipped.zip` from [GitHub Releases](https://github.com/mcclowes/clipped/releases), unzip, and drag Clipped to your Applications folder.
+
+Requires **macOS 15.0 (Sequoia)** or later.
+
+## Getting started
+
+1. Launch Clipped — it appears as an icon in your menu bar (no Dock icon).
+2. Copy things as you normally would. Clipped automatically tracks your clipboard.
+3. Press **`⌘⇧V`** to open the Clipped panel from anywhere, or click the menu bar icon.
+4. Click any item to copy it back to your clipboard.
 
 ## Features
 
-- **Clipboard history** — Tracks clipboard entries with content type detection (configurable history size, default 10)
+- **Clipboard history** — Automatically tracks what you copy, with configurable history size
 - **Format preservation** — Rich text, URLs, images, and code snippets retain their formatting
-- **Pinning** — Pin frequently used items so they persist above the history window
-- **Search & filter** — Filter by content type or search by text
-- **Secure mode** — Automatically skips or auto-expires clipboard entries from password managers (configurable timeout)
-- **Global hotkey** — `⌘⇧V` to open the panel from anywhere
-- **Persistence** — Optionally persist clipboard history across app restarts
-- **Launch at login** — Start Clipped automatically via `SMAppService`
-- **Paste matching style** — Strip formatting and paste as plain text
-- **Markdown conversion** — Convert rich text clipboard items to Markdown
-- **Link previews** — Automatically fetches page titles for URL items
-- **Export** — Merge and copy multiple clipboard items at once
-- **Screenshot capture** — Automatically detects and captures new screenshots
-- **Sticky notes** — Pin clipboard items as floating sticky notes on your desktop
+- **Global hotkey** — Press `⌘⇧V` to open Clipped from any app
+- **Search & filter** — Find past items by text or filter by content type (text, images, links, etc.)
+- **Pinned items** — Pin frequently used snippets so they always stay at the top
+- **Secure mode** — Automatically skips or auto-expires entries from password managers
+- **Paste as plain text** — Strip formatting and paste matching the destination style
+- **Markdown conversion** — Convert rich text items to Markdown with one click
+- **Link previews** — Automatically fetches page titles for URLs
+- **Screenshot capture** — Detects new screenshots and adds them to your history
+- **Sticky notes** — Pin any item as a floating note on your desktop
+- **Export** — Merge and copy multiple items at once
+- **Persistence** — Optionally keep your history across app restarts
+- **Launch at login** — Start Clipped automatically when you log in
 
-## Requirements
+## Privacy & security
 
-- macOS 15.0 (Sequoia) or later
-- Xcode 16+
-- Swift 6
+Clipped runs entirely on your Mac. No data is sent anywhere — your clipboard history stays local, stored in `~/Library/Application Support/Clipped/`. Sensitive entries from password managers can be automatically skipped or expired.
 
-## Building
+## Building from source
+
+If you'd like to build Clipped yourself:
 
 ```bash
-make generate  # Generate Xcode project from project.yml via XcodeGen
+make generate  # Generate Xcode project via XcodeGen
 make build     # Build the app
-make run       # Build and launch the app
+make run       # Build and launch
+make test      # Run tests
 ```
 
-Or manually:
-
-```bash
-cd Clipped
-xcodegen generate
-xcodebuild -project Clipped.xcodeproj -scheme Clipped -configuration Debug build
-```
-
-## Testing
-
-```bash
-make test
-```
-
-Or manually:
-
-```bash
-xcodebuild -project Clipped.xcodeproj -scheme Clipped -configuration Debug test
-```
-
-## Architecture
-
-Menu bar-only app using SwiftUI's `MenuBarExtra` (no Dock icon, no app switcher entry):
-
-- `ClipboardManager` — `@Observable` service that polls `NSPasteboard` for changes
-- `SettingsManager` — `@Observable` wrapper around `UserDefaults` and `SMAppService`
-- `HistoryStore` — JSON-based persistence to Application Support directory
-- `HotkeyManager` — Carbon-based global hotkey registration (`⌘⇧V`)
-- `LinkMetadataFetcher` — Async page title resolution for URL items
-- `MarkdownConverter` — RTF-to-Markdown conversion
-- `ScreenshotWatcher` — Monitors for new screenshots and adds them to clipboard history
-- `StatusBarController` — NSPopover-based menu bar panel controller
-- SwiftUI views for the panel, item rows, search, filtering, settings, sticky notes, and onboarding
+Requires Xcode 16+ and Swift 6. See [CLAUDE.md](CLAUDE.md) for project structure and architecture details.
