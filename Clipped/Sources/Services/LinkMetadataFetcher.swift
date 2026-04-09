@@ -4,6 +4,9 @@ import Foundation
 final class LinkMetadataFetcher {
     static let shared = LinkMetadataFetcher()
     private var cache: [URL: String] = [:]
+    private var inFlight: [URL: Task<String?, Never>] = [:]
+
+    private static let maxCacheSize = 200
 
     private init() {}
 
@@ -12,27 +15,41 @@ final class LinkMetadataFetcher {
 
         guard url.scheme == "http" || url.scheme == "https" else { return nil }
 
-        do {
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 5
-            request.setValue(
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-                forHTTPHeaderField: "User-Agent"
-            )
-
-            let (data, response) = try await URLSession.shared.data(for: request)
-
-            guard let httpResponse = response as? HTTPURLResponse,
-                  (200...299).contains(httpResponse.statusCode),
-                  let html = String(data: data.prefix(64000), encoding: .utf8)
-            else { return nil }
-
-            let title = parseTitle(from: html)
-            if let title { cache[url] = title }
-            return title
-        } catch {
-            return nil
+        // Deduplicate concurrent requests for the same URL
+        if let existing = inFlight[url] {
+            return await existing.value
         }
+
+        let task = Task<String?, Never> {
+            do {
+                var request = URLRequest(url: url)
+                request.timeoutInterval = 5
+                request.httpShouldHandleCookies = false
+
+                let (data, response) = try await URLSession.shared.data(for: request)
+
+                guard let httpResponse = response as? HTTPURLResponse,
+                      (200...299).contains(httpResponse.statusCode),
+                      let html = String(data: data.prefix(64000), encoding: .utf8)
+                else { return nil }
+
+                return parseTitle(from: html)
+            } catch {
+                return nil
+            }
+        }
+
+        inFlight[url] = task
+        let title = await task.value
+        inFlight[url] = nil
+
+        if let title {
+            if cache.count >= Self.maxCacheSize {
+                cache.removeAll()
+            }
+            cache[url] = title
+        }
+        return title
     }
 
     private func parseTitle(from html: String) -> String? {

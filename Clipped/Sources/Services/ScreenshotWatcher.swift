@@ -120,13 +120,7 @@ final class ScreenshotWatcher {
             // Copy screenshot to system clipboard so user can paste immediately
             clipboardManager?.copyToClipboard(item)
 
-            let maxSize = ClipboardManager.maxHistorySize
-            while clipboardManager?.items.count(where: { !$0.isPinned }) ?? 0 > maxSize {
-                if let lastUnpinned = clipboardManager?.items.lastIndex(where: { !$0.isPinned }) {
-                    clipboardManager?.items.remove(at: lastUnpinned)
-                }
-            }
-
+            clipboardManager?.trimToMaxSize()
             clipboardManager?.saveHistory()
 
             // Show a disappearing notification

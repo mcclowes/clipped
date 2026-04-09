@@ -1,10 +1,13 @@
 import AppKit
 import Foundation
+import os
 
 /// Persists clipboard history to a JSON file in the app's support directory.
 @MainActor
 final class HistoryStore {
     static let shared = HistoryStore()
+
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "HistoryStore")
 
     private let fileURL: URL
 
@@ -28,14 +31,31 @@ final class HistoryStore {
                 ofItemAtPath: fileURL.path
             )
         } catch {
-            // Silently fail — persistence is optional
+            Self.logger.error("Failed to save clipboard history: \(error.localizedDescription)")
         }
     }
 
     func load() -> (items: [ClipboardItem], pinned: [ClipboardItem]) {
-        guard let data = try? Data(contentsOf: fileURL),
-              let entries = try? JSONDecoder().decode([StoredEntry].self, from: data)
-        else {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            return ([], [])
+        }
+
+        let data: Data
+        do {
+            data = try Data(contentsOf: fileURL)
+        } catch {
+            Self.logger.error("Failed to read history file: \(error.localizedDescription)")
+            return ([], [])
+        }
+
+        let entries: [StoredEntry]
+        do {
+            entries = try JSONDecoder().decode([StoredEntry].self, from: data)
+        } catch {
+            Self.logger.error("History file corrupted, backing up and starting fresh: \(error.localizedDescription)")
+            let backupURL = fileURL.deletingLastPathComponent()
+                .appendingPathComponent("history.corrupted.json")
+            try? FileManager.default.moveItem(at: fileURL, to: backupURL)
             return ([], [])
         }
 

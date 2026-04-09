@@ -38,8 +38,13 @@ final class ClipboardManager {
     private(set) var isMonitoring = false
     private var pollTimer: Timer?
     private var lastChangeCount: Int = 0
+    private var isCheckingClipboard = false
 
     static let maxHistorySize = 10
+
+    private static let pollInterval: TimeInterval = 0.5
+    private static let monitoringResumeDelay: Duration = .milliseconds(200)
+    private static let vKeyCode: UInt16 = 0x09
 
     var filteredItems: [ClipboardItem] {
         var result = items
@@ -74,7 +79,7 @@ final class ClipboardManager {
     func startMonitoring() {
         guard !isMonitoring else { return }
         isMonitoring = true
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.checkClipboard()
             }
@@ -87,7 +92,21 @@ final class ClipboardManager {
         pollTimer = nil
     }
 
+    /// Pause monitoring, perform a clipboard mutation, then resume after a brief delay.
+    private func withMonitoringPaused(_ body: () -> Void) {
+        stopMonitoring()
+        body()
+        lastChangeCount = NSPasteboard.general.changeCount
+        Task {
+            try? await Task.sleep(for: Self.monitoringResumeDelay)
+            startMonitoring()
+        }
+    }
+
     private func checkClipboard() {
+        guard !isCheckingClipboard else { return }
+        isCheckingClipboard = true
+        defer { isCheckingClipboard = false }
         let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
         guard currentCount != lastChangeCount else { return }
@@ -140,12 +159,7 @@ final class ClipboardManager {
             }
         }
 
-        // Trim to max size (excluding pinned)
-        while items.count(where: { !$0.isPinned }) > Self.maxHistorySize {
-            if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
-                items.remove(at: lastUnpinned)
-            }
-        }
+        trimToMaxSize()
 
         if !pendingRemoval {
             saveHistory()
@@ -213,27 +227,26 @@ final class ClipboardManager {
     // MARK: - Actions
 
     func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
-        stopMonitoring()
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
+        withMonitoringPaused {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
 
-        switch item.content {
-        case let .text(string):
-            pasteboard.setString(string, forType: .string)
-        case let .richText(rtfData, plain):
-            if asPlainText {
-                pasteboard.setString(plain, forType: .string)
-            } else {
-                pasteboard.setData(rtfData, forType: .rtf)
-                pasteboard.setString(plain, forType: .string)
+            switch item.content {
+            case let .text(string):
+                pasteboard.setString(string, forType: .string)
+            case let .richText(rtfData, plain):
+                if asPlainText {
+                    pasteboard.setString(plain, forType: .string)
+                } else {
+                    pasteboard.setData(rtfData, forType: .rtf)
+                    pasteboard.setString(plain, forType: .string)
+                }
+            case let .url(url):
+                pasteboard.setString(url.absoluteString, forType: .string)
+            case let .image(data, _):
+                pasteboard.setData(data, forType: .tiff)
             }
-        case let .url(url):
-            pasteboard.setString(url.absoluteString, forType: .string)
-        case let .image(data, _):
-            pasteboard.setData(data, forType: .tiff)
         }
-
-        lastChangeCount = pasteboard.changeCount
 
         if settingsManager?.playSoundOnCopy ?? true {
             NSSound(named: "Pop")?.play()
@@ -243,12 +256,6 @@ final class ClipboardManager {
         if let index = items.firstIndex(where: { $0.id == item.id }) {
             let moved = items.remove(at: index)
             items.insert(moved, at: 0)
-        }
-
-        // Resume monitoring after a brief delay
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            startMonitoring()
         }
     }
 
@@ -273,10 +280,10 @@ final class ClipboardManager {
 
         let source = CGEventSource(stateID: .hidSystemState)
 
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // V key
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: true)
         keyDown?.flags = .maskCommand
 
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: false)
         keyUp?.flags = .maskCommand
 
         keyDown?.post(tap: .cghidEventTap)
@@ -291,15 +298,10 @@ final class ClipboardManager {
             return
         }
 
-        stopMonitoring()
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
-        lastChangeCount = pasteboard.changeCount
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            startMonitoring()
+        withMonitoringPaused {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
         }
     }
 
@@ -307,15 +309,10 @@ final class ClipboardManager {
         let merged = items.compactMap(\.plainText).joined(separator: "\n\n---\n\n")
         guard !merged.isEmpty else { return }
 
-        stopMonitoring()
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(merged, forType: .string)
-        lastChangeCount = pasteboard.changeCount
-
-        Task {
-            try? await Task.sleep(for: .milliseconds(200))
-            startMonitoring()
+        withMonitoringPaused {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(merged, forType: .string)
         }
     }
 
@@ -345,5 +342,14 @@ final class ClipboardManager {
             pinnedItems.removeAll()
         }
         saveHistory()
+    }
+
+    /// Remove oldest unpinned items beyond `maxHistorySize`.
+    func trimToMaxSize() {
+        while items.count(where: { !$0.isPinned }) > Self.maxHistorySize {
+            if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
+                items.remove(at: lastUnpinned)
+            }
+        }
     }
 }
