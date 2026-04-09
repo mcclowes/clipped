@@ -290,7 +290,8 @@ struct ClipboardManagerTests {
         manager.selectedFilter = .developer
 
         #expect(manager.filteredItems.count == 2)
-        try #expect(manager.filteredItems.allSatisfy(\.isDeveloperContent))
+        let allDev = try manager.filteredItems.allSatisfy(\.isDeveloperContent)
+        #expect(allDev)
     }
 
     @Test("Trim to max size preserves developer content items")
