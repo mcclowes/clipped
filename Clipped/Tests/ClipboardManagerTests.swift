@@ -5,9 +5,11 @@ import Testing
 
 @MainActor
 struct ClipboardManagerTests {
+    // swiftlint:disable large_tuple
     private func makeManager(persistHistory: Bool = true)
         -> (ClipboardManager, MockHistoryStore, MockSettingsManager, MockLinkMetadataFetcher)
     {
+        // swiftlint:enable large_tuple
         let manager = ClipboardManager()
         manager.stopMonitoring()
         let history = MockHistoryStore()
