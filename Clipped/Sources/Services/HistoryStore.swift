@@ -25,11 +25,16 @@ final class HistoryStore {
         let entries = (items + pinnedItems).filter { !$0.isSensitive }.map { StoredEntry(from: $0) }
         do {
             let data = try JSONEncoder().encode(entries)
-            try data.write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o600],
-                ofItemAtPath: fileURL.path
+            // Write to a temp file with restricted permissions, then atomically move into place.
+            // This avoids the race where .atomic creates a world-readable temp file.
+            let tempURL = fileURL.deletingLastPathComponent()
+                .appendingPathComponent("history.tmp.json")
+            FileManager.default.createFile(
+                atPath: tempURL.path,
+                contents: data,
+                attributes: [.posixPermissions: 0o600]
             )
+            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
         } catch {
             Self.logger.error("Failed to save clipboard history: \(error.localizedDescription)")
         }
@@ -169,6 +174,7 @@ private struct StoredEntry: Codable {
             contentType: type,
             sourceAppName: sourceAppName,
             sourceAppBundleID: sourceAppBundleID,
+            timestamp: timestamp,
             isPinned: isPinned
         )
         item.linkTitle = linkTitle

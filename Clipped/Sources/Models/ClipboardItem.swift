@@ -63,6 +63,7 @@ final class ClipboardItem: Identifiable {
         contentType: ContentType,
         sourceAppName: String? = nil,
         sourceAppBundleID: String? = nil,
+        timestamp: Date = Date(),
         isPinned: Bool = false,
         isSensitive: Bool = false
     ) {
@@ -71,13 +72,13 @@ final class ClipboardItem: Identifiable {
         self.contentType = contentType
         self.sourceAppName = sourceAppName
         self.sourceAppBundleID = sourceAppBundleID
-        timestamp = Date()
+        self.timestamp = timestamp
         self.isPinned = isPinned
         self.isSensitive = isSensitive
     }
 }
 
-enum ClipboardContent {
+enum ClipboardContent: Equatable {
     case text(String)
     case richText(Data, String) // RTF data + plain text fallback
     case url(URL)
