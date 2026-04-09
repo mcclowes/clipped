@@ -18,6 +18,10 @@ build/
 # CocoaPods (if ever used)
 Pods/
 
+# Profiling
+*.profraw
+*.profdata
+
 # Misc
 *.hmap
 *.moved-aside
