@@ -81,3 +81,35 @@ enum ClipboardContent: Sendable {
     case url(URL)
     case image(Data, CGSize) // image data + dimensions
 }
+
+enum HexColorParser {
+    private static let pattern = try! NSRegularExpression(
+        pattern: "#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\\b"
+    )
+
+    static func firstColor(in text: String) -> NSColor? {
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = pattern.firstMatch(in: text, range: range),
+              let matchRange = Range(match.range, in: text) else { return nil }
+        return parse(String(text[matchRange]))
+    }
+
+    static func parse(_ hex: String) -> NSColor? {
+        var h = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard h.hasPrefix("#") else { return nil }
+        h.removeFirst()
+
+        // Expand 3-char shorthand (#f0a -> #ff00aa)
+        if h.count == 3 {
+            h = h.map { "\($0)\($0)" }.joined()
+        }
+        guard h.count == 6, let value = UInt64(h, radix: 16) else { return nil }
+
+        return NSColor(
+            red: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}

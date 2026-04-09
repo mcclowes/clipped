@@ -56,7 +56,7 @@ Clipped/
 - `@Observable` macro (not `ObservableObject`)
 - Environment-based DI via `.environment()` in SwiftUI
 - No third-party dependencies
-- App-sandboxed with entitlements: network client, user-selected read-only files, app-scope bookmarks
+- App sandbox disabled; entitlements include network client, user-selected read-only files, app-scope bookmarks
 
 ## Testing
 
