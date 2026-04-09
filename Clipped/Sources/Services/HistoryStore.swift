@@ -9,10 +9,13 @@ final class HistoryStore {
     private let fileURL: URL
 
     private init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else {
+            fatalError("Application Support directory not found")
+        }
         let appDir = appSupport.appendingPathComponent("Clipped", isDirectory: true)
         try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
-        self.fileURL = appDir.appendingPathComponent("history.json")
+        fileURL = appDir.appendingPathComponent("history.json")
     }
 
     func save(items: [ClipboardItem], pinnedItems: [ClipboardItem]) {
@@ -71,43 +74,43 @@ private struct StoredEntry: Codable {
     let linkTitle: String?
 
     init(from item: ClipboardItem) {
-        self.id = item.id
-        self.contentType = item.contentType.rawValue
-        self.sourceAppName = item.sourceAppName
-        self.sourceAppBundleID = item.sourceAppBundleID
-        self.timestamp = item.timestamp
-        self.isPinned = item.isPinned
-        self.linkTitle = item.linkTitle
+        id = item.id
+        contentType = item.contentType.rawValue
+        sourceAppName = item.sourceAppName
+        sourceAppBundleID = item.sourceAppBundleID
+        timestamp = item.timestamp
+        isPinned = item.isPinned
+        linkTitle = item.linkTitle
 
         switch item.content {
-        case .text(let string):
-            self.textContent = string
-            self.rtfData = nil
-            self.urlString = nil
-            self.imageData = nil
-            self.imageWidth = nil
-            self.imageHeight = nil
-        case .richText(let data, let plain):
-            self.textContent = plain
-            self.rtfData = data
-            self.urlString = nil
-            self.imageData = nil
-            self.imageWidth = nil
-            self.imageHeight = nil
-        case .url(let url):
-            self.textContent = nil
-            self.rtfData = nil
-            self.urlString = url.absoluteString
-            self.imageData = nil
-            self.imageWidth = nil
-            self.imageHeight = nil
-        case .image(let data, let size):
-            self.textContent = nil
-            self.rtfData = nil
-            self.urlString = nil
-            self.imageData = data
-            self.imageWidth = size.width
-            self.imageHeight = size.height
+        case let .text(string):
+            textContent = string
+            rtfData = nil
+            urlString = nil
+            imageData = nil
+            imageWidth = nil
+            imageHeight = nil
+        case let .richText(data, plain):
+            textContent = plain
+            rtfData = data
+            urlString = nil
+            imageData = nil
+            imageWidth = nil
+            imageHeight = nil
+        case let .url(url):
+            textContent = nil
+            rtfData = nil
+            urlString = url.absoluteString
+            imageData = nil
+            imageWidth = nil
+            imageHeight = nil
+        case let .image(data, size):
+            textContent = nil
+            rtfData = nil
+            urlString = nil
+            imageData = data
+            imageWidth = size.width
+            imageHeight = size.height
         }
     }
 

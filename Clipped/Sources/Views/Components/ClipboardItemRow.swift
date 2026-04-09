@@ -54,7 +54,7 @@ struct ClipboardItemRow: View {
                 manager.pasteMatchingStyle(item)
             }
 
-            if case .url(let url) = item.content {
+            if case let .url(url) = item.content {
                 Button("Open URL") {
                     NSWorkspace.shared.open(url)
                 }
@@ -64,7 +64,7 @@ struct ClipboardItemRow: View {
                 openWindow(value: item.id)
             }
 
-            if item.plainText != nil && Self.is1PasswordInstalled {
+            if item.plainText != nil, Self.is1PasswordInstalled {
                 Button("Save to 1Password") {
                     manager.copyToClipboard(item, asPlainText: true)
                     Self.open1Password()
@@ -104,10 +104,18 @@ struct ClipboardItemRow: View {
 
         menu.addItem(.separator())
 
-        let pasteItem = NSMenuItem(title: "Paste directly", action: #selector(ActionMenuTarget.pasteDirectly), keyEquivalent: "")
+        let pasteItem = NSMenuItem(
+            title: "Paste directly",
+            action: #selector(ActionMenuTarget.pasteDirectly),
+            keyEquivalent: ""
+        )
         pasteItem.image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: nil)
 
-        let plainTextItem = NSMenuItem(title: "Copy as plain text", action: #selector(ActionMenuTarget.copyAsPlainText), keyEquivalent: "")
+        let plainTextItem = NSMenuItem(
+            title: "Copy as plain text",
+            action: #selector(ActionMenuTarget.copyAsPlainText),
+            keyEquivalent: ""
+        )
         plainTextItem.image = NSImage(systemSymbolName: "doc.plaintext", accessibilityDescription: nil)
 
         let target = ActionMenuTarget(manager: manager, item: item, openWindow: openWindow)
@@ -117,13 +125,17 @@ struct ClipboardItemRow: View {
         menu.addItem(plainTextItem)
 
         if case .richText = item.content {
-            let mdItem = NSMenuItem(title: "Copy as Markdown", action: #selector(ActionMenuTarget.copyAsMarkdown), keyEquivalent: "")
+            let mdItem = NSMenuItem(
+                title: "Copy as Markdown",
+                action: #selector(ActionMenuTarget.copyAsMarkdown),
+                keyEquivalent: ""
+            )
             mdItem.image = NSImage(systemSymbolName: "text.document", accessibilityDescription: nil)
             mdItem.target = target
             menu.addItem(mdItem)
         }
 
-        if case .url(let url) = item.content {
+        if case let .url(url) = item.content {
             let urlItem = NSMenuItem(title: "Open URL", action: #selector(ActionMenuTarget.openURL), keyEquivalent: "")
             urlItem.image = NSImage(systemSymbolName: "safari", accessibilityDescription: nil)
             urlItem.target = target
@@ -131,13 +143,21 @@ struct ClipboardItemRow: View {
             menu.addItem(urlItem)
         }
 
-        let stickyItem = NSMenuItem(title: "Open as sticky note", action: #selector(ActionMenuTarget.openStickyNote), keyEquivalent: "")
+        let stickyItem = NSMenuItem(
+            title: "Open as sticky note",
+            action: #selector(ActionMenuTarget.openStickyNote),
+            keyEquivalent: ""
+        )
         stickyItem.image = NSImage(systemSymbolName: "note.text", accessibilityDescription: nil)
         stickyItem.target = target
         menu.addItem(stickyItem)
 
         if item.plainText != nil && Self.is1PasswordInstalled {
-            let onePassItem = NSMenuItem(title: "Save to 1Password", action: #selector(ActionMenuTarget.saveTo1Password), keyEquivalent: "")
+            let onePassItem = NSMenuItem(
+                title: "Save to 1Password",
+                action: #selector(ActionMenuTarget.saveTo1Password),
+                keyEquivalent: ""
+            )
             onePassItem.image = NSImage(systemSymbolName: "lock.shield", accessibilityDescription: nil)
             onePassItem.target = target
             menu.addItem(onePassItem)
@@ -195,7 +215,7 @@ struct ClipboardItemRow: View {
             }
         } else {
             switch item.content {
-            case .image(let data, _):
+            case let .image(data, _):
                 if let nsImage = NSImage(data: data) {
                     Image(nsImage: nsImage)
                         .resizable()
@@ -239,6 +259,7 @@ struct ClipboardItemRow: View {
                             )
                     }
                 }
+            }
         }
     }
 
@@ -298,7 +319,7 @@ private final class ActionMenuTarget: NSObject {
     }
 
     @objc func openURL() {
-        if case .url(let url) = item.content {
+        if case let .url(url) = item.content {
             NSWorkspace.shared.open(url)
         }
     }

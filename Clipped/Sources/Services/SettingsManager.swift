@@ -39,24 +39,24 @@ final class SettingsManager {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
-                launchAtLogin = !launchAtLogin
+                launchAtLogin.toggle()
             }
         }
     }
 
     init() {
-        self.persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
-        self.maxHistorySize = max(UserDefaults.standard.integer(forKey: "maxHistorySize"), 10)
-        self.secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
+        persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
+        maxHistorySize = max(UserDefaults.standard.integer(forKey: "maxHistorySize"), 10)
+        secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "secureMode")
-        self.secureTimeout = UserDefaults.standard.object(forKey: "secureTimeout") == nil
+        secureTimeout = UserDefaults.standard.object(forKey: "secureTimeout") == nil
             ? 0
             : UserDefaults.standard.integer(forKey: "secureTimeout")
-        self.playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
+        playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
-        self.captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
-        self.launchAtLogin = SMAppService.mainApp.status == .enabled
+        captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
+        launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

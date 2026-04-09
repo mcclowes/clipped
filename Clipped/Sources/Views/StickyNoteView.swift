@@ -37,7 +37,6 @@ struct StickyNoteView: View {
         }
     }
 
-    @ViewBuilder
     private func stickyContent(for item: ClipboardItem) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             dragBar(for: item)
@@ -89,13 +88,13 @@ struct StickyNoteView: View {
     @ViewBuilder
     private func contentBody(for item: ClipboardItem) -> some View {
         switch item.content {
-        case .text(let string):
+        case let .text(string):
             selectableText(string, isCode: item.contentType == .code)
 
-        case .richText(_, let plainText):
+        case let .richText(_, plainText):
             selectableText(plainText, isCode: false)
 
-        case .url(let url):
+        case let .url(url):
             VStack(alignment: .leading, spacing: 4) {
                 if let title = item.linkTitle {
                     Text(title)
@@ -106,7 +105,7 @@ struct StickyNoteView: View {
                     .foregroundStyle(.blue)
             }
 
-        case .image(let data, _):
+        case let .image(data, _):
             if let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()

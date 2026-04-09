@@ -1,0 +1,25 @@
+# SwiftFormat configuration for Clipped
+
+--swiftversion 6.0
+--minversion 0.54
+
+# Rules
+--enable isEmpty
+--disable blankLinesBetweenChainedFunctions
+
+# Formatting options
+--indent 4
+--indentcase false
+--trimwhitespace always
+--voidtype void
+--nospaceoperators ..., ..<
+--commas always
+--stripunusedargs closure-only
+--maxwidth 120
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+
+# File options
+--exclude .build,DerivedData,Clipped/Clipped.xcodeproj

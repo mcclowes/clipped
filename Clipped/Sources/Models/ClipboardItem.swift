@@ -1,14 +1,16 @@
 import AppKit
 import Foundation
 
-enum ContentType: String, CaseIterable, Identifiable, Sendable {
+enum ContentType: String, CaseIterable, Identifiable {
     case plainText = "Text"
     case richText = "Rich Text"
     case url = "URL"
     case code = "Code"
     case image = "Image"
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var systemImage: String {
         switch self {
@@ -22,7 +24,7 @@ enum ContentType: String, CaseIterable, Identifiable, Sendable {
 }
 
 @MainActor
-final class ClipboardItem: Identifiable, Sendable {
+final class ClipboardItem: Identifiable {
     let id: UUID
     let content: ClipboardContent
     let contentType: ContentType
@@ -35,22 +37,22 @@ final class ClipboardItem: Identifiable, Sendable {
 
     var plainText: String? {
         switch content {
-        case .text(let string): string
-        case .richText(_, let plainFallback): plainFallback
-        case .url(let url): url.absoluteString
+        case let .text(string): string
+        case let .richText(_, plainFallback): plainFallback
+        case let .url(url): url.absoluteString
         default: nil
         }
     }
 
     var preview: String {
         switch content {
-        case .text(let string):
+        case let .text(string):
             String(string.prefix(200))
-        case .richText(_, let plain):
+        case let .richText(_, plain):
             String(plain.prefix(200))
-        case .url(let url):
+        case let .url(url):
             url.absoluteString
-        case .image(_, let size):
+        case let .image(_, size):
             "Image — \(Int(size.width))×\(Int(size.height))"
         }
     }
@@ -69,13 +71,13 @@ final class ClipboardItem: Identifiable, Sendable {
         self.contentType = contentType
         self.sourceAppName = sourceAppName
         self.sourceAppBundleID = sourceAppBundleID
-        self.timestamp = Date()
+        timestamp = Date()
         self.isPinned = isPinned
         self.isSensitive = isSensitive
     }
 }
 
-enum ClipboardContent: Sendable {
+enum ClipboardContent {
     case text(String)
     case richText(Data, String) // RTF data + plain text fallback
     case url(URL)
@@ -83,6 +85,7 @@ enum ClipboardContent: Sendable {
 }
 
 enum HexColorParser {
+    // swiftlint:disable:next force_try
     private static let pattern = try! NSRegularExpression(
         pattern: "#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\\b"
     )

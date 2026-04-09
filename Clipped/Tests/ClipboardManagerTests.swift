@@ -1,10 +1,9 @@
 import AppKit
+@testable import Clipped
 import Foundation
 import Testing
-@testable import Clipped
 
 @MainActor
-@Suite("ClipboardManager")
 struct ClipboardManagerTests {
     @Test("Starts with empty history")
     func emptyHistory() {
@@ -15,7 +14,7 @@ struct ClipboardManagerTests {
     }
 
     @Test("Filter by content type returns matching items only")
-    func filterByType() {
+    func filterByType() throws {
         let manager = ClipboardManager()
         manager.stopMonitoring()
 
@@ -23,8 +22,8 @@ struct ClipboardManagerTests {
             content: .text("hello"),
             contentType: .plainText
         )
-        let urlItem = ClipboardItem(
-            content: .url(URL(string: "https://example.com")!),
+        let urlItem = try ClipboardItem(
+            content: .url(#require(URL(string: "https://example.com"))),
             contentType: .url
         )
 
@@ -102,13 +101,13 @@ struct ClipboardManagerTests {
     }
 
     @Test("Content type detection")
-    func contentTypes() {
+    func contentTypes() throws {
         let textItem = ClipboardItem(content: .text("plain"), contentType: .plainText)
         #expect(textItem.contentType == .plainText)
         #expect(textItem.plainText == "plain")
 
-        let urlItem = ClipboardItem(
-            content: .url(URL(string: "https://example.com")!),
+        let urlItem = try ClipboardItem(
+            content: .url(#require(URL(string: "https://example.com"))),
             contentType: .url
         )
         #expect(urlItem.contentType == .url)
@@ -123,9 +122,9 @@ struct ClipboardManagerTests {
     }
 
     @Test("URL items support link title")
-    func linkTitle() {
-        let urlItem = ClipboardItem(
-            content: .url(URL(string: "https://example.com")!),
+    func linkTitle() throws {
+        let urlItem = try ClipboardItem(
+            content: .url(#require(URL(string: "https://example.com"))),
             contentType: .url
         )
         #expect(urlItem.linkTitle == nil)
@@ -136,7 +135,6 @@ struct ClipboardManagerTests {
 }
 
 @MainActor
-@Suite("MarkdownConverter")
 struct MarkdownConverterTests {
     @Test("Converts bold text to Markdown")
     func boldConversion() {
@@ -149,9 +147,9 @@ struct MarkdownConverterTests {
     }
 
     @Test("Converts links to Markdown")
-    func linkConversion() {
+    func linkConversion() throws {
         let attributed = NSMutableAttributedString(string: "click here")
-        let url = URL(string: "https://example.com")!
+        let url = try #require(URL(string: "https://example.com"))
         attributed.addAttribute(.link, value: url, range: NSRange(location: 0, length: 10))
 
         let markdown = MarkdownConverter.convert(attributedString: attributed)
@@ -166,7 +164,6 @@ struct MarkdownConverterTests {
 }
 
 @MainActor
-@Suite("HexColorParser")
 struct HexColorParserTests {
     @Test("Parses 6-digit hex colour")
     func sixDigit() {
@@ -199,23 +196,22 @@ struct HexColorParserTests {
     }
 }
 
-@Suite("LinkMetadataFetcher")
 struct LinkMetadataFetcherTests {
     @Test("Parses title from HTML")
     @MainActor
-    func parseTitle() async {
+    func parseTitle() async throws {
         let fetcher = LinkMetadataFetcher.shared
         // Test with a reliable public URL
-        let title = await fetcher.fetchTitle(for: URL(string: "https://example.com")!)
+        let title = try await fetcher.fetchTitle(for: #require(URL(string: "https://example.com")))
         #expect(title != nil)
         #expect(title?.contains("Example") == true)
     }
 
     @Test("Returns nil for non-HTTP URLs")
     @MainActor
-    func nonHttpUrl() async {
+    func nonHttpUrl() async throws {
         let fetcher = LinkMetadataFetcher.shared
-        let title = await fetcher.fetchTitle(for: URL(string: "ftp://example.com")!)
+        let title = try await fetcher.fetchTitle(for: #require(URL(string: "ftp://example.com")))
         #expect(title == nil)
     }
 }

@@ -33,7 +33,7 @@ enum MarkdownConverter {
                 let isBold = traits.contains(.bold)
                 let isItalic = traits.contains(.italic)
 
-                if isBold && isItalic {
+                if isBold, isItalic {
                     text = "***\(text)***"
                 } else if isBold {
                     text = "**\(text)**"

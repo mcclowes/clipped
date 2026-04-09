@@ -16,11 +16,13 @@ struct OnboardingOverlay: View {
                 Text("Welcome to Clipped")
                     .font(.headline)
 
-                Text("Your clipboard history lives up here in the menu bar. Copy anything and it'll appear in this panel.\n\nUse ⌘⇧V to open from anywhere.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Your clipboard history lives up here in the menu bar. Copy anything and it'll appear in this panel.\n\nUse ⌘⇧V to open from anywhere."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
 
                 Button("Get Started") {
                     withAnimation(.easeOut(duration: 0.2)) {

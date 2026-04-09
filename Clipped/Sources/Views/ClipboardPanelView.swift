@@ -122,9 +122,9 @@ struct ClipboardPanelView: View {
                 onReturnKey: { copySelectedItem() },
                 onEscapeKey: { handleEscape() }
             )
-                .padding(.horizontal, 12)
-                .padding(.top, 12)
-                .padding(.bottom, 8)
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
             ContentTypeFilterBar(selection: $manager.selectedContentType)
                 .padding(.horizontal, 12)
@@ -132,7 +132,7 @@ struct ClipboardPanelView: View {
 
             Divider()
 
-            if manager.pinnedItems.isEmpty && manager.filteredItems.isEmpty {
+            if manager.pinnedItems.isEmpty, manager.filteredItems.isEmpty {
                 emptyState
             } else {
                 ScrollViewReader { proxy in
@@ -332,7 +332,7 @@ struct ClipboardPanelView: View {
 
         if let current = selectedIndex {
             let next = current + delta
-            if next >= 0 && next < count {
+            if next >= 0, next < count {
                 selectedIndex = next
             }
         } else {

@@ -1,0 +1,49 @@
+# SwiftLint configuration for Clipped
+
+included:
+  - Clipped/Sources
+  - Clipped/Tests
+
+excluded:
+  - .build
+  - DerivedData
+
+# Disable noisy rules that don't add value for this project
+disabled_rules:
+  - trailing_comma
+  - identifier_name
+  - type_body_length
+  - file_length
+  - function_body_length
+  - line_length
+  - nesting
+  - todo
+  - opening_brace
+
+opt_in_rules:
+  - closure_spacing
+  - collection_alignment
+  - contains_over_filter_count
+  - contains_over_first_not_nil
+  - empty_collection_literal
+  - empty_count
+  - empty_string
+  - fatal_error_message
+  - first_where
+  - force_unwrapping
+  - last_where
+  - modifier_order
+  - overridden_super_call
+  - private_action
+  - private_outlet
+  - redundant_nil_coalescing
+  - redundant_type_annotation
+  - sorted_first_last
+  - toggle_bool
+  - unowned_variable_capture
+  - vertical_whitespace_closing_braces
+
+# SwiftFormat handles line length
+force_cast: warning
+force_try: warning
+force_unwrapping: warning

@@ -7,6 +7,17 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install tools
+        run: brew install swiftformat swiftlint
+
+      - name: Lint
+        run: make lint
+
   test:
     runs-on: macos-15
     steps:

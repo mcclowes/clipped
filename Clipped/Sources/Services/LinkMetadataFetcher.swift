@@ -24,7 +24,7 @@ final class LinkMetadataFetcher {
 
             guard let httpResponse = response as? HTTPURLResponse,
                   (200...299).contains(httpResponse.statusCode),
-                  let html = String(data: data.prefix(64_000), encoding: .utf8)
+                  let html = String(data: data.prefix(64000), encoding: .utf8)
             else { return nil }
 
             let title = parseTitle(from: html)
@@ -39,7 +39,11 @@ final class LinkMetadataFetcher {
         // Simple regex-based title extraction — no dependencies needed
         guard let openRange = html.range(of: "<title", options: .caseInsensitive),
               let closeStart = html.range(of: ">", range: openRange.upperBound..<html.endIndex),
-              let closeEnd = html.range(of: "</title>", options: .caseInsensitive, range: closeStart.upperBound..<html.endIndex)
+              let closeEnd = html.range(
+                  of: "</title>",
+                  options: .caseInsensitive,
+                  range: closeStart.upperBound..<html.endIndex
+              )
         else { return nil }
 
         let title = String(html[closeStart.upperBound..<closeEnd.lowerBound])

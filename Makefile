@@ -2,7 +2,7 @@ SCHEME = Clipped
 PROJECT_DIR = Clipped
 BUILD_DIR = $(shell xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $$NF}')
 
-.PHONY: build run test clean generate
+.PHONY: build run test clean generate format lint
 
 build:
 	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug build
@@ -28,3 +28,10 @@ clean:
 
 generate:
 	cd $(PROJECT_DIR) && xcodegen generate
+
+format:
+	swiftformat .
+
+lint:
+	swiftformat --lint .
+	swiftlint lint --strict

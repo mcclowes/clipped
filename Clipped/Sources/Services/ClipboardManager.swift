@@ -8,7 +8,7 @@ private let codeEditorBundleIDs: Set<String> = [
     "com.sublimetext.4",
     "com.jetbrains.intellij",
     "dev.zed.Zed",
-    "com.todesktop.230313mzl4w4u92",  // Cursor
+    "com.todesktop.230313mzl4w4u92", // Cursor
 ]
 
 private let passwordManagerBundleIDs: Set<String> = [
@@ -96,7 +96,7 @@ final class ClipboardManager {
         let secureTimeout = settingsManager?.secureTimeout ?? 0
 
         // Secure mode: skip or auto-expire items from password managers
-        if isFromPasswordManager && secureMode && secureTimeout == 0 {
+        if isFromPasswordManager, secureMode, secureTimeout == 0 {
             return
         }
 
@@ -106,7 +106,7 @@ final class ClipboardManager {
             bundleID: bundleID
         ) else { return }
 
-        if isFromPasswordManager && secureMode {
+        if isFromPasswordManager, secureMode {
             item.isSensitive = true
         }
 
@@ -116,7 +116,7 @@ final class ClipboardManager {
         items.insert(item, at: 0)
 
         // Schedule auto-removal for password manager items
-        if isFromPasswordManager && secureMode && secureTimeout > 0 {
+        if isFromPasswordManager, secureMode, secureTimeout > 0 {
             let itemID = item.id
             Task {
                 try? await Task.sleep(for: .seconds(secureTimeout))
@@ -125,14 +125,14 @@ final class ClipboardManager {
         }
 
         // Fetch link title for URLs
-        if case .url(let url) = item.content {
+        if case let .url(url) = item.content {
             Task {
                 item.linkTitle = await LinkMetadataFetcher.shared.fetchTitle(for: url)
             }
         }
 
         // Trim to max size (excluding pinned)
-        while items.filter({ !$0.isPinned }).count > Self.maxHistorySize {
+        while items.count(where: { !$0.isPinned }) > Self.maxHistorySize {
             if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
                 items.remove(at: lastUnpinned)
             }
@@ -207,18 +207,18 @@ final class ClipboardManager {
         pasteboard.clearContents()
 
         switch item.content {
-        case .text(let string):
+        case let .text(string):
             pasteboard.setString(string, forType: .string)
-        case .richText(let rtfData, let plain):
+        case let .richText(rtfData, plain):
             if asPlainText {
                 pasteboard.setString(plain, forType: .string)
             } else {
                 pasteboard.setData(rtfData, forType: .rtf)
                 pasteboard.setString(plain, forType: .string)
             }
-        case .url(let url):
+        case let .url(url):
             pasteboard.setString(url.absoluteString, forType: .string)
-        case .image(let data, _):
+        case let .image(data, _):
             pasteboard.setData(data, forType: .tiff)
         }
 
@@ -265,7 +265,7 @@ final class ClipboardManager {
     }
 
     func copyAsMarkdown(_ item: ClipboardItem) {
-        guard case .richText(let rtfData, let plain) = item.content,
+        guard case let .richText(rtfData, plain) = item.content,
               let markdown = MarkdownConverter.convert(rtfData: rtfData)
         else {
             copyToClipboard(item, asPlainText: true)
@@ -285,7 +285,7 @@ final class ClipboardManager {
     }
 
     func exportItems(_ items: [ClipboardItem]) {
-        let merged = items.compactMap { $0.plainText }.joined(separator: "\n\n---\n\n")
+        let merged = items.compactMap(\.plainText).joined(separator: "\n\n---\n\n")
         guard !merged.isEmpty else { return }
 
         stopMonitoring()

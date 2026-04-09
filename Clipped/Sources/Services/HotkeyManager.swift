@@ -19,7 +19,7 @@ final class HotkeyManager {
             eventKind: UInt32(kEventHotKeyPressed)
         )
 
-        let handlerBlock: EventHandlerUPP = { _, event, _ -> OSStatus in
+        let handlerBlock: EventHandlerUPP = { _, _, _ -> OSStatus in
             Task { @MainActor in
                 HotkeyManager.shared.callback?()
             }
