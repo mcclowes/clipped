@@ -108,6 +108,7 @@ private struct StoredEntry: Codable {
     let timestamp: Date
     let isPinned: Bool
     let linkTitle: String?
+    let linkFavicon: Data?
 
     init(from item: ClipboardItem) {
         id = item.id
@@ -117,6 +118,7 @@ private struct StoredEntry: Codable {
         timestamp = item.timestamp
         isPinned = item.isPinned
         linkTitle = item.linkTitle
+        linkFavicon = item.linkFavicon
 
         switch item.content {
         case let .text(string):
@@ -185,6 +187,7 @@ private struct StoredEntry: Codable {
             isPinned: isPinned
         )
         item.linkTitle = linkTitle
+        item.linkFavicon = linkFavicon
         return item
     }
 }

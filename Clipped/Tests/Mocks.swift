@@ -42,11 +42,11 @@ final class MockSettingsManager: SettingsManaging {
 
 @MainActor
 final class MockLinkMetadataFetcher: LinkMetadataFetching {
-    var titlesByURL: [URL: String] = [:]
+    var metadataByURL: [URL: LinkMetadata] = [:]
     var fetchCallCount = 0
 
-    func fetchTitle(for url: URL) async -> String? {
+    func fetchMetadata(for url: URL) async -> LinkMetadata {
         fetchCallCount += 1
-        return titlesByURL[url]
+        return metadataByURL[url] ?? LinkMetadata()
     }
 }

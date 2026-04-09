@@ -212,10 +212,27 @@ struct ClipboardItemRow: View {
     }
 
     private var contentTypeIcon: some View {
-        Image(systemName: shouldMask ? "lock.fill" : item.contentType.systemImage)
-            .font(.system(size: 12))
-            .foregroundStyle(shouldMask ? .orange : .secondary)
-            .frame(width: 20)
+        Group {
+            if shouldMask {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+            } else if case .url = item.content,
+                      let faviconData = item.linkFavicon,
+                      let nsImage = NSImage(data: faviconData) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 14, height: 14)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+            } else {
+                Image(systemName: item.contentType.systemImage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 20)
     }
 
     private var shouldMask: Bool {

@@ -34,6 +34,7 @@ final class ClipboardItem: Identifiable {
     var isPinned: Bool
     var isSensitive: Bool
     var linkTitle: String?
+    var linkFavicon: Data?
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
 
