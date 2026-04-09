@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-struct LinkMetadata: Sendable {
+struct LinkMetadata {
     var title: String?
     var favicon: Data?
 }
@@ -134,11 +134,11 @@ final class LinkMetadataFetcher: LinkMetadataFetching {
 
     private static func resolveURL(_ href: String, against baseURL: URL) -> URL? {
         if href.hasPrefix("http://") || href.hasPrefix("https://") {
-            return URL(string: href)
+            URL(string: href)
         } else if href.hasPrefix("//") {
-            return URL(string: "\(baseURL.scheme ?? "https"):\(href)")
+            URL(string: "\(baseURL.scheme ?? "https"):\(href)")
         } else {
-            return URL(string: href, relativeTo: baseURL)?.absoluteURL
+            URL(string: href, relativeTo: baseURL)?.absoluteURL
         }
     }
 
