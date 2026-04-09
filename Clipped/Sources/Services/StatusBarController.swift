@@ -122,6 +122,34 @@ final class StatusBarController {
         popover.isShown || (floatingPanel?.isVisible ?? false)
     }
 
+    private var onboardingWindow: NSWindow?
+
+    func openOnboarding(contentView: some View) {
+        if let existing = onboardingWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let hostingController = NSHostingController(rootView: contentView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Welcome to Clipped"
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        onboardingWindow = window
+    }
+
+    func closeOnboarding() {
+        onboardingWindow?.close()
+        onboardingWindow = nil
+    }
+
     private var settingsWindow: NSWindow?
 
     func openSettings(contentView: some View) {

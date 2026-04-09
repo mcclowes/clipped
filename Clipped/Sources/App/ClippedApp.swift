@@ -7,7 +7,6 @@ final class AppState: Observable {
     let clipboardManager = ClipboardManager()
     let settingsManager = SettingsManager()
     let screenshotWatcher = ScreenshotWatcher()
-    var showOnboarding = false
 
     private init() {}
 }
@@ -33,19 +32,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sw.startWatching(folder: folder)
         }
 
-        if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
-            state.showOnboarding = true
-            UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-        }
-
-        let panelContent = ClipboardPanelView(showOnboarding: Binding(
-            get: { AppState.shared.showOnboarding },
-            set: { AppState.shared.showOnboarding = $0 }
-        ))
-        .environment(cm)
-        .environment(sm)
+        let panelContent = ClipboardPanelView()
+            .environment(cm)
+            .environment(sm)
 
         StatusBarController.shared.setup(contentView: panelContent)
+
+        if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
+            let onboardingContent = OnboardingView {
+                UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
+                StatusBarController.shared.closeOnboarding()
+                StatusBarController.shared.show()
+            }
+            .environment(sm)
+            StatusBarController.shared.openOnboarding(contentView: onboardingContent)
+        }
 
         HotkeyManager.shared.register(
             keyCode: sm.hotkeyKeyCode,
