@@ -1,3 +1,4 @@
+import Carbon
 import SwiftUI
 
 struct SettingsView: View {
@@ -15,7 +16,8 @@ struct SettingsView: View {
                 Stepper(
                     "History size: \(settings.maxHistorySize)",
                     value: $settings.maxHistorySize,
-                    in: 5...50
+                    in: 10...500,
+                    step: settings.maxHistorySize >= 100 ? 50 : 10
                 )
             }
 
@@ -72,9 +74,28 @@ struct SettingsView: View {
             }
 
             Section("Keyboard shortcut") {
-                Text("⌥C — Open clipboard panel")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
+                HStack {
+                    Text("Open clipboard panel")
+                    Spacer()
+                    KeyRecorderView(
+                        keyCode: $settings.hotkeyKeyCode,
+                        modifiers: $settings.hotkeyModifiers,
+                        onChanged: {
+                            HotkeyManager.shared.reregister(
+                                keyCode: settings.hotkeyKeyCode,
+                                modifiers: settings.hotkeyModifiers
+                            )
+                        }
+                    )
+                }
+
+                Button("Reset to default (⌥C)") {
+                    settings.hotkeyKeyCode = 8
+                    settings.hotkeyModifiers = UInt32(optionKey)
+                    HotkeyManager.shared.reregister(keyCode: 8, modifiers: UInt32(optionKey))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             Section("About") {
@@ -86,6 +107,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 400)
+        .frame(width: 380, height: 480)
     }
 }

@@ -1,3 +1,4 @@
+import Carbon
 import Observation
 import os
 import ServiceManagement
@@ -12,6 +13,8 @@ protocol SettingsManaging: AnyObject {
     var playSoundOnCopy: Bool { get }
     var captureScreenshots: Bool { get }
     var launchAtLogin: Bool { get set }
+    var hotkeyKeyCode: UInt32 { get set }
+    var hotkeyModifiers: UInt32 { get set }
 }
 
 @MainActor
@@ -44,6 +47,14 @@ final class SettingsManager: SettingsManaging {
         didSet { UserDefaults.standard.set(captureScreenshots, forKey: "captureScreenshots") }
     }
 
+    var hotkeyKeyCode: UInt32 {
+        didSet { UserDefaults.standard.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode") }
+    }
+
+    var hotkeyModifiers: UInt32 {
+        didSet { UserDefaults.standard.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers") }
+    }
+
     var launchAtLogin: Bool {
         didSet {
             do {
@@ -61,7 +72,8 @@ final class SettingsManager: SettingsManaging {
 
     init() {
         persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
-        maxHistorySize = max(UserDefaults.standard.integer(forKey: "maxHistorySize"), 10)
+        let storedSize = UserDefaults.standard.integer(forKey: "maxHistorySize")
+        maxHistorySize = storedSize > 0 ? storedSize : 50
         secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "secureMode")
@@ -72,6 +84,12 @@ final class SettingsManager: SettingsManaging {
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
         captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
+
+        let storedKeyCode = UserDefaults.standard.integer(forKey: "hotkeyKeyCode")
+        hotkeyKeyCode = storedKeyCode > 0 ? UInt32(storedKeyCode) : 8 // Default: 'C'
+        let storedModifiers = UserDefaults.standard.integer(forKey: "hotkeyModifiers")
+        hotkeyModifiers = storedModifiers > 0 ? UInt32(storedModifiers) : UInt32(optionKey) // Default: Option
+
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }

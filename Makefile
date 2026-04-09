@@ -2,7 +2,7 @@ SCHEME = Clipped
 PROJECT_DIR = Clipped
 BUILD_DIR = $(shell xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $$NF}')
 
-.PHONY: build run test release package clean generate format lint help
+.PHONY: build run test release package clean generate format lint setup help
 
 help:
 	@echo "Available targets:"
@@ -48,3 +48,7 @@ format:
 lint:
 	swiftformat --lint .
 	swiftlint lint --strict
+
+setup:
+	git config core.hooksPath .githooks
+	@echo "Git hooks configured."

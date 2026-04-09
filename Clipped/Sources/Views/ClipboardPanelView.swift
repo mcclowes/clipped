@@ -10,7 +10,7 @@ struct ClipboardPanelView: View {
     @State private var showCopiedToast = false
 
     private var allVisibleItems: [ClipboardItem] {
-        manager.pinnedItems + manager.filteredItems
+        manager.filteredPinnedItems + manager.filteredItems
     }
 
     var body: some View {
@@ -132,15 +132,15 @@ struct ClipboardPanelView: View {
 
             Divider()
 
-            if manager.pinnedItems.isEmpty, manager.filteredItems.isEmpty {
+            if manager.filteredPinnedItems.isEmpty, manager.filteredItems.isEmpty {
                 emptyState
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            if !manager.pinnedItems.isEmpty {
+                            if !manager.filteredPinnedItems.isEmpty {
                                 Section {
-                                    ForEach(manager.pinnedItems) { item in
+                                    ForEach(manager.filteredPinnedItems) { item in
                                         ClipboardItemRow(
                                             item: item,
                                             isSelected: indexOf(item) == selectedIndex,
@@ -164,7 +164,7 @@ struct ClipboardPanelView: View {
                                         .id(item.id)
                                     }
                                 } header: {
-                                    if !manager.pinnedItems.isEmpty {
+                                    if !manager.filteredPinnedItems.isEmpty {
                                         sectionHeader("Recent")
                                     }
                                 }
@@ -277,7 +277,7 @@ struct ClipboardPanelView: View {
             Spacer()
 
             Button {
-                let allTextItems = manager.pinnedItems + manager.filteredItems
+                let allTextItems = manager.filteredPinnedItems + manager.filteredItems
                 manager.exportItems(allTextItems)
             } label: {
                 Image(systemName: "square.and.arrow.up")
@@ -285,7 +285,7 @@ struct ClipboardPanelView: View {
             }
             .buttonStyle(.plain)
             .help("Export all visible items to clipboard")
-            .disabled(manager.pinnedItems.isEmpty && manager.filteredItems.isEmpty)
+            .disabled(manager.filteredPinnedItems.isEmpty && manager.filteredItems.isEmpty)
 
             Button(action: openSettings) {
                 Image(systemName: "gear")

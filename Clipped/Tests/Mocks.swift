@@ -1,3 +1,4 @@
+import Carbon
 @testable import Clipped
 import Foundation
 
@@ -33,6 +34,8 @@ final class MockSettingsManager: SettingsManaging {
     var playSoundOnCopy = false
     var captureScreenshots = false
     var launchAtLogin = false
+    var hotkeyKeyCode: UInt32 = 8
+    var hotkeyModifiers: UInt32 = UInt32(optionKey)
 }
 
 @MainActor

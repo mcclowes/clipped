@@ -39,6 +39,7 @@ final class ClipboardManager {
     var settingsManager: (any SettingsManaging)?
     var historyStore: any HistoryStoring = HistoryStore.shared
     var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
+    var mutationService: any ClipboardMutating = ClipboardMutationService()
 
     private(set) var isMonitoring = false
     private var pollTimer: Timer?
@@ -46,14 +47,22 @@ final class ClipboardManager {
     private var isCheckingClipboard = false
     private var resumeMonitoringTask: Task<Void, Never>?
 
-    static let maxHistorySize = 10
+    static let maxHistorySize = 50
 
     private static let pollInterval: TimeInterval = 0.5
     private static let monitoringResumeDelay: Duration = .milliseconds(200)
     private static let vKeyCode: UInt16 = 0x09
 
+    var filteredPinnedItems: [ClipboardItem] {
+        applyFilters(to: pinnedItems)
+    }
+
     var filteredItems: [ClipboardItem] {
-        var result = items
+        applyFilters(to: items)
+    }
+
+    private func applyFilters(to source: [ClipboardItem]) -> [ClipboardItem] {
+        var result = source
         if let type = selectedContentType {
             result = result.filter { $0.contentType == type }
         }
@@ -136,11 +145,14 @@ final class ClipboardManager {
             return
         }
 
-        guard let item = readClipboardItem(
+        guard var item = readClipboardItem(
             from: pasteboard,
             appName: frontmostApp?.localizedName,
             bundleID: bundleID
         ) else { return }
+
+        // Apply clipboard mutations (strip tracking params, trim whitespace, etc.)
+        item = mutationService.apply(to: item)
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
         // regardless of whether secure mode UI behavior is enabled

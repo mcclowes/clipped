@@ -211,6 +211,49 @@ struct ClipboardManagerTests {
         #expect(imageItem.preview.contains("200"))
     }
 
+    @Test("Filtered pinned items respects content type filter")
+    func filteredPinnedByType() throws {
+        let (manager, _, _, _) = makeManager()
+
+        let textPinned = ClipboardItem(content: .text("pinned text"), contentType: .plainText)
+        let urlPinned = try ClipboardItem(
+            content: .url(#require(URL(string: "https://example.com"))),
+            contentType: .url
+        )
+
+        manager.pinnedItems = [textPinned, urlPinned]
+        manager.selectedContentType = .url
+
+        #expect(manager.filteredPinnedItems.count == 1)
+        #expect(manager.filteredPinnedItems.first?.contentType == .url)
+    }
+
+    @Test("Filtered pinned items respects search query")
+    func filteredPinnedBySearch() {
+        let (manager, _, _, _) = makeManager()
+
+        let item1 = ClipboardItem(content: .text("hello world"), contentType: .plainText)
+        let item2 = ClipboardItem(content: .text("goodbye"), contentType: .plainText)
+
+        manager.pinnedItems = [item1, item2]
+        manager.searchQuery = "hello"
+
+        #expect(manager.filteredPinnedItems.count == 1)
+        #expect(manager.filteredPinnedItems.first?.preview.contains("hello") == true)
+    }
+
+    @Test("Filtered pinned items returns all when no filter active")
+    func filteredPinnedNoFilter() {
+        let (manager, _, _, _) = makeManager()
+
+        let item1 = ClipboardItem(content: .text("one"), contentType: .plainText)
+        let item2 = ClipboardItem(content: .text("two"), contentType: .plainText)
+
+        manager.pinnedItems = [item1, item2]
+
+        #expect(manager.filteredPinnedItems.count == 2)
+    }
+
     @Test("URL items support link title")
     func linkTitle() throws {
         let urlItem = try ClipboardItem(

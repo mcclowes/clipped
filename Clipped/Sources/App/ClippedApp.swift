@@ -44,7 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         StatusBarController.shared.setup(contentView: panelContent)
 
-        HotkeyManager.shared.register {
+        HotkeyManager.shared.register(
+            keyCode: sm.hotkeyKeyCode,
+            modifiers: sm.hotkeyModifiers
+        ) {
             cm.openedViaHotkey = true
             StatusBarController.shared.toggle()
         }

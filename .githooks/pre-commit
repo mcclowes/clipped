@@ -1,0 +1,15 @@
+#!/bin/sh
+
+echo "Running pre-commit checks..."
+
+make build || {
+  echo "Build failed. Commit aborted."
+  exit 1
+}
+
+make test || {
+  echo "Tests failed. Commit aborted."
+  exit 1
+}
+
+echo "Pre-commit checks passed."
