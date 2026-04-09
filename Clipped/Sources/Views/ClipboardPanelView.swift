@@ -8,6 +8,7 @@ struct ClipboardPanelView: View {
     @State private var selectedIndex: Int?
     @State private var showQuickMenu = false
     @State private var showCopiedToast = false
+    @FocusState private var isSearchFocused: Bool
 
     private var allVisibleItems: [ClipboardItem] {
         manager.filteredPinnedItems + manager.filteredItems
@@ -117,6 +118,7 @@ struct ClipboardPanelView: View {
         return VStack(spacing: 0) {
             SearchBar(
                 text: $manager.searchQuery,
+                isFocused: $isSearchFocused,
                 onArrowUp: { moveSelection(by: -1) },
                 onArrowDown: { moveSelection(by: 1) },
                 onReturnKey: { copySelectedItem() },
@@ -213,6 +215,9 @@ struct ClipboardPanelView: View {
         }
         .onChange(of: manager.searchQuery) {
             selectedIndex = nil
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSPopover.didShowNotification)) { _ in
+            isSearchFocused = true
         }
         .overlay {
             if showCopiedToast {

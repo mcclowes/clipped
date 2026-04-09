@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SearchBar: View {
     @Binding var text: String
+    var isFocused: FocusState<Bool>.Binding
     var onArrowUp: (() -> Void)?
     var onArrowDown: (() -> Void)?
     var onReturnKey: (() -> Void)?
@@ -16,6 +17,7 @@ struct SearchBar: View {
             TextField("Search clipboard...", text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
+                .focused(isFocused)
                 .onKeyPress(.upArrow) {
                     onArrowUp?()
                     return onArrowUp != nil ? .handled : .ignored
