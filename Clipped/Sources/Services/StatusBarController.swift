@@ -7,6 +7,7 @@ final class StatusBarController {
 
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
+    private var floatingPanel: NSPanel?
     private var eventMonitor: Any?
 
     private init() {}
@@ -43,7 +44,7 @@ final class StatusBarController {
     }
 
     func toggle() {
-        if popover.isShown {
+        if isShown {
             close()
         } else {
             show()
@@ -51,18 +52,65 @@ final class StatusBarController {
     }
 
     func show() {
+        let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+        let statusBarScreen = statusItem?.button?.window?.screen
+
+        if let mouseScreen, mouseScreen != statusBarScreen {
+            showAsPanel(on: mouseScreen)
+        } else {
+            showAsPopover()
+        }
+    }
+
+    private func showAsPopover() {
         guard let button = statusItem?.button else { return }
+        closePanel()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
     }
 
+    private func showAsPanel(on screen: NSScreen) {
+        popover.performClose(nil)
+
+        if floatingPanel == nil {
+            let panel = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 420),
+                styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
+                backing: .buffered,
+                defer: false
+            )
+            panel.isFloatingPanel = true
+            panel.level = .floating
+            panel.titleVisibility = .hidden
+            panel.titlebarAppearsTransparent = true
+            panel.isMovableByWindowBackground = true
+            panel.hidesOnDeactivate = true
+            panel.contentViewController = popover.contentViewController
+            floatingPanel = panel
+        }
+
+        let panelSize = NSSize(width: 320, height: 420)
+        let screenFrame = screen.visibleFrame
+        let x = screenFrame.midX - panelSize.width / 2
+        let y = screenFrame.midY - panelSize.height / 2
+        floatingPanel?.setFrame(NSRect(x: x, y: y, width: panelSize.width, height: panelSize.height), display: true)
+        floatingPanel?.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+        floatingPanel?.makeKey()
+    }
+
+    private func closePanel() {
+        floatingPanel?.orderOut(nil)
+    }
+
     func close() {
         popover.performClose(nil)
+        closePanel()
     }
 
     var isShown: Bool {
-        popover.isShown
+        popover.isShown || (floatingPanel?.isVisible ?? false)
     }
 
     private var settingsWindow: NSWindow?
