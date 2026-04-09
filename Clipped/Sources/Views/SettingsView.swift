@@ -165,7 +165,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 640)
+        .frame(minWidth: 500, idealWidth: 500, minHeight: 450, idealHeight: 550)
     }
 
     private func overridePickerValue(_ current: Bool?) -> Int {
