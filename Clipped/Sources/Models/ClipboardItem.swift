@@ -37,7 +37,9 @@ final class ClipboardItem: Identifiable {
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
 
-    var wasMutated: Bool { !mutationsApplied.isEmpty }
+    var wasMutated: Bool {
+        !mutationsApplied.isEmpty
+    }
 
     var plainText: String? {
         switch content {

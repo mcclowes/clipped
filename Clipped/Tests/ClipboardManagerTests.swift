@@ -5,7 +5,9 @@ import Testing
 
 @MainActor
 struct ClipboardManagerTests {
-    private func makeManager(persistHistory: Bool = true) -> (ClipboardManager, MockHistoryStore, MockSettingsManager, MockLinkMetadataFetcher) {
+    private func makeManager(persistHistory: Bool = true)
+        -> (ClipboardManager, MockHistoryStore, MockSettingsManager, MockLinkMetadataFetcher)
+    {
         let manager = ClipboardManager()
         manager.stopMonitoring()
         let history = MockHistoryStore()

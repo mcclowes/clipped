@@ -94,7 +94,8 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
 
     func isEnabled(_ mutationID: MutationID, for contentType: ContentType) -> Bool {
         let key = "\(mutationID.rawValue):\(contentType.rawValue)"
-        return mutationRules[key] ?? (mutationID.defaultContentTypes.contains(contentType) && mutationID.enabledByDefault)
+        return mutationRules[key] ??
+            (mutationID.defaultContentTypes.contains(contentType) && mutationID.enabledByDefault)
     }
 
     func isOverridden(_ mutationID: MutationID, for bundleID: String) -> Bool? {

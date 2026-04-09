@@ -35,7 +35,7 @@ final class MockSettingsManager: SettingsManaging {
     var captureScreenshots = false
     var launchAtLogin = false
     var hotkeyKeyCode: UInt32 = 8
-    var hotkeyModifiers: UInt32 = UInt32(optionKey)
+    var hotkeyModifiers: UInt32 = .init(optionKey)
     var mutationRules: [String: Bool] = [:]
     var mutationAppOverrides: [String: Bool] = [:]
 }

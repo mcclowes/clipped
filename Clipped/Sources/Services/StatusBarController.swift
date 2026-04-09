@@ -8,7 +8,9 @@ final class StatusBarController {
 
     static let panelWidth: CGFloat = 320
     static let panelHeight: CGFloat = 420
-    static var panelSize: NSSize { NSSize(width: panelWidth, height: panelHeight) }
+    static var panelSize: NSSize {
+        NSSize(width: panelWidth, height: panelHeight)
+    }
 
     static let shared = StatusBarController()
 

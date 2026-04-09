@@ -13,7 +13,7 @@ final class HotkeyManager {
     private var callback: (@MainActor @Sendable () -> Void)?
 
     private(set) var currentKeyCode: UInt32 = 8
-    private(set) var currentModifiers: UInt32 = UInt32(optionKey)
+    private(set) var currentModifiers: UInt32 = .init(optionKey)
 
     var displayString: String {
         Self.formatShortcut(keyCode: currentKeyCode, modifiers: currentModifiers)

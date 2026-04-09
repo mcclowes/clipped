@@ -164,7 +164,7 @@ struct ClipboardMutationTests {
         item.mutationsApplied = ["Stripped tracking parameters"]
 
         // Restore
-        item.content = item.originalContent!
+        item.content = try #require(item.originalContent)
         item.originalContent = nil
         item.mutationsApplied = []
 
@@ -276,7 +276,8 @@ final class MockMutationRules: MutationRulesProviding {
 
     func isEnabled(_ mutationID: MutationID, for contentType: ContentType) -> Bool {
         let key = "\(mutationID.rawValue):\(contentType.rawValue)"
-        return enabledRules[key] ?? (mutationID.defaultContentTypes.contains(contentType) && mutationID.enabledByDefault)
+        return enabledRules[key] ??
+            (mutationID.defaultContentTypes.contains(contentType) && mutationID.enabledByDefault)
     }
 
     func isOverridden(_ mutationID: MutationID, for bundleID: String) -> Bool? {

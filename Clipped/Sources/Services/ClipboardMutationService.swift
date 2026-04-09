@@ -3,10 +3,12 @@ import os
 
 /// Identifies a mutation by a stable key for settings persistence.
 enum MutationID: String, CaseIterable, Identifiable {
-    case stripTrackingParams = "stripTrackingParams"
-    case trimWhitespace = "trimWhitespace"
+    case stripTrackingParams
+    case trimWhitespace
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var displayName: String {
         switch self {
@@ -71,11 +73,10 @@ final class ClipboardMutationService: ClipboardMutating {
 
         for mutation in mutations {
             // Check content type rule
-            let enabledForType: Bool
-            if let rules = rulesProvider {
-                enabledForType = rules.isEnabled(mutation.id, for: item.contentType)
+            let enabledForType: Bool = if let rules = rulesProvider {
+                rules.isEnabled(mutation.id, for: item.contentType)
             } else {
-                enabledForType = mutation.id.defaultContentTypes.contains(item.contentType)
+                mutation.id.defaultContentTypes.contains(item.contentType)
                     && mutation.id.enabledByDefault
             }
 
