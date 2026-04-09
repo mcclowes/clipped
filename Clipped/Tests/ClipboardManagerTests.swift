@@ -274,9 +274,17 @@ struct ClipboardManagerTests {
     func devFilter() {
         let (manager, _, _, _) = makeManager()
 
-        let devItem = ClipboardItem(content: .text("550e8400-e29b-41d4-a716-446655440000"), contentType: .plainText, isDeveloperContent: true)
+        let devItem = ClipboardItem(
+            content: .text("550e8400-e29b-41d4-a716-446655440000"),
+            contentType: .plainText,
+            isDeveloperContent: true
+        )
         let normalItem = ClipboardItem(content: .text("hello world"), contentType: .plainText)
-        let codeItem = ClipboardItem(content: .text("let x = 1"), contentType: .code, isDeveloperContent: true)
+        let codeItem = ClipboardItem(
+            content: .text("let x = 1"),
+            contentType: .code,
+            isDeveloperContent: true
+        )
 
         manager.items = [devItem, normalItem, codeItem]
         manager.selectedFilter = .developer
@@ -295,7 +303,11 @@ struct ClipboardManagerTests {
                 ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
             )
         }
-        let devItem = ClipboardItem(content: .text("dev item"), contentType: .plainText, isDeveloperContent: true)
+        let devItem = ClipboardItem(
+            content: .text("dev item"),
+            contentType: .plainText,
+            isDeveloperContent: true
+        )
         manager.items.append(devItem)
 
         manager.trimToMaxSize()
