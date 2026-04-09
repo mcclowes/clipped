@@ -15,6 +15,12 @@ struct ClipboardItemRow: View {
             contentTypeIcon
             contentPreview
             Spacer(minLength: 4)
+            if item.wasMutated {
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.purple.opacity(0.7))
+                    .help(item.mutationsApplied.joined(separator: ", "))
+            }
             if item.isPinned {
                 Image(systemName: "pin.fill")
                     .font(.system(size: 8))
@@ -68,6 +74,13 @@ struct ClipboardItemRow: View {
                 Button("Save to 1Password") {
                     manager.copyToClipboard(item, asPlainText: true)
                     Self.open1Password()
+                }
+            }
+
+            if item.wasMutated {
+                Divider()
+                Button("Restore original") {
+                    manager.restoreOriginal(item)
                 }
             }
 
@@ -161,6 +174,18 @@ struct ClipboardItemRow: View {
             onePassItem.image = NSImage(systemSymbolName: "lock.shield", accessibilityDescription: nil)
             onePassItem.target = target
             menu.addItem(onePassItem)
+        }
+
+        if item.wasMutated {
+            menu.addItem(.separator())
+            let restoreItem = NSMenuItem(
+                title: "Restore original",
+                action: #selector(ActionMenuTarget.restoreOriginal),
+                keyEquivalent: ""
+            )
+            restoreItem.image = NSImage(systemSymbolName: "arrow.uturn.backward", accessibilityDescription: nil)
+            restoreItem.target = target
+            menu.addItem(restoreItem)
         }
 
         menu.addItem(.separator())
@@ -337,6 +362,10 @@ private final class ActionMenuTarget: NSObject {
     @objc func saveTo1Password() {
         manager.copyToClipboard(item, asPlainText: true)
         ClipboardItemRow.open1Password()
+    }
+
+    @objc func restoreOriginal() {
+        manager.restoreOriginal(item)
     }
 
     @objc func deleteItem() {

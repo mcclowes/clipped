@@ -1,18 +1,56 @@
 import Foundation
 import os
 
+/// Identifies a mutation by a stable key for settings persistence.
+enum MutationID: String, CaseIterable, Identifiable {
+    case stripTrackingParams = "stripTrackingParams"
+    case trimWhitespace = "trimWhitespace"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .stripTrackingParams: "Strip tracking parameters"
+        case .trimWhitespace: "Trim whitespace"
+        }
+    }
+
+    /// Content types this mutation applies to by default.
+    var defaultContentTypes: Set<ContentType> {
+        switch self {
+        case .stripTrackingParams: [.url]
+        case .trimWhitespace: [.plainText, .code]
+        }
+    }
+
+    /// Whether this mutation is enabled by default.
+    var enabledByDefault: Bool {
+        switch self {
+        case .stripTrackingParams: true
+        case .trimWhitespace: true
+        }
+    }
+}
+
 /// Defines a single clipboard content mutation.
 @MainActor
 protocol ClipboardMutation {
+    var id: MutationID { get }
     var name: String { get }
-    var isEnabled: Bool { get }
     func mutate(_ item: ClipboardItem) -> ClipboardItem
 }
 
 /// Protocol for the mutation pipeline, enabling DI and testing.
 @MainActor
 protocol ClipboardMutating {
-    func apply(to item: ClipboardItem) -> ClipboardItem
+    func apply(to item: ClipboardItem, sourceAppBundleID: String?) -> ClipboardItem
+}
+
+/// Persisted configuration for which mutations are enabled per content type and source app.
+@MainActor
+protocol MutationRulesProviding {
+    func isEnabled(_ mutationID: MutationID, for contentType: ContentType) -> Bool
+    func isOverridden(_ mutationID: MutationID, for bundleID: String) -> Bool?
 }
 
 /// Runs clipboard items through a pipeline of configurable mutations.
@@ -21,20 +59,49 @@ final class ClipboardMutationService: ClipboardMutating {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ClipboardMutationService")
 
     let mutations: [any ClipboardMutation]
+    var rulesProvider: (any MutationRulesProviding)?
 
     init(mutations: [any ClipboardMutation] = ClipboardMutationService.defaultMutations()) {
         self.mutations = mutations
     }
 
-    func apply(to item: ClipboardItem) -> ClipboardItem {
+    func apply(to item: ClipboardItem, sourceAppBundleID: String? = nil) -> ClipboardItem {
         var result = item
-        for mutation in mutations where mutation.isEnabled {
+        var applied: [String] = []
+
+        for mutation in mutations {
+            // Check content type rule
+            let enabledForType: Bool
+            if let rules = rulesProvider {
+                enabledForType = rules.isEnabled(mutation.id, for: item.contentType)
+            } else {
+                enabledForType = mutation.id.defaultContentTypes.contains(item.contentType)
+                    && mutation.id.enabledByDefault
+            }
+
+            // Check source app override (if any)
+            var enabled = enabledForType
+            if let bundleID = sourceAppBundleID, let rules = rulesProvider,
+               let override = rules.isOverridden(mutation.id, for: bundleID)
+            {
+                enabled = override
+            }
+
+            guard enabled else { continue }
+
             let previous = result
             result = mutation.mutate(result)
             if result !== previous {
+                applied.append(mutation.name)
                 Self.logger.debug("Mutation '\(mutation.name)' modified item")
             }
         }
+
+        if !applied.isEmpty {
+            result.originalContent = item.content
+            result.mutationsApplied = applied
+        }
+
         return result
     }
 
@@ -51,8 +118,8 @@ final class ClipboardMutationService: ClipboardMutating {
 /// Strips common tracking parameters from URLs (utm_*, fbclid, gclid, etc.)
 @MainActor
 final class StripTrackingParamsMutation: ClipboardMutation {
-    let name = "Strip tracking parameters"
-    var isEnabled = true
+    let id = MutationID.stripTrackingParams
+    let name = "Stripped tracking parameters"
 
     private static let trackingParams: Set<String> = [
         "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
@@ -97,8 +164,8 @@ final class StripTrackingParamsMutation: ClipboardMutation {
 /// Trims leading/trailing whitespace from plain text items.
 @MainActor
 final class TrimWhitespaceMutation: ClipboardMutation {
-    let name = "Trim whitespace"
-    var isEnabled = true
+    let id = MutationID.trimWhitespace
+    let name = "Trimmed whitespace"
 
     func mutate(_ item: ClipboardItem) -> ClipboardItem {
         guard case let .text(string) = item.content else { return item }

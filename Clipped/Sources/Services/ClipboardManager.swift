@@ -152,7 +152,7 @@ final class ClipboardManager {
         ) else { return }
 
         // Apply clipboard mutations (strip tracking params, trim whitespace, etc.)
-        item = mutationService.apply(to: item)
+        item = mutationService.apply(to: item, sourceAppBundleID: bundleID)
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
         // regardless of whether secure mode UI behavior is enabled
@@ -365,6 +365,14 @@ final class ClipboardManager {
             pinnedItems.removeAll { $0.id == item.id }
             items.insert(item, at: 0)
         }
+        saveHistory()
+    }
+
+    func restoreOriginal(_ item: ClipboardItem) {
+        guard let original = item.originalContent else { return }
+        item.content = original
+        item.originalContent = nil
+        item.mutationsApplied = []
         saveHistory()
     }
 

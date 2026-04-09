@@ -26,7 +26,7 @@ enum ContentType: String, CaseIterable, Identifiable {
 @MainActor
 final class ClipboardItem: Identifiable {
     let id: UUID
-    let content: ClipboardContent
+    var content: ClipboardContent
     let contentType: ContentType
     let sourceAppName: String?
     let sourceAppBundleID: String?
@@ -34,6 +34,10 @@ final class ClipboardItem: Identifiable {
     var isPinned: Bool
     var isSensitive: Bool
     var linkTitle: String?
+    var originalContent: ClipboardContent?
+    var mutationsApplied: [String] = []
+
+    var wasMutated: Bool { !mutationsApplied.isEmpty }
 
     var plainText: String? {
         switch content {

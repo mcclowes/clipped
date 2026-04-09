@@ -98,6 +98,27 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
+            Section("Content cleanup") {
+                ForEach(MutationID.allCases) { mutation in
+                    DisclosureGroup(mutation.displayName) {
+                        ForEach(ContentType.allCases) { contentType in
+                            Toggle(
+                                contentType.rawValue,
+                                isOn: Binding(
+                                    get: { settings.isEnabled(mutation, for: contentType) },
+                                    set: { settings.setEnabled(mutation, for: contentType, enabled: $0) }
+                                )
+                            )
+                            .font(.callout)
+                        }
+                    }
+                }
+
+                Text("Mutated items show a ✦ badge. Right-click to restore the original.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("About") {
                 Text("Clipped v1.0.0")
                     .foregroundStyle(.secondary)
@@ -107,6 +128,6 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 480)
+        .frame(width: 380, height: 580)
     }
 }

@@ -15,11 +15,13 @@ protocol SettingsManaging: AnyObject {
     var launchAtLogin: Bool { get set }
     var hotkeyKeyCode: UInt32 { get set }
     var hotkeyModifiers: UInt32 { get set }
+    var mutationRules: [String: Bool] { get set }
+    var mutationAppOverrides: [String: Bool] { get set }
 }
 
 @MainActor
 @Observable
-final class SettingsManager: SettingsManaging {
+final class SettingsManager: SettingsManaging, MutationRulesProviding {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "SettingsManager")
 
     var persistAcrossReboots: Bool {
@@ -55,6 +57,24 @@ final class SettingsManager: SettingsManaging {
         didSet { UserDefaults.standard.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers") }
     }
 
+    /// Per-content-type mutation rules. Key: "mutationID:contentType", Value: enabled.
+    var mutationRules: [String: Bool] {
+        didSet {
+            if let data = try? JSONEncoder().encode(mutationRules) {
+                UserDefaults.standard.set(data, forKey: "mutationRules")
+            }
+        }
+    }
+
+    /// Per-source-app overrides. Key: "mutationID:bundleID", Value: enabled.
+    var mutationAppOverrides: [String: Bool] {
+        didSet {
+            if let data = try? JSONEncoder().encode(mutationAppOverrides) {
+                UserDefaults.standard.set(data, forKey: "mutationAppOverrides")
+            }
+        }
+    }
+
     var launchAtLogin: Bool {
         didSet {
             do {
@@ -68,6 +88,28 @@ final class SettingsManager: SettingsManaging {
                 launchAtLogin.toggle()
             }
         }
+    }
+
+    // MARK: - MutationRulesProviding
+
+    func isEnabled(_ mutationID: MutationID, for contentType: ContentType) -> Bool {
+        let key = "\(mutationID.rawValue):\(contentType.rawValue)"
+        return mutationRules[key] ?? (mutationID.defaultContentTypes.contains(contentType) && mutationID.enabledByDefault)
+    }
+
+    func isOverridden(_ mutationID: MutationID, for bundleID: String) -> Bool? {
+        let key = "\(mutationID.rawValue):\(bundleID)"
+        return mutationAppOverrides[key]
+    }
+
+    func setEnabled(_ mutationID: MutationID, for contentType: ContentType, enabled: Bool) {
+        let key = "\(mutationID.rawValue):\(contentType.rawValue)"
+        mutationRules[key] = enabled
+    }
+
+    func setOverride(_ mutationID: MutationID, for bundleID: String, enabled: Bool?) {
+        let key = "\(mutationID.rawValue):\(bundleID)"
+        mutationAppOverrides[key] = enabled
     }
 
     init() {
@@ -84,6 +126,22 @@ final class SettingsManager: SettingsManaging {
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
         captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
+
+        if let rulesData = UserDefaults.standard.data(forKey: "mutationRules"),
+           let decoded = try? JSONDecoder().decode([String: Bool].self, from: rulesData)
+        {
+            mutationRules = decoded
+        } else {
+            mutationRules = [:]
+        }
+
+        if let overridesData = UserDefaults.standard.data(forKey: "mutationAppOverrides"),
+           let decoded = try? JSONDecoder().decode([String: Bool].self, from: overridesData)
+        {
+            mutationAppOverrides = decoded
+        } else {
+            mutationAppOverrides = [:]
+        }
 
         let storedKeyCode = UserDefaults.standard.integer(forKey: "hotkeyKeyCode")
         hotkeyKeyCode = storedKeyCode > 0 ? UInt32(storedKeyCode) : 8 // Default: 'C'

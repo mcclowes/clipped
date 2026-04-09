@@ -21,6 +21,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sw = state.screenshotWatcher
 
         cm.settingsManager = sm
+        if let mutationService = cm.mutationService as? ClipboardMutationService {
+            mutationService.rulesProvider = sm
+        }
         cm.loadPersistedHistory()
         sw.clipboardManager = cm
         sw.requestNotificationPermission()
