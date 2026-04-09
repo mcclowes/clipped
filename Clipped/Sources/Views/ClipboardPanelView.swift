@@ -203,6 +203,14 @@ struct ClipboardPanelView: View {
             handleEscape()
             return .handled
         }
+        .onKeyPress(.tab) {
+            moveSelection(by: 1)
+            return .handled
+        }
+        .onKeyPress(.tab, modifiers: .shift) {
+            moveSelection(by: -1)
+            return .handled
+        }
         .onChange(of: manager.searchQuery) {
             selectedIndex = nil
         }
