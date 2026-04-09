@@ -217,6 +217,20 @@ final class ClipboardManager {
 
         // Plain text / code
         if let string = pasteboard.string(forType: .string), !string.isEmpty {
+            // Detect URLs pasted as plain text (no .URL pasteboard type)
+            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.contains(" "), !trimmed.contains("\n"),
+               let url = URL(string: trimmed),
+               url.scheme == "http" || url.scheme == "https"
+            {
+                return ClipboardItem(
+                    content: .url(url),
+                    contentType: .url,
+                    sourceAppName: appName,
+                    sourceAppBundleID: bundleID
+                )
+            }
+
             let isCode = bundleID.map { codeEditorBundleIDs.contains($0) } ?? false
             return ClipboardItem(
                 content: .text(string),
