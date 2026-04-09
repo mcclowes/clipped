@@ -6,6 +6,8 @@ cask "clipped" do
   desc "Native macOS clipboard manager"
   homepage "https://github.com/mcclowes/clipped"
 
+  depends_on macos: ">= :sequoia"
+
   app "Clipped.app"
 
   zap trash: [
