@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import Observation
 import SwiftUI
 
@@ -18,6 +19,10 @@ private let passwordManagerBundleIDs: Set<String> = [
     "com.bitwarden.desktop",
     "org.keepassxc.keepassxc",
 ]
+
+/// Industry-standard pasteboard type set by password managers to mark concealed/sensitive content.
+/// See https://nspasteboard.org
+private let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
 
 @MainActor
 @Observable
@@ -91,11 +96,13 @@ final class ClipboardManager {
         let frontmostApp = NSWorkspace.shared.frontmostApplication
         let bundleID = frontmostApp?.bundleIdentifier
 
-        let isFromPasswordManager = bundleID.map { passwordManagerBundleIDs.contains($0) } ?? false
+        let hasConcealedType = pasteboard.types?.contains(concealedType) ?? false
+        let isFromPasswordManager = hasConcealedType
+            || (bundleID.map { passwordManagerBundleIDs.contains($0) } ?? false)
         let secureMode = settingsManager?.secureMode ?? true
         let secureTimeout = settingsManager?.secureTimeout ?? 0
 
-        // Secure mode: skip or auto-expire items from password managers
+        // Secure mode: skip or auto-expire sensitive items
         if isFromPasswordManager, secureMode, secureTimeout == 0 {
             return
         }
@@ -115,12 +122,14 @@ final class ClipboardManager {
 
         items.insert(item, at: 0)
 
-        // Schedule auto-removal for password manager items
-        if isFromPasswordManager, secureMode, secureTimeout > 0 {
+        // Schedule auto-removal for password manager items — don't persist until removed
+        let pendingRemoval = isFromPasswordManager && secureMode && secureTimeout > 0
+        if pendingRemoval {
             let itemID = item.id
             Task {
                 try? await Task.sleep(for: .seconds(secureTimeout))
                 items.removeAll { $0.id == itemID }
+                saveHistory()
             }
         }
 
@@ -138,7 +147,9 @@ final class ClipboardManager {
             }
         }
 
-        saveHistory()
+        if !pendingRemoval {
+            saveHistory()
+        }
     }
 
     private func readClipboardItem(
@@ -243,15 +254,23 @@ final class ClipboardManager {
 
     func pasteMatchingStyle(_ item: ClipboardItem) {
         // Copy as plain text, then simulate Cmd+V
+        let targetApp = NSWorkspace.shared.frontmostApplication
         copyToClipboard(item, asPlainText: true)
 
         Task {
             try? await Task.sleep(for: .milliseconds(100))
+            // Abort if focus changed during the delay to avoid pasting into the wrong app
+            guard NSWorkspace.shared.frontmostApplication == targetApp else { return }
             simulatePaste()
         }
     }
 
     func simulatePaste() {
+        // Don't inject keystrokes when secure input is active (e.g. password dialogs)
+        if IsSecureEventInputEnabled() {
+            return
+        }
+
         let source = CGEventSource(stateID: .hidSystemState)
 
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true) // V key
