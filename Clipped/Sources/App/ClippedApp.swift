@@ -4,12 +4,14 @@ import SwiftUI
 final class AppState: Observable {
     static let shared = AppState()
 
-    let clipboardManager = ClipboardManager()
     let settingsManager = SettingsManager()
+    let clipboardManager: ClipboardManager
     let screenshotWatcher = ScreenshotWatcher()
     var showOnboarding = false
 
-    private init() {}
+    private init() {
+        clipboardManager = ClipboardManager(settingsManager: settingsManager)
+    }
 }
 
 @MainActor
@@ -20,7 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sm = state.settingsManager
         let sw = state.screenshotWatcher
 
-        cm.settingsManager = sm
         cm.loadPersistedHistory()
         sw.clipboardManager = cm
         sw.requestNotificationPermission()

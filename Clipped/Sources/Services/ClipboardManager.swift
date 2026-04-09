@@ -33,7 +33,9 @@ final class ClipboardManager {
     var selectedContentType: ContentType?
     var openedViaHotkey = false
 
-    var settingsManager: SettingsManager?
+    let settingsManager: SettingsManager?
+    let historyStore: HistoryStoring
+    let pasteboard: PasteboardReading
 
     private(set) var isMonitoring = false
     private var pollTimer: Timer?
@@ -60,21 +62,31 @@ final class ClipboardManager {
         return result
     }
 
-    init() {
-        lastChangeCount = NSPasteboard.general.changeCount
-        startMonitoring()
+    init(
+        settingsManager: SettingsManager? = nil,
+        historyStore: HistoryStoring? = nil,
+        pasteboard: PasteboardReading? = nil,
+        startMonitoringOnInit: Bool = true
+    ) {
+        self.settingsManager = settingsManager
+        self.historyStore = historyStore ?? HistoryStore.shared
+        self.pasteboard = pasteboard ?? NSPasteboard.general
+        lastChangeCount = self.pasteboard.changeCount
+        if startMonitoringOnInit {
+            startMonitoring()
+        }
     }
 
     func loadPersistedHistory() {
         guard settingsManager?.persistAcrossReboots == true else { return }
-        let (loaded, pinned) = HistoryStore.shared.load()
+        let (loaded, pinned) = historyStore.load()
         if items.isEmpty { items = loaded }
         if pinnedItems.isEmpty { pinnedItems = pinned }
     }
 
     func saveHistory() {
         guard settingsManager?.persistAcrossReboots == true else { return }
-        HistoryStore.shared.save(items: items, pinnedItems: pinnedItems)
+        historyStore.save(items: items, pinnedItems: pinnedItems)
     }
 
     func startMonitoring() {
@@ -98,7 +110,7 @@ final class ClipboardManager {
         resumeMonitoringTask?.cancel()
         stopMonitoring()
         body()
-        lastChangeCount = NSPasteboard.general.changeCount
+        lastChangeCount = pasteboard.changeCount
         resumeMonitoringTask = Task {
             try? await Task.sleep(for: Self.monitoringResumeDelay)
             guard !Task.isCancelled else { return }
@@ -106,11 +118,10 @@ final class ClipboardManager {
         }
     }
 
-    private func checkClipboard() {
+    func checkClipboard() {
         guard !isCheckingClipboard else { return }
         isCheckingClipboard = true
         defer { isCheckingClipboard = false }
-        let pasteboard = NSPasteboard.general
         let currentCount = pasteboard.changeCount
         guard currentCount != lastChangeCount else { return }
         lastChangeCount = currentCount
@@ -130,7 +141,6 @@ final class ClipboardManager {
         }
 
         guard let item = readClipboardItem(
-            from: pasteboard,
             appName: frontmostApp?.localizedName,
             bundleID: bundleID
         ) else { return }
@@ -171,16 +181,17 @@ final class ClipboardManager {
         }
     }
 
-    private func readClipboardItem(
-        from pasteboard: NSPasteboard,
+    func readClipboardItem(
+        from source: PasteboardReading? = nil,
         appName: String?,
         bundleID: String?
     ) -> ClipboardItem? {
-        let types = pasteboard.types ?? []
+        let pb = source ?? pasteboard
+        let types = pb.types ?? []
 
         // Check for image first
         if types.contains(.tiff) || types.contains(.png) {
-            if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
+            if let imageData = pb.data(forType: .tiff) ?? pb.data(forType: .png) {
                 if let image = NSImage(data: imageData) {
                     return ClipboardItem(
                         content: .image(imageData, image.size),
@@ -193,7 +204,7 @@ final class ClipboardManager {
         }
 
         // Check for URL
-        if types.contains(.URL), let url = URL(string: pasteboard.string(forType: .string) ?? "") {
+        if types.contains(.URL), let url = URL(string: pb.string(forType: .string) ?? "") {
             if url.scheme == "http" || url.scheme == "https" {
                 return ClipboardItem(
                     content: .url(url),
@@ -205,8 +216,8 @@ final class ClipboardManager {
         }
 
         // Check for rich text
-        if types.contains(.rtf), let rtfData = pasteboard.data(forType: .rtf) {
-            let plainText = pasteboard.string(forType: .string) ?? ""
+        if types.contains(.rtf), let rtfData = pb.data(forType: .rtf) {
+            let plainText = pb.string(forType: .string) ?? ""
             return ClipboardItem(
                 content: .richText(rtfData, plainText),
                 contentType: .richText,
@@ -216,7 +227,7 @@ final class ClipboardManager {
         }
 
         // Plain text / code
-        if let string = pasteboard.string(forType: .string), !string.isEmpty {
+        if let string = pb.string(forType: .string), !string.isEmpty {
             let isCode = bundleID.map { codeEditorBundleIDs.contains($0) } ?? false
             return ClipboardItem(
                 content: .text(string),
@@ -233,7 +244,6 @@ final class ClipboardManager {
 
     func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
         withMonitoringPaused {
-            let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
 
             switch item.content {
@@ -304,7 +314,6 @@ final class ClipboardManager {
         }
 
         withMonitoringPaused {
-            let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
         }
@@ -315,7 +324,6 @@ final class ClipboardManager {
         guard !merged.isEmpty else { return }
 
         withMonitoringPaused {
-            let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(merged, forType: .string)
         }

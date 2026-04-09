@@ -52,7 +52,7 @@ final class LinkMetadataFetcher {
         return title
     }
 
-    private func parseTitle(from html: String) -> String? {
+    func parseTitle(from html: String) -> String? {
         // Simple regex-based title extraction — no dependencies needed
         guard let openRange = html.range(of: "<title", options: .caseInsensitive),
               let closeStart = html.range(of: ">", range: openRange.upperBound..<html.endIndex),
