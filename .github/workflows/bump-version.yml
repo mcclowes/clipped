@@ -60,7 +60,7 @@ jobs:
           git checkout -b "$BRANCH"
           git add Clipped/project.yml
           git commit -m "Bump version to ${{ steps.bump.outputs.new_version }}"
-          git push origin "$BRANCH"
+          git push origin "$BRANCH" --force
           gh pr create \
             --title "Bump version to ${{ steps.bump.outputs.new_version }}" \
             --body "Automated version bump (${{ inputs.bump }}) to **${{ steps.bump.outputs.new_version }}**.
