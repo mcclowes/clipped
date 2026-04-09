@@ -7,6 +7,7 @@ struct StickyNoteView: View {
 
     private var item: ClipboardItem? {
         manager.items.first { $0.id == itemID }
+            ?? manager.pinnedItems.first { $0.id == itemID }
     }
 
     var body: some View {
@@ -30,8 +31,8 @@ struct StickyNoteView: View {
         .background(.ultraThinMaterial)
         .clipShape(.rect(cornerRadius: 12))
         .floatingPanel()
-        .onChange(of: manager.items.contains { $0.id == itemID }) { _, exists in
-            if !exists {
+        .onChange(of: item == nil) { _, isGone in
+            if isGone {
                 dismissWindow(value: itemID)
             }
         }

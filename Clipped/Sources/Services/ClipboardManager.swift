@@ -39,6 +39,7 @@ final class ClipboardManager {
     private var pollTimer: Timer?
     private var lastChangeCount: Int = 0
     private var isCheckingClipboard = false
+    private var resumeMonitoringTask: Task<Void, Never>?
 
     static let maxHistorySize = 10
 
@@ -94,11 +95,13 @@ final class ClipboardManager {
 
     /// Pause monitoring, perform a clipboard mutation, then resume after a brief delay.
     private func withMonitoringPaused(_ body: () -> Void) {
+        resumeMonitoringTask?.cancel()
         stopMonitoring()
         body()
         lastChangeCount = NSPasteboard.general.changeCount
-        Task {
+        resumeMonitoringTask = Task {
             try? await Task.sleep(for: Self.monitoringResumeDelay)
+            guard !Task.isCancelled else { return }
             startMonitoring()
         }
     }
@@ -132,12 +135,14 @@ final class ClipboardManager {
             bundleID: bundleID
         ) else { return }
 
-        if isFromPasswordManager, secureMode {
+        // Always flag password manager items as sensitive so they're never persisted to disk,
+        // regardless of whether secure mode UI behavior is enabled
+        if isFromPasswordManager {
             item.isSensitive = true
         }
 
-        // Deduplicate: remove existing item with same content preview
-        items.removeAll { $0.preview == item.preview && !$0.isPinned }
+        // Deduplicate: remove existing item with same content
+        items.removeAll { $0.content == item.content && !$0.isPinned }
 
         items.insert(item, at: 0)
 
@@ -344,9 +349,10 @@ final class ClipboardManager {
         saveHistory()
     }
 
-    /// Remove oldest unpinned items beyond `maxHistorySize`.
+    /// Remove oldest unpinned items beyond the configured max history size.
     func trimToMaxSize() {
-        while items.count(where: { !$0.isPinned }) > Self.maxHistorySize {
+        let limit = settingsManager?.maxHistorySize ?? Self.maxHistorySize
+        while items.count(where: { !$0.isPinned }) > limit {
             if let lastUnpinned = items.lastIndex(where: { !$0.isPinned }) {
                 items.remove(at: lastUnpinned)
             }
