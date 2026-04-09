@@ -2,7 +2,19 @@ SCHEME = Clipped
 PROJECT_DIR = Clipped
 BUILD_DIR = $(shell xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $$NF}')
 
-.PHONY: build run test clean generate format lint
+.PHONY: build run test release package clean generate format lint help
+
+help:
+	@echo "Available targets:"
+	@echo "  build     - Debug build"
+	@echo "  run       - Build and launch"
+	@echo "  test      - Run unit tests"
+	@echo "  release   - Release build (unsigned)"
+	@echo "  package   - Release build + zip for distribution"
+	@echo "  clean     - Clean build artifacts"
+	@echo "  generate  - Regenerate Xcode project from project.yml"
+	@echo "  format    - Auto-format Swift code"
+	@echo "  lint      - Check code style (swiftformat + swiftlint)"
 
 build:
 	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug build

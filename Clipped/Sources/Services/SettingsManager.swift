@@ -1,10 +1,24 @@
 import Observation
+import os
 import ServiceManagement
 import SwiftUI
 
 @MainActor
+protocol SettingsManaging: AnyObject {
+    var persistAcrossReboots: Bool { get }
+    var maxHistorySize: Int { get }
+    var secureMode: Bool { get }
+    var secureTimeout: Int { get }
+    var playSoundOnCopy: Bool { get }
+    var captureScreenshots: Bool { get }
+    var launchAtLogin: Bool { get set }
+}
+
+@MainActor
 @Observable
-final class SettingsManager {
+final class SettingsManager: SettingsManaging {
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "SettingsManager")
+
     var persistAcrossReboots: Bool {
         didSet { UserDefaults.standard.set(persistAcrossReboots, forKey: "persistAcrossReboots") }
     }
@@ -39,6 +53,7 @@ final class SettingsManager {
                     try SMAppService.mainApp.unregister()
                 }
             } catch {
+                Self.logger.error("Failed to update launch-at-login: \(error.localizedDescription)")
                 launchAtLogin.toggle()
             }
         }

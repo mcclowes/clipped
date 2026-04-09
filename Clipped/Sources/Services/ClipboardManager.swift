@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Observation
+import os
 import SwiftUI
 
 private let codeEditorBundleIDs: Set<String> = [
@@ -27,13 +28,17 @@ private let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.Concea
 @MainActor
 @Observable
 final class ClipboardManager {
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "ClipboardManager")
+
     var items: [ClipboardItem] = []
     var pinnedItems: [ClipboardItem] = []
     var searchQuery = ""
     var selectedContentType: ContentType?
     var openedViaHotkey = false
 
-    var settingsManager: SettingsManager?
+    var settingsManager: (any SettingsManaging)?
+    var historyStore: any HistoryStoring = HistoryStore.shared
+    var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
 
     private(set) var isMonitoring = false
     private var pollTimer: Timer?
@@ -67,18 +72,19 @@ final class ClipboardManager {
 
     func loadPersistedHistory() {
         guard settingsManager?.persistAcrossReboots == true else { return }
-        let (loaded, pinned) = HistoryStore.shared.load()
+        let (loaded, pinned) = historyStore.load()
         if items.isEmpty { items = loaded }
         if pinnedItems.isEmpty { pinnedItems = pinned }
     }
 
     func saveHistory() {
         guard settingsManager?.persistAcrossReboots == true else { return }
-        HistoryStore.shared.save(items: items, pinnedItems: pinnedItems)
+        historyStore.save(items: items, pinnedItems: pinnedItems)
     }
 
     func startMonitoring() {
         guard !isMonitoring else { return }
+        Self.logger.debug("Starting clipboard monitoring")
         isMonitoring = true
         pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -88,6 +94,7 @@ final class ClipboardManager {
     }
 
     func stopMonitoring() {
+        Self.logger.debug("Stopping clipboard monitoring")
         isMonitoring = false
         pollTimer?.invalidate()
         pollTimer = nil
@@ -160,7 +167,7 @@ final class ClipboardManager {
         // Fetch link title for URLs
         if case let .url(url) = item.content {
             Task {
-                item.linkTitle = await LinkMetadataFetcher.shared.fetchTitle(for: url)
+                item.linkTitle = await linkMetadataFetcher.fetchTitle(for: url)
             }
         }
 

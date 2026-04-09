@@ -2,16 +2,23 @@ import AppKit
 import Foundation
 import os
 
+@MainActor
+protocol HistoryStoring: AnyObject {
+    func save(items: [ClipboardItem], pinnedItems: [ClipboardItem])
+    func load() -> (items: [ClipboardItem], pinned: [ClipboardItem])
+    func clear()
+}
+
 /// Persists clipboard history to a JSON file in the app's support directory.
 @MainActor
-final class HistoryStore {
+final class HistoryStore: HistoryStoring {
     static let shared = HistoryStore()
 
     private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "HistoryStore")
 
     private let fileURL: URL
 
-    private init() {
+    init() {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
         else {
             fatalError("Application Support directory not found")

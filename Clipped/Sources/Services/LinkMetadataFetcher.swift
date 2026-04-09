@@ -1,14 +1,22 @@
 import Foundation
+import os
 
 @MainActor
-final class LinkMetadataFetcher {
+protocol LinkMetadataFetching: AnyObject {
+    func fetchTitle(for url: URL) async -> String?
+}
+
+@MainActor
+final class LinkMetadataFetcher: LinkMetadataFetching {
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "LinkMetadataFetcher")
+
     static let shared = LinkMetadataFetcher()
     private var cache: [URL: String] = [:]
     private var inFlight: [URL: Task<String?, Never>] = [:]
 
     private static let maxCacheSize = 200
 
-    private init() {}
+    init() {}
 
     func fetchTitle(for url: URL) async -> String? {
         if let cached = cache[url] { return cached }
@@ -35,6 +43,7 @@ final class LinkMetadataFetcher {
 
                 return parseTitle(from: html)
             } catch {
+                Self.logger.debug("Failed to fetch title for \(url.absoluteString): \(error.localizedDescription)")
                 return nil
             }
         }

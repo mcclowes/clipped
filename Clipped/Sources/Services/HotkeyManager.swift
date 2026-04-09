@@ -1,8 +1,11 @@
 import Carbon
 import Cocoa
+import os
 
 @MainActor
 final class HotkeyManager {
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "HotkeyManager")
+
     static let shared = HotkeyManager()
 
     private var eventHandler: EventHandlerRef?
@@ -12,6 +15,7 @@ final class HotkeyManager {
     private init() {}
 
     func register(callback: @escaping @MainActor @Sendable () -> Void) {
+        Self.logger.debug("Registering global hotkey")
         self.callback = callback
 
         var eventType = EventTypeSpec(

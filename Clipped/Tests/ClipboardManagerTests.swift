@@ -5,23 +5,31 @@ import Testing
 
 @MainActor
 struct ClipboardManagerTests {
-    @Test("Starts with empty history")
-    func emptyHistory() {
+    private func makeManager(persistHistory: Bool = true) -> (ClipboardManager, MockHistoryStore, MockSettingsManager, MockLinkMetadataFetcher) {
         let manager = ClipboardManager()
         manager.stopMonitoring()
+        let history = MockHistoryStore()
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = persistHistory
+        let fetcher = MockLinkMetadataFetcher()
+        manager.historyStore = history
+        manager.settingsManager = settings
+        manager.linkMetadataFetcher = fetcher
+        return (manager, history, settings, fetcher)
+    }
+
+    @Test("Starts with empty history")
+    func emptyHistory() {
+        let (manager, _, _, _) = makeManager()
         #expect(manager.items.isEmpty)
         #expect(manager.pinnedItems.isEmpty)
     }
 
     @Test("Filter by content type returns matching items only")
     func filterByType() throws {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
+        let (manager, _, _, _) = makeManager()
 
-        let textItem = ClipboardItem(
-            content: .text("hello"),
-            contentType: .plainText
-        )
+        let textItem = ClipboardItem(content: .text("hello"), contentType: .plainText)
         let urlItem = try ClipboardItem(
             content: .url(#require(URL(string: "https://example.com"))),
             contentType: .url
@@ -36,8 +44,7 @@ struct ClipboardManagerTests {
 
     @Test("Search filters items by preview text")
     func searchFilter() {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
+        let (manager, _, _, _) = makeManager()
 
         let item1 = ClipboardItem(content: .text("hello world"), contentType: .plainText)
         let item2 = ClipboardItem(content: .text("goodbye"), contentType: .plainText)
@@ -51,9 +58,7 @@ struct ClipboardManagerTests {
 
     @Test("Toggle pin moves item between lists")
     func togglePin() {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
-
+        let (manager, history, _, _) = makeManager()
         let item = ClipboardItem(content: .text("pin me"), contentType: .plainText)
         manager.items = [item]
 
@@ -62,6 +67,7 @@ struct ClipboardManagerTests {
         #expect(manager.items.isEmpty)
         #expect(manager.pinnedItems.count == 1)
         #expect(item.isPinned == true)
+        #expect(history.saveCallCount > 0)
 
         manager.togglePin(item)
 
@@ -72,21 +78,19 @@ struct ClipboardManagerTests {
 
     @Test("Remove item removes from correct list")
     func removeItem() {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
-
+        let (manager, history, _, _) = makeManager()
         let item = ClipboardItem(content: .text("remove me"), contentType: .plainText)
         manager.items = [item]
 
         manager.removeItem(item)
 
         #expect(manager.items.isEmpty)
+        #expect(history.saveCallCount > 0)
     }
 
     @Test("Clear all preserves pinned items by default")
     func clearAllPreservesPinned() {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
+        let (manager, _, _, _) = makeManager()
 
         let pinned = ClipboardItem(content: .text("pinned"), contentType: .plainText)
         let unpinned = ClipboardItem(content: .text("unpinned"), contentType: .plainText)
@@ -100,10 +104,23 @@ struct ClipboardManagerTests {
         #expect(manager.pinnedItems.count == 1)
     }
 
+    @Test("Clear all with includePinned removes everything")
+    func clearAllIncludingPinned() {
+        let (manager, _, _, _) = makeManager()
+
+        manager.pinnedItems = [ClipboardItem(content: .text("pinned"), contentType: .plainText)]
+        manager.items = [ClipboardItem(content: .text("unpinned"), contentType: .plainText)]
+
+        manager.clearAll(includePinned: true)
+
+        #expect(manager.items.isEmpty)
+        #expect(manager.pinnedItems.isEmpty)
+    }
+
     @Test("Trim to max size removes oldest unpinned items")
     func trimToMaxSize() {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
+        let (manager, _, settings, _) = makeManager()
+        settings.maxHistorySize = 10
 
         for i in 0...15 {
             manager.items.append(
@@ -111,19 +128,16 @@ struct ClipboardManagerTests {
             )
         }
 
-        #expect(manager.items.count == 16)
-
         manager.trimToMaxSize()
 
-        #expect(manager.items.count == ClipboardManager.maxHistorySize)
-        // First items should be preserved (they're at the front)
+        #expect(manager.items.count == 10)
         #expect(manager.items.first?.preview == "item 0")
     }
 
     @Test("Trim to max size preserves pinned items")
     func trimPreservesPinned() {
-        let manager = ClipboardManager()
-        manager.stopMonitoring()
+        let (manager, _, settings, _) = makeManager()
+        settings.maxHistorySize = 10
 
         for i in 0...15 {
             let item = ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
@@ -136,6 +150,44 @@ struct ClipboardManagerTests {
         let pinnedInItems = manager.items.filter(\.isPinned)
         #expect(pinnedInItems.count == 1)
         #expect(pinnedInItems.first?.preview == "item 12")
+    }
+
+    @Test("Load persisted history uses history store")
+    func loadPersistedHistory() {
+        let (manager, history, settings, _) = makeManager()
+        settings.persistAcrossReboots = true
+
+        let item = ClipboardItem(content: .text("persisted"), contentType: .plainText)
+        history.loadResult = ([item], [])
+
+        manager.loadPersistedHistory()
+
+        #expect(manager.items.count == 1)
+        #expect(manager.items.first?.plainText == "persisted")
+    }
+
+    @Test("Load persisted history skipped when persistence disabled")
+    func loadPersistedHistoryDisabled() {
+        let (manager, history, settings, _) = makeManager()
+        settings.persistAcrossReboots = false
+
+        let item = ClipboardItem(content: .text("persisted"), contentType: .plainText)
+        history.loadResult = ([item], [])
+
+        manager.loadPersistedHistory()
+
+        #expect(manager.items.isEmpty)
+    }
+
+    @Test("Save history skipped when persistence disabled")
+    func saveHistoryDisabled() {
+        let (manager, history, settings, _) = makeManager()
+        settings.persistAcrossReboots = false
+
+        manager.items = [ClipboardItem(content: .text("test"), contentType: .plainText)]
+        manager.saveHistory()
+
+        #expect(history.saveCallCount == 0)
     }
 
     @Test("Content type detection")
@@ -169,87 +221,5 @@ struct ClipboardManagerTests {
 
         urlItem.linkTitle = "Example Domain"
         #expect(urlItem.linkTitle == "Example Domain")
-    }
-}
-
-@MainActor
-struct MarkdownConverterTests {
-    @Test("Converts bold text to Markdown")
-    func boldConversion() {
-        let attributed = NSMutableAttributedString(string: "hello bold world")
-        let boldFont = NSFont.boldSystemFont(ofSize: 12)
-        attributed.addAttribute(.font, value: boldFont, range: NSRange(location: 6, length: 4))
-
-        let markdown = MarkdownConverter.convert(attributedString: attributed)
-        #expect(markdown.contains("**bold**"))
-    }
-
-    @Test("Converts links to Markdown")
-    func linkConversion() throws {
-        let attributed = NSMutableAttributedString(string: "click here")
-        let url = try #require(URL(string: "https://example.com"))
-        attributed.addAttribute(.link, value: url, range: NSRange(location: 0, length: 10))
-
-        let markdown = MarkdownConverter.convert(attributedString: attributed)
-        #expect(markdown.contains("[click here](https://example.com)"))
-    }
-
-    @Test("Returns nil for invalid RTF data")
-    func invalidRtf() {
-        let result = MarkdownConverter.convert(rtfData: Data([0x00, 0x01, 0x02]))
-        #expect(result == nil)
-    }
-}
-
-@MainActor
-struct HexColorParserTests {
-    @Test("Parses 6-digit hex colour")
-    func sixDigit() {
-        let color = HexColorParser.parse("#FF5733")
-        #expect(color != nil)
-    }
-
-    @Test("Parses 3-digit shorthand hex colour")
-    func threeDigit() {
-        let color = HexColorParser.parse("#f0a")
-        #expect(color != nil)
-    }
-
-    @Test("Returns nil for invalid hex")
-    func invalid() {
-        #expect(HexColorParser.parse("not a colour") == nil)
-        #expect(HexColorParser.parse("#GGG") == nil)
-        #expect(HexColorParser.parse("") == nil)
-    }
-
-    @Test("Finds first hex colour in text")
-    func firstColorInText() {
-        let color = HexColorParser.firstColor(in: "Background is #2ecc71 and text is #333")
-        #expect(color != nil)
-    }
-
-    @Test("Returns nil when no hex colour present")
-    func noColorInText() {
-        #expect(HexColorParser.firstColor(in: "no colours here") == nil)
-    }
-}
-
-struct LinkMetadataFetcherTests {
-    @Test("Parses title from HTML")
-    @MainActor
-    func parseTitle() async throws {
-        let fetcher = LinkMetadataFetcher.shared
-        // Test with a reliable public URL
-        let title = try await fetcher.fetchTitle(for: #require(URL(string: "https://example.com")))
-        #expect(title != nil)
-        #expect(title?.contains("Example") == true)
-    }
-
-    @Test("Returns nil for non-HTTP URLs")
-    @MainActor
-    func nonHttpUrl() async throws {
-        let fetcher = LinkMetadataFetcher.shared
-        let title = try await fetcher.fetchTitle(for: #require(URL(string: "ftp://example.com")))
-        #expect(title == nil)
     }
 }

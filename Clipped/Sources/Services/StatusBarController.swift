@@ -1,8 +1,11 @@
 import AppKit
+import os
 import SwiftUI
 
 @MainActor
 final class StatusBarController {
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "StatusBarController")
+
     static let shared = StatusBarController()
 
     private var statusItem: NSStatusItem?

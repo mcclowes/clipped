@@ -1,10 +1,13 @@
 import AppKit
 import Observation
+import os
 import UserNotifications
 
 @MainActor
 @Observable
 final class ScreenshotWatcher {
+    private static let logger = Logger(subsystem: "com.mcclowes.Clipped", category: "ScreenshotWatcher")
+
     private(set) var isWatching = false
     private(set) var watchedFolder: URL?
     private var knownFiles: Set<String> = []
@@ -71,7 +74,10 @@ final class ScreenshotWatcher {
     func startWatching(folder: URL) {
         stopWatching()
 
-        guard folder.startAccessingSecurityScopedResource() else { return }
+        guard folder.startAccessingSecurityScopedResource() else {
+            Self.logger.error("Failed to access security-scoped resource for screenshot folder")
+            return
+        }
         watchedFolder = folder
 
         knownFiles = Set(imageFiles(in: folder))
@@ -109,6 +115,7 @@ final class ScreenshotWatcher {
                   let image = NSImage(data: imageData)
             else { continue }
 
+            Self.logger.info("New screenshot detected: \(fileName)")
             let item = ClipboardItem(
                 content: .image(imageData, image.size),
                 contentType: .image,
