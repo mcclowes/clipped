@@ -282,7 +282,7 @@ struct ClipboardItemRow: View {
                 }
             case .text, .richText:
                 HStack(spacing: 6) {
-                    if item.contentType == .code {
+                    if item.contentType == .code || item.isDeveloperContent {
                         Text(item.preview)
                             .font(.system(size: 11, design: .monospaced))
                             .lineLimit(2)

@@ -1,29 +1,31 @@
 import SwiftUI
 
 struct ContentTypeFilterBar: View {
-    @Binding var selection: ContentType?
+    @Binding var selection: ClipboardFilter?
 
     var body: some View {
         HStack(spacing: 4) {
-            filterButton(label: "All", type: nil)
+            filterButton(label: "All", filter: nil)
+
+            filterButton(label: "Dev", filter: .developer)
 
             ForEach(ContentType.allCases) { type in
-                filterButton(label: type.rawValue, type: type)
+                filterButton(label: type.rawValue, filter: .contentType(type))
             }
         }
     }
 
-    private func filterButton(label: String, type: ContentType?) -> some View {
+    private func filterButton(label: String, filter: ClipboardFilter?) -> some View {
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
-                selection = type
+                selection = filter
             }
         } label: {
             Text(label)
-                .font(.system(size: 10, weight: selection == type ? .semibold : .regular))
+                .font(.system(size: 10, weight: selection == filter ? .semibold : .regular))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
-                .background(selection == type ? Color.accentColor.opacity(0.15) : .clear)
+                .background(selection == filter ? Color.accentColor.opacity(0.15) : .clear)
                 .clipShape(.capsule)
         }
         .buttonStyle(.plain)
