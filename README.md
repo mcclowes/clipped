@@ -1,5 +1,7 @@
 # Clipped
 
+[![Release](https://github.com/mcclowes/clipped/actions/workflows/release.yml/badge.svg)](https://github.com/mcclowes/clipped/actions/workflows/release.yml)
+
 A lightweight, native macOS clipboard manager that fits the platform aesthetic and gets out of the way.
 
 ## Features
