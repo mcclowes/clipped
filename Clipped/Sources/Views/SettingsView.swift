@@ -14,12 +14,11 @@ struct SettingsView: View {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
                 Toggle("Persist history across reboots", isOn: $settings.persistAcrossReboots)
                 Toggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
-                Stepper(
-                    "History size: \(settings.maxHistorySize)",
-                    value: $settings.maxHistorySize,
-                    in: 10...500,
-                    step: settings.maxHistorySize >= 100 ? 50 : 10
-                )
+                Picker("History size", selection: $settings.maxHistorySize) {
+                    ForEach([10, 25, 50, 100, 250, 500], id: \.self) { size in
+                        Text("\(size)").tag(size)
+                    }
+                }
             }
 
             Section("Screenshots") {

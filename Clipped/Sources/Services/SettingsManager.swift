@@ -116,7 +116,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     init() {
         persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
         let storedSize = UserDefaults.standard.integer(forKey: "maxHistorySize")
-        maxHistorySize = storedSize > 0 ? storedSize : 50
+        maxHistorySize = storedSize > 0 ? storedSize : 100
         secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "secureMode")
