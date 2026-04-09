@@ -75,7 +75,7 @@ final class ClipboardManager {
         case let .contentType(type):
             result = result.filter { $0.contentType == type }
         case .developer:
-            result = result.filter { $0.isDeveloperContent }
+            result = result.filter(\.isDeveloperContent)
         case nil:
             break
         }
