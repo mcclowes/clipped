@@ -20,6 +20,9 @@ jobs:
       - name: Generate Xcode project
         run: make generate
 
+      - name: Run tests
+        run: make test
+
       - name: Import signing certificate
         env:
           CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
