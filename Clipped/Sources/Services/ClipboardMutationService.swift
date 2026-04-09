@@ -32,6 +32,29 @@ enum MutationID: String, CaseIterable, Identifiable {
         }
     }
 
+    var description: String {
+        switch self {
+        case .stripTrackingParams:
+            "Removes utm_source, fbclid, gclid, and other tracking query parameters from URLs."
+        case .trimWhitespace:
+            "Removes leading and trailing whitespace and newlines from copied text."
+        case .cleanAmazonLinks:
+            "Shortens Amazon product URLs to just the /dp/ASIN path, removing referral tags."
+        case .smartQuotesToStraight:
+            "Converts curly \u{201C}smart\u{201D} quotes to straight \"plain\" quotes."
+        case .collapseMultipleSpaces:
+            "Replaces runs of multiple spaces with a single space."
+        case .stripToPlainText:
+            "Removes rich text formatting, keeping only the plain text content."
+        case .convertToMarkdown:
+            "Converts rich text (RTF) to markdown formatting."
+        case .stripANSICodes:
+            "Removes terminal color and formatting escape codes from copied text."
+        case .detectCodeSnippets:
+            "Identifies code snippets and tags them as developer content for filtering."
+        }
+    }
+
     /// Content types this mutation applies to by default.
     var defaultContentTypes: Set<ContentType> {
         switch self {

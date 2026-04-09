@@ -1,10 +1,64 @@
+import AppKit
 import Carbon
 import SwiftUI
+
+enum SettingsTab: String, CaseIterable {
+    case general = "General"
+    case transformations = "Transformations"
+    case appRules = "App rules"
+
+    var systemImage: String {
+        switch self {
+        case .general: "gearshape"
+        case .transformations: "wand.and.stars"
+        case .appRules: "app.badge.checkmark"
+        }
+    }
+}
 
 struct SettingsView: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(ScreenshotWatcher.self) private var screenshotWatcher
     @Environment(ClipboardManager.self) private var clipboardManager
+
+    @State private var selectedTab: SettingsTab = .general
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            ForEach(SettingsTab.allCases, id: \.self) { tab in
+                Tab(tab.rawValue, systemImage: tab.systemImage, value: tab) {
+                    tabContent(for: tab)
+                }
+            }
+        }
+        .frame(
+            minWidth: 500,
+            idealWidth: 500,
+            maxWidth: .infinity,
+            minHeight: 450,
+            idealHeight: 550,
+            maxHeight: .infinity
+        )
+    }
+
+    @ViewBuilder
+    private func tabContent(for tab: SettingsTab) -> some View {
+        switch tab {
+        case .general:
+            GeneralSettingsTab()
+        case .transformations:
+            TransformationsSettingsTab()
+        case .appRules:
+            AppRulesSettingsTab()
+        }
+    }
+}
+
+// MARK: - General
+
+private struct GeneralSettingsTab: View {
+    @Environment(SettingsManager.self) private var settings
+    @Environment(ScreenshotWatcher.self) private var screenshotWatcher
 
     var body: some View {
         @Bindable var settings = settings
@@ -28,7 +82,6 @@ struct SettingsView: View {
                             if let folder = screenshotWatcher.resolveBookmark() {
                                 screenshotWatcher.startWatching(folder: folder)
                             } else {
-                                // Defer modal panel out of SwiftUI view update cycle
                                 DispatchQueue.main.async {
                                     if let folder = screenshotWatcher.promptForFolder() {
                                         screenshotWatcher.startWatching(folder: folder)
@@ -48,7 +101,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                             .font(.caption)
                         Spacer()
-                        Button("Change…") {
+                        Button("Change\u{2026}") {
                             DispatchQueue.main.async {
                                 if let newFolder = screenshotWatcher.promptForFolder() {
                                     screenshotWatcher.startWatching(folder: newFolder)
@@ -89,7 +142,7 @@ struct SettingsView: View {
                     )
                 }
 
-                Button("Reset to default (⌥C)") {
+                Button("Reset to default (\u{2325}C)") {
                     settings.hotkeyKeyCode = 8
                     settings.hotkeyModifiers = UInt32(optionKey)
                     HotkeyManager.shared.reregister(keyCode: 8, modifiers: UInt32(optionKey))
@@ -98,36 +151,89 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section("Content cleanup") {
-                ForEach(MutationID.allCases) { mutation in
-                    DisclosureGroup(mutation.displayName) {
-                        ForEach(ContentType.allCases) { contentType in
-                            Toggle(
-                                contentType.rawValue,
-                                isOn: Binding(
-                                    get: { settings.isEnabled(mutation, for: contentType) },
-                                    set: { settings.setEnabled(mutation, for: contentType, enabled: $0) }
-                                )
-                            )
-                            .font(.callout)
-                        }
-                    }
-                }
-
-                Text("Mutated items show a ✦ badge. Right-click to restore the original.")
+            Section("About") {
+                Text("Clipped v1.0.0")
+                    .foregroundStyle(.secondary)
+                Text("Clipboard history never leaves your device.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+        }
+        .formStyle(.grouped)
+    }
+}
 
-            Section("Source app overrides") {
+// MARK: - Transformations
+
+private struct TransformationsSettingsTab: View {
+    @Environment(SettingsManager.self) private var settings
+
+    var body: some View {
+        @Bindable var settings = settings
+
+        Form {
+            Section {
+                ForEach(MutationID.allCases) { mutation in
+                    MutationToggleRow(mutation: mutation)
+                }
+            } footer: {
+                Text("Mutated items show a \u{2726} badge. Right-click to restore the original.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+private struct MutationToggleRow: View {
+    @Environment(SettingsManager.self) private var settings
+    let mutation: MutationID
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: {
+                mutation.defaultContentTypes.contains { contentType in
+                    settings.isEnabled(mutation, for: contentType)
+                }
+            },
+            set: { newValue in
+                for contentType in mutation.defaultContentTypes {
+                    settings.setEnabled(mutation, for: contentType, enabled: newValue)
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        Toggle(isOn: isEnabled) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(mutation.displayName)
+                Text(mutation.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+// MARK: - App rules
+
+private struct AppRulesSettingsTab: View {
+    @Environment(SettingsManager.self) private var settings
+    @Environment(ClipboardManager.self) private var clipboardManager
+
+    var body: some View {
+        Form {
+            Section {
                 let apps = clipboardManager.recentSourceApps
                 if apps.isEmpty {
-                    Text("App overrides will appear here once you copy from different apps.")
+                    Text("Per-app rules will appear here once you copy from different apps.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 } else {
                     ForEach(apps, id: \.bundleID) { app in
-                        DisclosureGroup(app.appName) {
+                        DisclosureGroup {
                             ForEach(MutationID.allCases) { mutation in
                                 let current = settings.isOverridden(mutation, for: app.bundleID)
                                 Picker(mutation.displayName, selection: Binding(
@@ -146,32 +252,23 @@ struct SettingsView: View {
                                 }
                                 .font(.callout)
                             }
+                        } label: {
+                            HStack(spacing: 8) {
+                                AppIconView(bundleID: app.bundleID)
+                                Text(app.appName)
+                            }
                         }
                     }
                 }
-
-                Text("Override mutation rules for specific apps. \"Default\" uses the content type setting.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-
-            Section("About") {
-                Text("Clipped v1.0.0")
-                    .foregroundStyle(.secondary)
-                Text("Clipboard history never leaves your device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            } footer: {
+                Text(
+                    "Override transformation rules for specific apps. \"Default\" uses the global setting."
+                )
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             }
         }
         .formStyle(.grouped)
-        .frame(
-            minWidth: 500,
-            idealWidth: 500,
-            maxWidth: .infinity,
-            minHeight: 450,
-            idealHeight: 550,
-            maxHeight: .infinity
-        )
     }
 
     private func overridePickerValue(_ current: Bool?) -> Int {
@@ -188,5 +285,32 @@ struct SettingsView: View {
         case -1: false
         default: nil
         }
+    }
+}
+
+// MARK: - App icon
+
+private struct AppIconView: View {
+    let bundleID: String
+
+    var body: some View {
+        Group {
+            if let icon = appIcon {
+                Image(nsImage: icon)
+                    .resizable()
+            } else {
+                Image(systemName: "app.fill")
+                    .resizable()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(width: 20, height: 20)
+    }
+
+    private var appIcon: NSImage? {
+        guard let url = NSWorkspace.shared.urlForApplication(
+            withBundleIdentifier: bundleID
+        ) else { return nil }
+        return NSWorkspace.shared.icon(forFile: url.path)
     }
 }
