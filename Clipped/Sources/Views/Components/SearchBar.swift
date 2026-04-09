@@ -32,6 +32,14 @@ struct SearchBar: View {
                     onEscapeKey?()
                     return onEscapeKey != nil ? .handled : .ignored
                 }
+                .onKeyPress(.tab) {
+                    onArrowDown?()
+                    return onArrowDown != nil ? .handled : .ignored
+                }
+                .onKeyPress(.tab, modifiers: .shift) {
+                    onArrowUp?()
+                    return onArrowUp != nil ? .handled : .ignored
+                }
 
             if !text.isEmpty {
                 Button {
