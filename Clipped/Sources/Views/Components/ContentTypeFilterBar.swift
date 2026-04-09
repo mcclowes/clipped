@@ -6,12 +6,10 @@ struct ContentTypeFilterBar: View {
     var body: some View {
         HStack(spacing: 4) {
             filterButton(label: "All", filter: nil)
-
+            filterButton(label: "Text", filter: .text)
+            filterButton(label: "URL", filter: .contentType(.url))
             filterButton(label: "Dev", filter: .developer)
-
-            ForEach(ContentType.allCases) { type in
-                filterButton(label: type.rawValue, filter: .contentType(type))
-            }
+            filterButton(label: "Image", filter: .contentType(.image))
         }
     }
 

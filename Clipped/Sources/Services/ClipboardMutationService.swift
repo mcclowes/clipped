@@ -12,6 +12,7 @@ enum MutationID: String, CaseIterable, Identifiable {
     case stripToPlainText
     case convertToMarkdown
     case stripANSICodes
+    case detectCodeSnippets
 
     var id: String {
         rawValue
@@ -27,6 +28,7 @@ enum MutationID: String, CaseIterable, Identifiable {
         case .stripToPlainText: "Strip to plain text"
         case .convertToMarkdown: "Convert to markdown"
         case .stripANSICodes: "Strip ANSI codes"
+        case .detectCodeSnippets: "Detect code snippets"
         }
     }
 
@@ -34,13 +36,14 @@ enum MutationID: String, CaseIterable, Identifiable {
     var defaultContentTypes: Set<ContentType> {
         switch self {
         case .stripTrackingParams: [.url]
-        case .trimWhitespace: [.plainText, .code]
+        case .trimWhitespace: [.plainText]
         case .cleanAmazonLinks: [.url]
         case .smartQuotesToStraight: [.plainText]
         case .collapseMultipleSpaces: [.plainText]
         case .stripToPlainText: [.richText]
         case .convertToMarkdown: [.richText]
-        case .stripANSICodes: [.code]
+        case .stripANSICodes: [.plainText]
+        case .detectCodeSnippets: [.plainText]
         }
     }
 
@@ -55,6 +58,7 @@ enum MutationID: String, CaseIterable, Identifiable {
         case .stripToPlainText: false
         case .convertToMarkdown: false
         case .stripANSICodes: false
+        case .detectCodeSnippets: false
         }
     }
 }
@@ -141,6 +145,7 @@ final class ClipboardMutationService: ClipboardMutating {
             StripToPlainTextMutation(),
             ConvertToMarkdownMutation(),
             StripANSICodesMutation(),
+            DetectCodeSnippetMutation(),
         ]
     }
 }
@@ -379,5 +384,100 @@ final class StripANSICodesMutation: ClipboardMutation {
         guard stripped != string else { return item }
 
         return copyItem(item, content: .text(stripped))
+    }
+}
+
+/// Detects code snippets in plain text and reclassifies as `.code` with `isDeveloperContent`.
+@MainActor
+final class DetectCodeSnippetMutation: ClipboardMutation {
+    let id = MutationID.detectCodeSnippets
+    let name = "Detected code snippet"
+
+    // Import/include statements
+    // swiftlint:disable:next force_try
+    private static let importPattern = try! NSRegularExpression(
+        pattern: #"(?m)^(?:import\s|from\s+\S+\s+import\s|#include\s|using\s+\S+;|require\()"#
+    )
+
+    // Function/method declarations
+    // swiftlint:disable:next force_try
+    private static let declarationPattern = try! NSRegularExpression(
+        pattern: #"(?m)^(?:(?:export\s+)?(?:async\s+)?function\s+\w+|def\s+\w+\s*\(|(?:pub\s+)?fn\s+\w+|func\s+\w+)"#
+    )
+
+    // Variable declarations (let/const/var with assignment)
+    // swiftlint:disable:next force_try
+    private static let variablePattern = try! NSRegularExpression(
+        pattern: #"(?m)^(?:(?:export\s+)?(?:const|let|var)\s+\w+\s*[=:])"#
+    )
+
+    // Arrow functions
+    // swiftlint:disable:next force_try
+    private static let arrowPattern = try! NSRegularExpression(
+        pattern: #"=>\s*[{\(]|=>\s*\w"#
+    )
+
+    // Class/struct/enum/interface declarations
+    // swiftlint:disable:next force_try
+    private static let classPattern = try! NSRegularExpression(
+        pattern: #"(?m)^(?:(?:export\s+)?(?:abstract\s+)?class\s+\w+|struct\s+\w+|enum\s+\w+|interface\s+\w+|protocol\s+\w+)"#
+    )
+
+    // Shell commands (common package managers, git, etc.)
+    // swiftlint:disable:next force_try
+    private static let shellPattern = try! NSRegularExpression(
+        pattern: #"(?m)^(?:npm\s+(?:install|run|start|test|build)|pip\s+install|yarn\s+(?:add|run)|pnpm\s+(?:add|run)|git\s+(?:commit|push|pull|checkout|merge|rebase|clone|stash)|brew\s+install|cargo\s+(?:build|run|test)|docker\s+(?:run|build|compose)|kubectl\s+|curl\s+-)"#
+    )
+
+    // Code density: lines ending with ; or { or } (need 2+ to trigger)
+    // swiftlint:disable:next force_try
+    private static let braceOrSemicolonLine = try! NSRegularExpression(
+        pattern: #"(?m)[;{}\)]$"#
+    )
+
+    // require() as used in JS/Node (not at line start, e.g. `const x = require('y')`)
+    // swiftlint:disable:next force_try
+    private static let requireCallPattern = try! NSRegularExpression(
+        pattern: #"=\s*require\(['"]\w"#
+    )
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .text(string) = item.content,
+              item.contentType == .plainText,
+              !item.isDeveloperContent
+        else { return item }
+
+        guard looksLikeCode(string) else { return item }
+
+        return ClipboardItem(
+            id: item.id,
+            content: item.content,
+            contentType: item.contentType,
+            sourceAppName: item.sourceAppName,
+            sourceAppBundleID: item.sourceAppBundleID,
+            timestamp: item.timestamp,
+            isPinned: item.isPinned,
+            isSensitive: item.isSensitive,
+            isDeveloperContent: true
+        )
+    }
+
+    private func looksLikeCode(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+
+        // Single-pattern matches (high confidence)
+        if Self.importPattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.declarationPattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.variablePattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.arrowPattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.classPattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.shellPattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.requireCallPattern.firstMatch(in: text, range: range) != nil { return true }
+
+        // Code density: 2+ lines ending with braces/semicolons
+        let braceMatches = Self.braceOrSemicolonLine.numberOfMatches(in: text, range: range)
+        if braceMatches >= 2 { return true }
+
+        return false
     }
 }

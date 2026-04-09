@@ -456,7 +456,7 @@ struct ClipboardMutationTests {
         let mutation = StripANSICodesMutation()
         let item = ClipboardItem(
             content: .text("\u{1B}[31mError:\u{1B}[0m something failed"),
-            contentType: .code
+            contentType: .plainText
         )
 
         let result = mutation.mutate(item)
@@ -473,7 +473,7 @@ struct ClipboardMutationTests {
         let mutation = StripANSICodesMutation()
         let item = ClipboardItem(
             content: .text("\u{1B}[1m\u{1B}[32mSuccess\u{1B}[0m: \u{1B}[34mdone\u{1B}[0m"),
-            contentType: .code
+            contentType: .plainText
         )
 
         let result = mutation.mutate(item)
@@ -488,7 +488,7 @@ struct ClipboardMutationTests {
     @Test("Preserves text without ANSI codes")
     func preserveTextWithoutANSI() {
         let mutation = StripANSICodesMutation()
-        let item = ClipboardItem(content: .text("clean output"), contentType: .code)
+        let item = ClipboardItem(content: .text("clean output"), contentType: .plainText)
 
         let result = mutation.mutate(item)
 
@@ -511,13 +511,13 @@ struct ClipboardMutationTests {
     @Test("MutationID has correct default content types")
     func mutationIDDefaults() {
         #expect(MutationID.stripTrackingParams.defaultContentTypes == [.url])
-        #expect(MutationID.trimWhitespace.defaultContentTypes == [.plainText, .code])
+        #expect(MutationID.trimWhitespace.defaultContentTypes == [.plainText])
         #expect(MutationID.cleanAmazonLinks.defaultContentTypes == [.url])
         #expect(MutationID.smartQuotesToStraight.defaultContentTypes == [.plainText])
         #expect(MutationID.collapseMultipleSpaces.defaultContentTypes == [.plainText])
         #expect(MutationID.stripToPlainText.defaultContentTypes == [.richText])
         #expect(MutationID.convertToMarkdown.defaultContentTypes == [.richText])
-        #expect(MutationID.stripANSICodes.defaultContentTypes == [.code])
+        #expect(MutationID.stripANSICodes.defaultContentTypes == [.plainText])
     }
 
     @Test("New mutations are disabled by default")
@@ -545,6 +545,143 @@ struct ClipboardMutationTests {
         for expected in MutationID.allCases {
             #expect(ids.contains(expected))
         }
+    }
+
+    // MARK: - DetectCodeSnippetMutation
+
+    @Test("Detects import statements")
+    func detectsImports() {
+        let mutation = DetectCodeSnippetMutation()
+
+        for code in [
+            "import Foundation",
+            "import React from 'react'",
+            "from typing import Optional",
+            "#include <stdio.h>",
+            "const x = require('fs')",
+        ] {
+            let item = ClipboardItem(content: .text(code), contentType: .plainText)
+            let result = mutation.mutate(item)
+            #expect(result.isDeveloperContent, "Should flag as dev: \(code)")
+        }
+    }
+
+    @Test("Detects function/variable declarations")
+    func detectsDeclarations() {
+        let mutation = DetectCodeSnippetMutation()
+
+        for code in [
+            "func greet(name: String) -> String {",
+            "function handleClick(event) {",
+            "def process_data(items):",
+            "const API_URL = 'https://api.example.com'",
+            "let count = items.filter { $0.isActive }",
+            "var result: [String] = []",
+        ] {
+            let item = ClipboardItem(content: .text(code), contentType: .plainText)
+            let result = mutation.mutate(item)
+            #expect(result.isDeveloperContent, "Should flag as dev: \(code)")
+        }
+    }
+
+    @Test("Detects multiline code with braces and semicolons")
+    func detectsMultilineCode() {
+        let mutation = DetectCodeSnippetMutation()
+
+        let snippet = """
+        if (user.isLoggedIn) {
+            console.log("Welcome");
+            return true;
+        }
+        """
+        let item = ClipboardItem(content: .text(snippet), contentType: .plainText)
+        let result = mutation.mutate(item)
+        #expect(result.isDeveloperContent)
+    }
+
+    @Test("Detects shell commands")
+    func detectsShellCommands() {
+        let mutation = DetectCodeSnippetMutation()
+
+        for code in [
+            "npm install react",
+            "pip install requests",
+            "git commit -m 'fix bug'",
+            "brew install wget",
+            "cargo build --release",
+        ] {
+            let item = ClipboardItem(content: .text(code), contentType: .plainText)
+            let result = mutation.mutate(item)
+            #expect(result.isDeveloperContent, "Should flag as dev: \(code)")
+        }
+    }
+
+    @Test("Detects arrow functions and common syntax")
+    func detectsCodeSyntax() {
+        let mutation = DetectCodeSnippetMutation()
+
+        for code in [
+            "const greet = (name) => {",
+            "items.map(x => x.id)",
+            "class UserService extends BaseService {",
+        ] {
+            let item = ClipboardItem(content: .text(code), contentType: .plainText)
+            let result = mutation.mutate(item)
+            #expect(result.isDeveloperContent, "Should flag as dev: \(code)")
+        }
+    }
+
+    @Test("Does not flag plain prose as code")
+    func rejectsPlainProse() {
+        let mutation = DetectCodeSnippetMutation()
+
+        for text in [
+            "Hello, how are you?",
+            "Meeting at 3pm tomorrow",
+            "Buy milk and eggs",
+            "The quick brown fox jumps over the lazy dog",
+            "Let me know if you have any questions",
+            "Please review the document and provide feedback",
+        ] {
+            let item = ClipboardItem(content: .text(text), contentType: .plainText)
+            let result = mutation.mutate(item)
+            #expect(result === item, "Should NOT detect: \(text)")
+        }
+    }
+
+    @Test("Ignores non-text items")
+    func codeDetectIgnoresURLs() throws {
+        let mutation = DetectCodeSnippetMutation()
+        let url = try #require(URL(string: "https://example.com"))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    @Test("Skips items already flagged as developer content")
+    func codeDetectSkipsExistingDevContent() {
+        let mutation = DetectCodeSnippetMutation()
+        let item = ClipboardItem(
+            content: .text("import Foundation"),
+            contentType: .plainText,
+            isDeveloperContent: true
+        )
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    @Test("detectCodeSnippets is disabled by default")
+    func codeDetectDisabledByDefault() {
+        #expect(!MutationID.detectCodeSnippets.enabledByDefault)
+    }
+
+    @Test("detectCodeSnippets targets plainText")
+    func codeDetectTargetsPlainText() {
+        #expect(MutationID.detectCodeSnippets.defaultContentTypes == [.plainText])
     }
 }
 

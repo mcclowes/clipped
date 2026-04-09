@@ -6,7 +6,7 @@ import SwiftUI
 final class StatusBarController {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "StatusBarController")
 
-    static let panelWidth: CGFloat = 320
+    static let panelWidth: CGFloat = 380
     static let panelHeight: CGFloat = 420
     static var panelSize: NSSize {
         NSSize(width: panelWidth, height: panelHeight)

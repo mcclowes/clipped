@@ -155,11 +155,13 @@ private struct StoredEntry: Codable {
     }
 
     func toClipboardItem() -> ClipboardItem? {
-        guard let type = ContentType(rawValue: contentType) else { return nil }
+        // Map legacy "Code" type to plainText
+        let resolvedType = contentType == "Code" ? "Text" : contentType
+        guard let type = ContentType(rawValue: resolvedType) else { return nil }
 
         let content: ClipboardContent
         switch type {
-        case .plainText, .code:
+        case .plainText:
             guard let text = textContent else { return nil }
             content = .text(text)
         case .richText:

@@ -90,7 +90,7 @@ struct StickyNoteView: View {
     private func contentBody(for item: ClipboardItem) -> some View {
         switch item.content {
         case let .text(string):
-            selectableText(string, isCode: item.contentType == .code)
+            selectableText(string, isCode: item.isDeveloperContent)
 
         case let .richText(_, plainText):
             selectableText(plainText, isCode: false)

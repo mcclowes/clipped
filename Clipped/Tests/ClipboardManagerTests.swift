@@ -282,7 +282,7 @@ struct ClipboardManagerTests {
         let normalItem = ClipboardItem(content: .text("hello world"), contentType: .plainText)
         let codeItem = ClipboardItem(
             content: .text("let x = 1"),
-            contentType: .code,
+            contentType: .plainText,
             isDeveloperContent: true
         )
 

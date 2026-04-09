@@ -5,7 +5,6 @@ enum ContentType: String, CaseIterable, Identifiable {
     case plainText = "Text"
     case richText = "Rich Text"
     case url = "URL"
-    case code = "Code"
     case image = "Image"
 
     var id: String {
@@ -17,7 +16,6 @@ enum ContentType: String, CaseIterable, Identifiable {
         case .plainText: "doc.text"
         case .richText: "doc.richtext"
         case .url: "link"
-        case .code: "chevron.left.forwardslash.chevron.right"
         case .image: "photo"
         }
     }
@@ -26,11 +24,13 @@ enum ContentType: String, CaseIterable, Identifiable {
 /// Filter options for the clipboard panel, including content types and the developer meta-filter.
 enum ClipboardFilter: Hashable, Identifiable {
     case contentType(ContentType)
+    case text // combines plainText + richText
     case developer
 
     var id: String {
         switch self {
         case let .contentType(type): type.rawValue
+        case .text: "Text"
         case .developer: "Developer"
         }
     }
@@ -38,6 +38,7 @@ enum ClipboardFilter: Hashable, Identifiable {
     var label: String {
         switch self {
         case let .contentType(type): type.rawValue
+        case .text: "Text"
         case .developer: "Dev"
         }
     }
@@ -45,6 +46,7 @@ enum ClipboardFilter: Hashable, Identifiable {
     var systemImage: String {
         switch self {
         case let .contentType(type): type.systemImage
+        case .text: "doc.text"
         case .developer: "curlybraces"
         }
     }

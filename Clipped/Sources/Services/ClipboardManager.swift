@@ -86,6 +86,8 @@ final class ClipboardManager {
         switch selectedFilter {
         case let .contentType(type):
             result = result.filter { $0.contentType == type }
+        case .text:
+            result = result.filter { $0.contentType == .plainText || $0.contentType == .richText }
         case .developer:
             result = result.filter(\.isDeveloperContent)
         case nil:
@@ -284,7 +286,7 @@ final class ClipboardManager {
                 || DeveloperContentDetector.isDeveloperContent(string)
             return ClipboardItem(
                 content: .text(string),
-                contentType: isFromCodeEditor ? .code : .plainText,
+                contentType: .plainText,
                 sourceAppName: appName,
                 sourceAppBundleID: bundleID,
                 isDeveloperContent: isDevContent
