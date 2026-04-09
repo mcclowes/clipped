@@ -23,14 +23,15 @@ Clipped/
     App/ClippedApp.swift   # Entry point, MenuBarExtra setup
     Models/ClipboardItem.swift
     Services/
-      ClipboardManager.swift    # Core clipboard polling + item management
-      SettingsManager.swift     # UserDefaults + SMAppService wrapper
-      HistoryStore.swift        # JSON persistence to ~/Library/Application Support/Clipped/
-      HotkeyManager.swift      # Carbon global hotkey (Cmd+Shift+V)
-      LinkMetadataFetcher.swift # Async URL title fetching
-      MarkdownConverter.swift   # RTF -> Markdown
-      ScreenshotWatcher.swift   # Monitors for new screenshots
-      StatusBarController.swift # NSPopover-based menu bar controller
+      ClipboardManager.swift        # Core clipboard polling + item management
+      ClipboardMutationService.swift # Clipboard content transformations
+      SettingsManager.swift         # UserDefaults + SMAppService wrapper
+      HistoryStore.swift            # JSON persistence to ~/Library/Application Support/Clipped/
+      HotkeyManager.swift          # Carbon global hotkey (Cmd+Shift+V)
+      LinkMetadataFetcher.swift     # Async URL title fetching
+      MarkdownConverter.swift       # RTF -> Markdown
+      ScreenshotWatcher.swift       # Monitors for new screenshots
+      StatusBarController.swift     # NSPopover-based menu bar controller
     Views/
       ClipboardPanelView.swift
       SettingsView.swift
@@ -40,9 +41,12 @@ Clipped/
         SearchBar.swift
         ContentTypeFilterBar.swift
         FloatingPanelModifier.swift
+        KeyRecorderView.swift
         OnboardingOverlay.swift
   Tests/
     ClipboardManagerTests.swift
+    ClipboardMutationTests.swift
+    DeveloperContentDetectorTests.swift
     HexColorParserTests.swift
     HistoryStoreTests.swift
     LinkMetadataFetcherTests.swift
