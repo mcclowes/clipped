@@ -197,16 +197,27 @@ struct ClipboardItemRow: View {
                     .foregroundStyle(.blue)
             }
         case .text, .richText:
-            if item.contentType == .code {
-                Text(item.preview)
-                    .font(.system(size: 11, design: .monospaced))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
-            } else {
-                Text(item.preview)
-                    .font(.system(size: 11))
-                    .lineLimit(2)
-                    .foregroundStyle(.primary)
+            HStack(spacing: 6) {
+                if item.contentType == .code {
+                    Text(item.preview)
+                        .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text(item.preview)
+                        .font(.system(size: 11))
+                        .lineLimit(2)
+                        .foregroundStyle(.primary)
+                }
+                if let color = HexColorParser.firstColor(in: item.preview) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(nsColor: color))
+                        .frame(width: 14, height: 14)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(.primary.opacity(0.15), lineWidth: 0.5)
+                        )
+                }
             }
         }
     }
