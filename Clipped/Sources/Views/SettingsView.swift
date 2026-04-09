@@ -4,6 +4,7 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(ScreenshotWatcher.self) private var screenshotWatcher
+    @Environment(ClipboardManager.self) private var clipboardManager
 
     var body: some View {
         @Bindable var settings = settings
@@ -119,6 +120,42 @@ struct SettingsView: View {
                     .foregroundStyle(.tertiary)
             }
 
+            Section("Source app overrides") {
+                let apps = clipboardManager.recentSourceApps
+                if apps.isEmpty {
+                    Text("App overrides will appear here once you copy from different apps.")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                } else {
+                    ForEach(apps, id: \.bundleID) { app in
+                        DisclosureGroup(app.appName) {
+                            ForEach(MutationID.allCases) { mutation in
+                                let current = settings.isOverridden(mutation, for: app.bundleID)
+                                Picker(mutation.displayName, selection: Binding(
+                                    get: { overridePickerValue(current) },
+                                    set: { newValue in
+                                        settings.setOverride(
+                                            mutation,
+                                            for: app.bundleID,
+                                            enabled: overrideFromPicker(newValue)
+                                        )
+                                    }
+                                )) {
+                                    Text("Default").tag(0)
+                                    Text("On").tag(1)
+                                    Text("Off").tag(-1)
+                                }
+                                .font(.callout)
+                            }
+                        }
+                    }
+                }
+
+                Text("Override mutation rules for specific apps. \"Default\" uses the content type setting.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("About") {
                 Text("Clipped v1.0.0")
                     .foregroundStyle(.secondary)
@@ -128,6 +165,22 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 580)
+        .frame(width: 380, height: 640)
+    }
+
+    private func overridePickerValue(_ current: Bool?) -> Int {
+        switch current {
+        case nil: 0
+        case true?: 1
+        case false?: -1
+        }
+    }
+
+    private func overrideFromPicker(_ value: Int) -> Bool? {
+        switch value {
+        case 1: true
+        case -1: false
+        default: nil
+        }
     }
 }

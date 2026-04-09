@@ -1,3 +1,4 @@
+import AppKit
 import Carbon
 @testable import Clipped
 import Foundation
@@ -251,18 +252,298 @@ struct ClipboardMutationTests {
         #expect(result.contentType == .url)
     }
 
+    // MARK: - CleanAmazonLinksMutation
+
+    @Test("Cleans Amazon product URL to /dp/ASIN path")
+    func cleanAmazonLink() throws {
+        let mutation = CleanAmazonLinksMutation()
+        let url = try #require(URL(
+            string: "https://www.amazon.com/Some-Product-Name/dp/B08N5WRWNW/ref=sr_1_1?keywords=test&qid=123"
+        ))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+
+        let result = mutation.mutate(item)
+
+        guard case let .url(cleanedURL) = result.content else {
+            Issue.record("Expected URL content")
+            return
+        }
+        #expect(cleanedURL.absoluteString == "https://www.amazon.com/dp/B08N5WRWNW")
+    }
+
+    @Test("Cleans Amazon UK links")
+    func cleanAmazonUKLink() throws {
+        let mutation = CleanAmazonLinksMutation()
+        let url = try #require(URL(
+            string: "https://www.amazon.co.uk/dp/B08N5WRWNW/ref=abc"
+        ))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+
+        let result = mutation.mutate(item)
+
+        guard case let .url(cleanedURL) = result.content else {
+            Issue.record("Expected URL content")
+            return
+        }
+        #expect(cleanedURL.absoluteString == "https://www.amazon.co.uk/dp/B08N5WRWNW")
+    }
+
+    @Test("Ignores non-Amazon URLs")
+    func ignoreNonAmazonURLs() throws {
+        let mutation = CleanAmazonLinksMutation()
+        let url = try #require(URL(string: "https://example.com/dp/B08N5WRWNW"))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    @Test("Ignores Amazon URLs without ASIN")
+    func ignoreAmazonWithoutASIN() throws {
+        let mutation = CleanAmazonLinksMutation()
+        let url = try #require(URL(string: "https://www.amazon.com/deals"))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    // MARK: - SmartQuotesToStraightMutation
+
+    @Test("Converts smart single quotes to straight")
+    func convertSmartSingleQuotes() {
+        let mutation = SmartQuotesToStraightMutation()
+        let item = ClipboardItem(content: .text("it\u{2018}s a \u{2019}test\u{2019}"), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(converted) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(converted == "it's a 'test'")
+    }
+
+    @Test("Converts smart double quotes to straight")
+    func convertSmartDoubleQuotes() {
+        let mutation = SmartQuotesToStraightMutation()
+        let item = ClipboardItem(
+            content: .text("\u{201C}hello\u{201D}"),
+            contentType: .plainText
+        )
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(converted) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(converted == "\"hello\"")
+    }
+
+    @Test("Preserves text without smart quotes")
+    func preserveTextWithoutSmartQuotes() {
+        let mutation = SmartQuotesToStraightMutation()
+        let item = ClipboardItem(content: .text("no smart quotes here"), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    // MARK: - CollapseMultipleSpacesMutation
+
+    @Test("Collapses multiple spaces to single")
+    func collapseSpaces() {
+        let mutation = CollapseMultipleSpacesMutation()
+        let item = ClipboardItem(content: .text("hello   world    test"), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(collapsed) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(collapsed == "hello world test")
+    }
+
+    @Test("Preserves text with single spaces")
+    func preserveSingleSpaces() {
+        let mutation = CollapseMultipleSpacesMutation()
+        let item = ClipboardItem(content: .text("hello world"), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    // MARK: - StripToPlainTextMutation
+
+    @Test("Strips rich text to plain text")
+    func stripRichText() {
+        let mutation = StripToPlainTextMutation()
+        let rtfData = Data()
+        let item = ClipboardItem(
+            content: .richText(rtfData, "plain fallback"),
+            contentType: .richText
+        )
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(plain) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(plain == "plain fallback")
+    }
+
+    @Test("Ignores non-rich-text items")
+    func stripIgnoresPlainText() {
+        let mutation = StripToPlainTextMutation()
+        let item = ClipboardItem(content: .text("hello"), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    // MARK: - ConvertToMarkdownMutation
+
+    @Test("Converts RTF to markdown")
+    func convertRTFToMarkdown() throws {
+        let mutation = ConvertToMarkdownMutation()
+        // Create real RTF with bold text
+        let attributed = NSMutableAttributedString(string: "hello bold world")
+        attributed.addAttribute(
+            .font,
+            value: NSFont.boldSystemFont(ofSize: 12),
+            range: NSRange(location: 6, length: 4)
+        )
+        let rtfData = try #require(attributed.rtf(
+            from: NSRange(location: 0, length: attributed.length),
+            documentAttributes: [:]
+        ))
+        let item = ClipboardItem(
+            content: .richText(rtfData, "hello bold world"),
+            contentType: .richText
+        )
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(markdown) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(markdown.contains("**bold**"))
+    }
+
+    @Test("Ignores non-rich-text for markdown conversion")
+    func markdownIgnoresPlainText() {
+        let mutation = ConvertToMarkdownMutation()
+        let item = ClipboardItem(content: .text("hello"), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    // MARK: - StripANSICodesMutation
+
+    @Test("Strips ANSI color codes from text")
+    func stripANSICodes() {
+        let mutation = StripANSICodesMutation()
+        let item = ClipboardItem(
+            content: .text("\u{1B}[31mError:\u{1B}[0m something failed"),
+            contentType: .code
+        )
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(stripped) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(stripped == "Error: something failed")
+    }
+
+    @Test("Strips multiple ANSI sequences")
+    func stripMultipleANSI() {
+        let mutation = StripANSICodesMutation()
+        let item = ClipboardItem(
+            content: .text("\u{1B}[1m\u{1B}[32mSuccess\u{1B}[0m: \u{1B}[34mdone\u{1B}[0m"),
+            contentType: .code
+        )
+
+        let result = mutation.mutate(item)
+
+        guard case let .text(stripped) = result.content else {
+            Issue.record("Expected text content")
+            return
+        }
+        #expect(stripped == "Success: done")
+    }
+
+    @Test("Preserves text without ANSI codes")
+    func preserveTextWithoutANSI() {
+        let mutation = StripANSICodesMutation()
+        let item = ClipboardItem(content: .text("clean output"), contentType: .code)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
+    @Test("Ignores non-text items for ANSI stripping")
+    func ansiIgnoresURLs() throws {
+        let mutation = StripANSICodesMutation()
+        let url = try #require(URL(string: "https://example.com"))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
     // MARK: - MutationID
 
     @Test("MutationID has correct default content types")
     func mutationIDDefaults() {
         #expect(MutationID.stripTrackingParams.defaultContentTypes == [.url])
         #expect(MutationID.trimWhitespace.defaultContentTypes == [.plainText, .code])
+        #expect(MutationID.cleanAmazonLinks.defaultContentTypes == [.url])
+        #expect(MutationID.smartQuotesToStraight.defaultContentTypes == [.plainText])
+        #expect(MutationID.collapseMultipleSpaces.defaultContentTypes == [.plainText])
+        #expect(MutationID.stripToPlainText.defaultContentTypes == [.richText])
+        #expect(MutationID.convertToMarkdown.defaultContentTypes == [.richText])
+        #expect(MutationID.stripANSICodes.defaultContentTypes == [.code])
+    }
+
+    @Test("New mutations are disabled by default")
+    func newMutationsDisabledByDefault() {
+        #expect(!MutationID.cleanAmazonLinks.enabledByDefault)
+        #expect(!MutationID.smartQuotesToStraight.enabledByDefault)
+        #expect(!MutationID.collapseMultipleSpaces.enabledByDefault)
+        #expect(!MutationID.stripToPlainText.enabledByDefault)
+        #expect(!MutationID.convertToMarkdown.enabledByDefault)
+        #expect(!MutationID.stripANSICodes.enabledByDefault)
     }
 
     @Test("All MutationIDs have display names")
     func allMutationsHaveNames() {
         for mutation in MutationID.allCases {
             #expect(!mutation.displayName.isEmpty)
+        }
+    }
+
+    @Test("Default mutations includes all mutation types")
+    func defaultMutationsIncludesAll() {
+        let mutations = ClipboardMutationService.defaultMutations()
+        let ids = Set(mutations.map(\.id))
+        #expect(ids.count == MutationID.allCases.count)
+        for expected in MutationID.allCases {
+            #expect(ids.contains(expected))
         }
     }
 }

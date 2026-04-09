@@ -61,6 +61,18 @@ final class ClipboardManager {
     private static let monitoringResumeDelay: Duration = .milliseconds(200)
     private static let vKeyCode: UInt16 = 0x09
 
+    /// Unique (bundleID, appName) pairs from current history, for settings UI.
+    var recentSourceApps: [(bundleID: String, appName: String)] {
+        var seen = Set<String>()
+        var result: [(bundleID: String, appName: String)] = []
+        for item in items + pinnedItems {
+            guard let bid = item.sourceAppBundleID, !seen.contains(bid) else { continue }
+            seen.insert(bid)
+            result.append((bid, item.sourceAppName ?? bid))
+        }
+        return result.sorted { $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending }
+    }
+
     var filteredPinnedItems: [ClipboardItem] {
         applyFilters(to: pinnedItems)
     }

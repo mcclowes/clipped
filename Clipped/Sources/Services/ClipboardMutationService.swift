@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -5,6 +6,12 @@ import os
 enum MutationID: String, CaseIterable, Identifiable {
     case stripTrackingParams
     case trimWhitespace
+    case cleanAmazonLinks
+    case smartQuotesToStraight
+    case collapseMultipleSpaces
+    case stripToPlainText
+    case convertToMarkdown
+    case stripANSICodes
 
     var id: String {
         rawValue
@@ -14,6 +21,12 @@ enum MutationID: String, CaseIterable, Identifiable {
         switch self {
         case .stripTrackingParams: "Strip tracking parameters"
         case .trimWhitespace: "Trim whitespace"
+        case .cleanAmazonLinks: "Clean Amazon links"
+        case .smartQuotesToStraight: "Smart quotes to straight"
+        case .collapseMultipleSpaces: "Collapse multiple spaces"
+        case .stripToPlainText: "Strip to plain text"
+        case .convertToMarkdown: "Convert to markdown"
+        case .stripANSICodes: "Strip ANSI codes"
         }
     }
 
@@ -22,6 +35,12 @@ enum MutationID: String, CaseIterable, Identifiable {
         switch self {
         case .stripTrackingParams: [.url]
         case .trimWhitespace: [.plainText, .code]
+        case .cleanAmazonLinks: [.url]
+        case .smartQuotesToStraight: [.plainText]
+        case .collapseMultipleSpaces: [.plainText]
+        case .stripToPlainText: [.richText]
+        case .convertToMarkdown: [.richText]
+        case .stripANSICodes: [.code]
         }
     }
 
@@ -30,6 +49,12 @@ enum MutationID: String, CaseIterable, Identifiable {
         switch self {
         case .stripTrackingParams: true
         case .trimWhitespace: true
+        case .cleanAmazonLinks: false
+        case .smartQuotesToStraight: false
+        case .collapseMultipleSpaces: false
+        case .stripToPlainText: false
+        case .convertToMarkdown: false
+        case .stripANSICodes: false
         }
     }
 }
@@ -109,12 +134,36 @@ final class ClipboardMutationService: ClipboardMutating {
     static func defaultMutations() -> [any ClipboardMutation] {
         [
             StripTrackingParamsMutation(),
+            CleanAmazonLinksMutation(),
             TrimWhitespaceMutation(),
+            SmartQuotesToStraightMutation(),
+            CollapseMultipleSpacesMutation(),
+            StripToPlainTextMutation(),
+            ConvertToMarkdownMutation(),
+            StripANSICodesMutation(),
         ]
     }
 }
 
 // MARK: - Built-in mutations
+
+/// Helper to create a new ClipboardItem preserving all metadata.
+@MainActor
+private func copyItem(
+    _ item: ClipboardItem,
+    content: ClipboardContent
+) -> ClipboardItem {
+    ClipboardItem(
+        id: item.id,
+        content: content,
+        contentType: item.contentType,
+        sourceAppName: item.sourceAppName,
+        sourceAppBundleID: item.sourceAppBundleID,
+        timestamp: item.timestamp,
+        isPinned: item.isPinned,
+        isSensitive: item.isSensitive
+    )
+}
 
 /// Strips common tracking parameters from URLs (utm_*, fbclid, gclid, etc.)
 @MainActor
@@ -149,16 +198,7 @@ final class StripTrackingParamsMutation: ClipboardMutation {
 
         guard let cleanedURL = components.url else { return item }
 
-        return ClipboardItem(
-            id: item.id,
-            content: .url(cleanedURL),
-            contentType: item.contentType,
-            sourceAppName: item.sourceAppName,
-            sourceAppBundleID: item.sourceAppBundleID,
-            timestamp: item.timestamp,
-            isPinned: item.isPinned,
-            isSensitive: item.isSensitive
-        )
+        return copyItem(item, content: .url(cleanedURL))
     }
 }
 
@@ -174,15 +214,170 @@ final class TrimWhitespaceMutation: ClipboardMutation {
         let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed != string else { return item }
 
-        return ClipboardItem(
-            id: item.id,
-            content: .text(trimmed),
-            contentType: item.contentType,
-            sourceAppName: item.sourceAppName,
-            sourceAppBundleID: item.sourceAppBundleID,
-            timestamp: item.timestamp,
-            isPinned: item.isPinned,
-            isSensitive: item.isSensitive
+        return copyItem(item, content: .text(trimmed))
+    }
+}
+
+/// Cleans Amazon product URLs to just the /dp/ASIN path.
+@MainActor
+final class CleanAmazonLinksMutation: ClipboardMutation {
+    let id = MutationID.cleanAmazonLinks
+    let name = "Cleaned Amazon link"
+
+    // swiftlint:disable:next force_try
+    private static let dpPattern = try! NSRegularExpression(
+        pattern: "/dp/([A-Z0-9]{10})"
+    )
+
+    private static let amazonHosts: Set<String> = [
+        "amazon.com", "www.amazon.com",
+        "amazon.co.uk", "www.amazon.co.uk",
+        "amazon.de", "www.amazon.de",
+        "amazon.fr", "www.amazon.fr",
+        "amazon.ca", "www.amazon.ca",
+        "amazon.co.jp", "www.amazon.co.jp",
+        "amazon.com.au", "www.amazon.com.au",
+        "amazon.it", "www.amazon.it",
+        "amazon.es", "www.amazon.es",
+        "amazon.in", "www.amazon.in",
+    ]
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .url(url) = item.content,
+              let host = url.host?.lowercased(),
+              Self.amazonHosts.contains(host)
+        else { return item }
+
+        let path = url.path
+        let range = NSRange(path.startIndex..., in: path)
+        guard let match = Self.dpPattern.firstMatch(in: path, range: range),
+              let asinRange = Range(match.range(at: 1), in: path)
+        else { return item }
+
+        let asin = String(path[asinRange])
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.path = "/dp/\(asin)"
+
+        guard let cleanedURL = components.url else { return item }
+        guard cleanedURL != url else { return item }
+
+        return copyItem(item, content: .url(cleanedURL))
+    }
+}
+
+/// Converts smart (curly) quotes to straight quotes.
+@MainActor
+final class SmartQuotesToStraightMutation: ClipboardMutation {
+    let id = MutationID.smartQuotesToStraight
+    let name = "Straightened quotes"
+
+    private static let replacements: [(Character, Character)] = [
+        ("\u{2018}", "'"), // left single
+        ("\u{2019}", "'"), // right single
+        ("\u{201C}", "\""), // left double
+        ("\u{201D}", "\""), // right double
+    ]
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .text(string) = item.content else { return item }
+
+        var result = string
+        for (smart, straight) in Self.replacements {
+            result = result.map { $0 == smart ? straight : $0 }
+                .reduce(into: "") { $0.append($1) }
+        }
+
+        guard result != string else { return item }
+
+        return copyItem(item, content: .text(result))
+    }
+}
+
+/// Collapses runs of multiple spaces into a single space.
+@MainActor
+final class CollapseMultipleSpacesMutation: ClipboardMutation {
+    let id = MutationID.collapseMultipleSpaces
+    let name = "Collapsed multiple spaces"
+
+    // swiftlint:disable:next force_try
+    private static let multiSpacePattern = try! NSRegularExpression(
+        pattern: " {2,}"
+    )
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .text(string) = item.content else { return item }
+
+        let range = NSRange(string.startIndex..., in: string)
+        let collapsed = Self.multiSpacePattern.stringByReplacingMatches(
+            in: string,
+            range: range,
+            withTemplate: " "
         )
+
+        guard collapsed != string else { return item }
+
+        return copyItem(item, content: .text(collapsed))
+    }
+}
+
+/// Strips rich text formatting, keeping only the plain text fallback.
+@MainActor
+final class StripToPlainTextMutation: ClipboardMutation {
+    let id = MutationID.stripToPlainText
+    let name = "Stripped to plain text"
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .richText(_, plainFallback) = item.content,
+              !plainFallback.isEmpty
+        else { return item }
+
+        return copyItem(item, content: .text(plainFallback))
+    }
+}
+
+/// Converts rich text (RTF) to markdown using the existing MarkdownConverter.
+@MainActor
+final class ConvertToMarkdownMutation: ClipboardMutation {
+    let id = MutationID.convertToMarkdown
+    let name = "Converted to markdown"
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .richText(rtfData, plainFallback) = item.content,
+              let markdown = MarkdownConverter.convert(rtfData: rtfData),
+              !markdown.isEmpty,
+              markdown != plainFallback
+        else { return item }
+
+        return copyItem(item, content: .text(markdown))
+    }
+}
+
+/// Strips ANSI escape codes from text (common in terminal output).
+@MainActor
+final class StripANSICodesMutation: ClipboardMutation {
+    let id = MutationID.stripANSICodes
+    let name = "Stripped ANSI codes"
+
+    // Matches ANSI CSI sequences: ESC[ followed by params and a final byte
+    // swiftlint:disable:next force_try
+    private static let ansiPattern = try! NSRegularExpression(
+        pattern: "\\x1B\\[[0-9;]*[A-Za-z]"
+    )
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .text(string) = item.content else { return item }
+
+        let range = NSRange(string.startIndex..., in: string)
+        let stripped = Self.ansiPattern.stringByReplacingMatches(
+            in: string,
+            range: range,
+            withTemplate: ""
+        )
+
+        guard stripped != string else { return item }
+
+        return copyItem(item, content: .text(stripped))
     }
 }
