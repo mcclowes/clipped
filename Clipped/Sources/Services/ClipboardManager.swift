@@ -176,10 +176,13 @@ final class ClipboardManager {
             }
         }
 
-        // Fetch link title for URLs
+        // Fetch link metadata (title + favicon) for URLs
         if case let .url(url) = item.content {
             Task {
-                item.linkTitle = await linkMetadataFetcher.fetchTitle(for: url)
+                let metadata = await linkMetadataFetcher.fetchMetadata(for: url)
+                item.linkTitle = metadata.title
+                item.linkFavicon = metadata.favicon
+                saveHistory()
             }
         }
 
