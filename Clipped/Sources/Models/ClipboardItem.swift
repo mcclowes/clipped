@@ -30,6 +30,7 @@ final class ClipboardItem: Identifiable, Sendable {
     let sourceAppBundleID: String?
     let timestamp: Date
     var isPinned: Bool
+    var isSensitive: Bool
     var linkTitle: String?
 
     var plainText: String? {
@@ -60,7 +61,8 @@ final class ClipboardItem: Identifiable, Sendable {
         contentType: ContentType,
         sourceAppName: String? = nil,
         sourceAppBundleID: String? = nil,
-        isPinned: Bool = false
+        isPinned: Bool = false,
+        isSensitive: Bool = false
     ) {
         self.id = id
         self.content = content
@@ -69,6 +71,7 @@ final class ClipboardItem: Identifiable, Sendable {
         self.sourceAppBundleID = sourceAppBundleID
         self.timestamp = Date()
         self.isPinned = isPinned
+        self.isSensitive = isSensitive
     }
 }
 
