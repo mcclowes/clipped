@@ -94,8 +94,8 @@ final class ClipboardManager {
 
     // MARK: - Init
 
-    init() {
-        monitor = PasteboardMonitor()
+    init(pasteboard: PasteboardProtocol = NSPasteboard.general) {
+        monitor = PasteboardMonitor(pasteboard: pasteboard)
         history = ClipboardHistory()
         monitor.onNewItem = { [weak self] event in
             self?.ingest(event)
@@ -241,8 +241,7 @@ final class ClipboardManager {
     private static let vKeyCode: UInt16 = 0x09
 
     func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
-        monitor.write {
-            let pasteboard = NSPasteboard.general
+        monitor.write { pasteboard in
             pasteboard.clearContents()
 
             switch item.content {
@@ -317,8 +316,7 @@ final class ClipboardManager {
             return
         }
 
-        monitor.write {
-            let pasteboard = NSPasteboard.general
+        monitor.write { pasteboard in
             pasteboard.clearContents()
             pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
         }
@@ -328,8 +326,7 @@ final class ClipboardManager {
         let merged = items.compactMap(\.plainText).joined(separator: "\n\n---\n\n")
         guard !merged.isEmpty else { return }
 
-        monitor.write {
-            let pasteboard = NSPasteboard.general
+        monitor.write { pasteboard in
             pasteboard.clearContents()
             pasteboard.setString(merged, forType: .string)
         }
