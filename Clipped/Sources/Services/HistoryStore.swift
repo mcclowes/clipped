@@ -8,14 +8,17 @@ protocol HistoryStoring: Sendable {
     func clear() async
 }
 
-/// Persists clipboard history to a JSON file in the app's support directory.
-/// Disk I/O is isolated to this actor so callers on the main actor never block the UI.
+/// Persists clipboard history to disk. Metadata lives in `history.json`; image payloads
+/// are stored as individual files under `images/<uuid>.{png,tiff}` so the JSON doesn't
+/// carry base64-bloated images (a 4 MB screenshot was ~5.4 MB encoded). Disk I/O is
+/// isolated to this actor so callers on the main actor never block the UI.
 actor HistoryStore: HistoryStoring {
     static let shared = HistoryStore()
 
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "HistoryStore")
 
     private let fileURL: URL
+    private let imagesDir: URL
 
     init() {
         guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -25,13 +28,30 @@ actor HistoryStore: HistoryStoring {
         let appDir = appSupport.appendingPathComponent("Clipped", isDirectory: true)
         try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
         fileURL = appDir.appendingPathComponent("history.json")
+        imagesDir = appDir.appendingPathComponent("images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
     }
 
     func save(entries: [StoredEntry]) async {
+        // Write image payloads to their own files and build wire entries with imageData
+        // stripped so the JSON stays small.
+        var wireEntries: [StoredEntry] = []
+        wireEntries.reserveCapacity(entries.count)
+        var liveImageIDs: Set<UUID> = []
+
+        for entry in entries {
+            if let data = entry.imageData {
+                let url = imageFileURL(for: entry.id, data: data)
+                writeImageFile(data: data, to: url)
+                liveImageIDs.insert(entry.id)
+            }
+            wireEntries.append(entry.strippingImageData())
+        }
+
+        deleteOrphanedImageFiles(keeping: liveImageIDs)
+
         do {
-            let data = try JSONEncoder().encode(entries)
-            // Write to a temp file with restricted permissions, then atomically move into place.
-            // This avoids the race where .atomic creates a world-readable temp file.
+            let data = try JSONEncoder().encode(wireEntries)
             let tempURL = fileURL.deletingLastPathComponent()
                 .appendingPathComponent("history.tmp.json")
             FileManager.default.createFile(
@@ -62,8 +82,9 @@ actor HistoryStore: HistoryStoring {
             return []
         }
 
+        let decoded: [StoredEntry]
         do {
-            return try JSONDecoder().decode([StoredEntry].self, from: data)
+            decoded = try JSONDecoder().decode([StoredEntry].self, from: data)
         } catch {
             Self.logger.error("History file corrupted, backing up and starting fresh: \(error.localizedDescription)")
             let backupURL = fileURL.deletingLastPathComponent()
@@ -71,10 +92,68 @@ actor HistoryStore: HistoryStoring {
             try? FileManager.default.moveItem(at: fileURL, to: backupURL)
             return []
         }
+
+        // Hydrate image payloads from the side files. If a legacy history.json still has
+        // imageData embedded, pass it through untouched — the next save() will migrate it
+        // to a side file.
+        return decoded.map { entry in
+            guard entry.contentType == "Image", entry.imageData == nil else { return entry }
+            guard let payload = loadImageFile(for: entry.id) else { return entry }
+            return entry.withImageData(payload)
+        }
     }
 
     func clear() async {
         try? FileManager.default.removeItem(at: fileURL)
+        try? FileManager.default.removeItem(at: imagesDir)
+        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+    }
+
+    // MARK: - Image files
+
+    private func imageFileURL(for id: UUID, data: Data) -> URL {
+        let ext = Self.isPNGData(data) ? "png" : "tiff"
+        return imagesDir.appendingPathComponent("\(id.uuidString).\(ext)")
+    }
+
+    private func loadImageFile(for id: UUID) -> Data? {
+        for ext in ["png", "tiff"] {
+            let url = imagesDir.appendingPathComponent("\(id.uuidString).\(ext)")
+            if let data = try? Data(contentsOf: url) {
+                return data
+            }
+        }
+        return nil
+    }
+
+    private func writeImageFile(data: Data, to url: URL) {
+        FileManager.default.createFile(
+            atPath: url.path,
+            contents: data,
+            attributes: [.posixPermissions: 0o600]
+        )
+    }
+
+    /// Remove any image files on disk whose UUID is no longer in the live set.
+    private func deleteOrphanedImageFiles(keeping liveIDs: Set<UUID>) {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: imagesDir,
+            includingPropertiesForKeys: nil
+        ) else { return }
+
+        for url in entries {
+            let stem = url.deletingPathExtension().lastPathComponent
+            guard let id = UUID(uuidString: stem) else { continue }
+            if !liveIDs.contains(id) {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    private static func isPNGData(_ data: Data) -> Bool {
+        let magic: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        guard data.count >= magic.count else { return false }
+        return data.prefix(magic.count).elementsEqual(magic)
     }
 }
 
@@ -100,6 +179,51 @@ struct StoredEntry: Codable {
     let linkTitle: String?
     let linkFavicon: Data?
     let mutationsApplied: [String]?
+
+    /// Copy of this entry with `imageData` cleared, used when writing the JSON envelope
+    /// so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
+    func strippingImageData() -> StoredEntry {
+        StoredEntry(
+            id: id,
+            contentType: contentType,
+            textContent: textContent,
+            rtfData: rtfData,
+            urlString: urlString,
+            imageData: nil,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight,
+            sourceAppName: sourceAppName,
+            sourceAppBundleID: sourceAppBundleID,
+            timestamp: timestamp,
+            isPinned: isPinned,
+            isDeveloperContent: isDeveloperContent,
+            linkTitle: linkTitle,
+            linkFavicon: linkFavicon,
+            mutationsApplied: mutationsApplied
+        )
+    }
+
+    /// Copy of this entry with `imageData` hydrated from disk during load.
+    func withImageData(_ data: Data) -> StoredEntry {
+        StoredEntry(
+            id: id,
+            contentType: contentType,
+            textContent: textContent,
+            rtfData: rtfData,
+            urlString: urlString,
+            imageData: data,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight,
+            sourceAppName: sourceAppName,
+            sourceAppBundleID: sourceAppBundleID,
+            timestamp: timestamp,
+            isPinned: isPinned,
+            isDeveloperContent: isDeveloperContent,
+            linkTitle: linkTitle,
+            linkFavicon: linkFavicon,
+            mutationsApplied: mutationsApplied
+        )
+    }
 }
 
 @MainActor
