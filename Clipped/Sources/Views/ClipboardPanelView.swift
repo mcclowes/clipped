@@ -2,6 +2,11 @@ import SwiftUI
 
 struct ClipboardPanelView: View {
     @Environment(ClipboardManager.self) private var manager
+
+    /// Callbacks injected by the composition root so the panel never reaches for globals.
+    let onOpenSettings: () -> Void
+    let onClosePanel: () -> Void
+
     @State private var showClearConfirmation = false
     @State private var clearedSnapshot: ClipboardManager.ClearedSnapshot?
     @State private var clearedCleanupTask: Task<Void, Never>?
@@ -410,16 +415,11 @@ struct ClipboardPanelView: View {
     }
 
     private func dismissPanel() {
-        StatusBarController.shared.close()
+        onClosePanel()
     }
 
     private func openSettings() {
-        let state = AppState.shared
-        let settingsContent = SettingsView()
-            .environment(state.clipboardManager)
-            .environment(state.settingsManager)
-            .environment(state.screenshotWatcher)
-        StatusBarController.shared.openSettings(contentView: settingsContent)
+        onOpenSettings()
     }
 }
 

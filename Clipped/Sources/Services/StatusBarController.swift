@@ -12,14 +12,16 @@ final class StatusBarController {
         NSSize(width: panelWidth, height: panelHeight)
     }
 
-    static let shared = StatusBarController()
+    /// Injected by `AppDelegate` at construction time so the option-click handler can
+    /// write to `openedWithOption` without reaching through a global.
+    weak var clipboardManager: ClipboardManager?
 
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var floatingPanel: NSPanel?
     private var eventMonitor: Any?
 
-    private init() {}
+    init() {}
 
     func setup(contentView: some View) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -52,7 +54,7 @@ final class StatusBarController {
         // Capture modifier state at click time. Reading `NSEvent.modifierFlags` later
         // (from a popover notification) races with the user releasing the key.
         let optionHeld = NSApp.currentEvent?.modifierFlags.contains(.option) ?? false
-        AppState.shared.clipboardManager.openedWithOption = optionHeld
+        clipboardManager?.openedWithOption = optionHeld
         toggle()
     }
 
