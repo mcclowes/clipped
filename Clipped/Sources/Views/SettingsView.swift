@@ -142,6 +142,19 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.tertiary)
             }
 
+            Section {
+                ForEach(ClipboardFilter.toggleableCategories) { category in
+                    FilterCategoryToggleRow(category: category)
+                }
+            } header: {
+                Text("Filter tabs")
+            } footer: {
+                Text("Show or hide the category tabs above the clipboard history. " +
+                    "The \u{201C}All\u{201D} tab is always available.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("Keyboard shortcut") {
                 HStack {
                     Text("Open clipboard panel")
@@ -184,6 +197,40 @@ private struct GeneralSettingsTab: View {
 
     private static var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+}
+
+private struct FilterCategoryToggleRow: View {
+    @Environment(SettingsManager.self) private var settings
+    let category: ClipboardFilter
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: { !settings.disabledFilterIDs.contains(category.id) },
+            set: { newValue in
+                if newValue {
+                    settings.disabledFilterIDs.remove(category.id)
+                } else {
+                    settings.disabledFilterIDs.insert(category.id)
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        Toggle(isOn: isEnabled) {
+            HStack(spacing: 8) {
+                Image(systemName: category.systemImage)
+                    .frame(width: 16)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.label)
+                    Text(category.settingsDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
 

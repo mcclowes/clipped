@@ -145,6 +145,7 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     var hotkeyModifiers: UInt32 = .init(optionKey)
     var mutationRules: [String: Bool] = [:]
     var mutationAppOverrides: [String: Bool] = [:]
+    var disabledFilterIDs: Set<String> = []
 
     // MARK: - MutationRulesProviding
 

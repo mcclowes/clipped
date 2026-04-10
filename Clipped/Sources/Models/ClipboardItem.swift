@@ -51,6 +51,34 @@ enum ClipboardFilter: Hashable, Identifiable {
         case .developer: "curlybraces"
         }
     }
+
+    /// User-visible description shown in settings next to the toggle.
+    var settingsDescription: String {
+        switch self {
+        case .text:
+            "Plain and rich text items"
+        case .contentType(.url):
+            "Web links"
+        case .contentType(.image):
+            "Screenshots and other images"
+        case .developer:
+            "UUIDs, JSON, JWTs, hashes, code blocks, file paths"
+        case .contentType(.plainText):
+            "Plain text only"
+        case .contentType(.richText):
+            "Rich text only"
+        }
+    }
+
+    /// Filter categories the user can show or hide in the panel's tab bar.
+    /// "All" is implicit — it is always shown as the default selection.
+    /// Adding a new case here makes it opt-out (visible unless the user disables it).
+    static let toggleableCategories: [ClipboardFilter] = [
+        .text,
+        .contentType(.url),
+        .developer,
+        .contentType(.image),
+    ]
 }
 
 /// Detects developer-oriented content in plain text: UUIDs, code blocks, JSON, hashes, JWTs, file paths.

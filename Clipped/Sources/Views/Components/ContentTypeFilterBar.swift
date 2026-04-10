@@ -2,14 +2,15 @@ import SwiftUI
 
 struct ContentTypeFilterBar: View {
     @Binding var selection: ClipboardFilter?
+    /// Ordered list of filter categories to expose as tabs. "All" is always prepended.
+    let visibleCategories: [ClipboardFilter]
 
     var body: some View {
         HStack(spacing: 4) {
             filterButton(label: "All", filter: nil)
-            filterButton(label: "Text", filter: .text)
-            filterButton(label: "URL", filter: .contentType(.url))
-            filterButton(label: "Dev", filter: .developer)
-            filterButton(label: "Image", filter: .contentType(.image))
+            ForEach(visibleCategories) { category in
+                filterButton(label: category.label, filter: category)
+            }
         }
     }
 
