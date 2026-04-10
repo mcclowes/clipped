@@ -353,6 +353,45 @@ enum NumberDetector {
     }
 }
 
+/// Detects common API-key / secret patterns by prefix so the UI can mask them.
+/// Precision-over-recall: a match means the string *looks like* a real secret, not that
+/// it definitely is one. Used to flag items for display masking only — raw bytes still
+/// round-trip through the clipboard unchanged so paste continues to work.
+enum SecretDetector {
+    private static let rawPatterns: [String] = [
+        // Stripe / Clerk / webhook secrets: sk_live_, sk_test_, pk_live_, pk_test_,
+        // rk_live_, rk_test_, whsec_...
+        #"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9._-]{16,}"#,
+        #"\bwhsec_[A-Za-z0-9._-]{20,}"#,
+        // GitHub tokens: ghp_, gho_, ghu_, ghs_, ghr_
+        #"\bgh[pousr]_[A-Za-z0-9]{20,}"#,
+        // Slack bot/user/app tokens
+        #"\bxox[bpars]-[A-Za-z0-9-]{10,}"#,
+        // AWS access key IDs (permanent + temporary)
+        #"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"#,
+        // Google API keys (canonical length is 35 suffix chars; allow more for safety)
+        #"\bAIza[A-Za-z0-9_-]{30,}"#,
+        // Supabase service role keys
+        #"\bsbp_[A-Za-z0-9]{20,}"#,
+        // OpenAI API keys (legacy + project-scoped)
+        #"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}"#,
+        // JWT tokens
+        #"\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+"#,
+        // Generic env-var line: UPPER_SNAKE=<long value with no whitespace>
+        #"(?m)^[A-Z][A-Z0-9_]{2,}=\S{16,}$"#,
+    ]
+
+    private static let compiled: [NSRegularExpression] = rawPatterns.compactMap {
+        try? NSRegularExpression(pattern: $0, options: [.anchorsMatchLines])
+    }
+
+    static func containsSecret(_ text: String) -> Bool {
+        guard !text.isEmpty else { return false }
+        let range = NSRange(text.startIndex..., in: text)
+        return compiled.contains { $0.firstMatch(in: text, options: [], range: range) != nil }
+    }
+}
+
 /// Detects developer-oriented content in plain text: UUIDs, code blocks, JSON, hashes, JWTs, file paths.
 enum DeveloperContentDetector {
     // UUID: 8-4-4-4-12 hex digits
@@ -417,7 +456,12 @@ final class ClipboardItem: Identifiable {
     let sourceAppBundleID: String?
     let timestamp: Date
     var isPinned: Bool
+    /// Transient flag for items we must not persist to disk (password-manager output).
+    /// Implies UI masking but also gates persistence — see `HistoryStore` / `StoredEntry`.
     var isSensitive: Bool
+    /// Persistent flag for items whose *content* matches a known secret pattern.
+    /// Masks the preview and detail views but the raw bytes still round-trip so paste works.
+    var containsSecret: Bool
     var isDeveloperContent: Bool
     var detectedCategories: Set<ContentCategory>
     var linkTitle: String?
@@ -471,6 +515,7 @@ final class ClipboardItem: Identifiable {
         timestamp: Date = Date(),
         isPinned: Bool = false,
         isSensitive: Bool = false,
+        containsSecret: Bool = false,
         isDeveloperContent: Bool = false,
         detectedCategories: Set<ContentCategory> = []
     ) {
@@ -482,6 +527,7 @@ final class ClipboardItem: Identifiable {
         self.timestamp = timestamp
         self.isPinned = isPinned
         self.isSensitive = isSensitive
+        self.containsSecret = containsSecret
         self.isDeveloperContent = isDeveloperContent
         self.detectedCategories = detectedCategories
     }

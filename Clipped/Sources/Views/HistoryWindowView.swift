@@ -316,19 +316,23 @@ private struct HistoryItemRow: View {
     }
 
     private var primaryLabel: String {
+        if item.isSensitive || item.containsSecret {
+            return "••• Sensitive content •••"
+        }
         switch item.content {
         case .text, .richText:
-            item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+            return item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
         case .url:
-            item.linkTitle ?? item.preview
+            return item.linkTitle ?? item.preview
         case let .image(_, size):
-            "Image — \(Int(size.width))×\(Int(size.height))"
+            return "Image — \(Int(size.width))×\(Int(size.height))"
         case let .svg(_, size):
-            "SVG — \(Int(size.width))×\(Int(size.height))"
+            return "SVG — \(Int(size.width))×\(Int(size.height))"
         }
     }
 
     private var secondaryLabel: String? {
+        if item.isSensitive || item.containsSecret { return nil }
         if case .url = item.content, item.linkTitle != nil {
             return item.preview
         }
@@ -386,6 +390,12 @@ private struct HistoryDetailView: View {
     @Environment(\.openWindow) private var openWindow
     let item: ClipboardItem
     let onCopy: () -> Void
+
+    @State private var isRevealed = false
+
+    private var shouldMask: Bool {
+        (item.isSensitive || item.containsSecret) && !isRevealed
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -450,6 +460,38 @@ private struct HistoryDetailView: View {
 
     @ViewBuilder
     private var contentView: some View {
+        if shouldMask {
+            maskedPanel
+        } else {
+            unmaskedContentView
+        }
+    }
+
+    private var maskedPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.orange)
+                Text("Sensitive content hidden")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            Text("This item looks like it contains an API key or other secret. Reveal it to view the raw contents.")
+                .font(.callout)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: 360, alignment: .leading)
+            Button {
+                isRevealed = true
+            } label: {
+                Label("Reveal", systemImage: "eye")
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var unmaskedContentView: some View {
         switch item.content {
         case let .text(string):
             Text(string)

@@ -181,6 +181,8 @@ struct StoredEntry: Codable {
     let timestamp: Date
     let isPinned: Bool
     let isDeveloperContent: Bool?
+    /// Nullable for backward compat with history files written before secret detection existed.
+    let containsSecret: Bool?
     let linkTitle: String?
     let linkFavicon: Data?
     let mutationsApplied: [String]?
@@ -205,6 +207,7 @@ struct StoredEntry: Codable {
             timestamp: timestamp,
             isPinned: isPinned,
             isDeveloperContent: isDeveloperContent,
+            containsSecret: containsSecret,
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
@@ -229,6 +232,7 @@ struct StoredEntry: Codable {
             timestamp: timestamp,
             isPinned: isPinned,
             isDeveloperContent: isDeveloperContent,
+            containsSecret: containsSecret,
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
@@ -306,6 +310,7 @@ extension StoredEntry {
             timestamp: item.timestamp,
             isPinned: item.isPinned,
             isDeveloperContent: item.isDeveloperContent,
+            containsSecret: item.containsSecret ? true : nil,
             linkTitle: item.linkTitle,
             linkFavicon: item.linkFavicon,
             mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied,
@@ -331,6 +336,7 @@ extension StoredEntry {
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
             isPinned: isPinned,
+            containsSecret: containsSecret ?? false,
             isDeveloperContent: isDeveloperContent ?? false,
             detectedCategories: decodedCategories
         )

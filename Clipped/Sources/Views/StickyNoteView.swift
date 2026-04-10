@@ -5,6 +5,8 @@ struct StickyNoteView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     let itemID: UUID
 
+    @State private var isRevealed = false
+
     private var item: ClipboardItem? {
         manager.items.first { $0.id == itemID }
             ?? manager.pinnedItems.first { $0.id == itemID }
@@ -90,8 +92,45 @@ struct StickyNoteView: View {
         .padding(.bottom, 4)
     }
 
+    private func shouldMask(_ item: ClipboardItem) -> Bool {
+        (item.isSensitive || item.containsSecret) && !isRevealed
+    }
+
     @ViewBuilder
     private func contentBody(for item: ClipboardItem) -> some View {
+        if shouldMask(item) {
+            maskedContent
+        } else {
+            unmaskedContentBody(for: item)
+        }
+    }
+
+    private var maskedContent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 6) {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.orange)
+                Text("Sensitive content hidden")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            Text("••••••••••••••••")
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.tertiary)
+            Button {
+                isRevealed = true
+            } label: {
+                Label("Reveal", systemImage: "eye")
+                    .font(.system(size: 11))
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help("Reveal sensitive content")
+        }
+    }
+
+    @ViewBuilder
+    private func unmaskedContentBody(for item: ClipboardItem) -> some View {
         switch item.content {
         case let .text(string):
             selectableText(string, isCode: item.isDeveloperContent)

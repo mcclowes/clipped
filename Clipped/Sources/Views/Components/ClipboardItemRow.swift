@@ -237,7 +237,7 @@ struct ClipboardItemRow: View {
     }
 
     private var shouldMask: Bool {
-        item.isSensitive && !isRevealed
+        (item.isSensitive || item.containsSecret) && !isRevealed
     }
 
     @ViewBuilder

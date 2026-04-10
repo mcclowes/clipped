@@ -195,6 +195,10 @@ final class ClipboardManager {
             item.isSensitive = true
         }
 
+        if let text = item.plainText, SecretDetector.containsSecret(text) {
+            item.containsSecret = true
+        }
+
         history.insert(item)
 
         if policy.pendingRemoval {

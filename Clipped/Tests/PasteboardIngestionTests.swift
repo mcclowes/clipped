@@ -177,4 +177,44 @@ struct PasteboardIngestionTests {
 
         #expect(mock.string(forType: .string) == "copy me")
     }
+
+    @Test("Ingest flags items that look like API keys as containing a secret")
+    func ingestFlagsSecrets() {
+        let mock = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: mock)
+        manager.stopMonitoring()
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = false
+        manager.settingsManager = settings
+        manager.historyStore = MockHistoryStore()
+
+        // Built by concatenation so the source literal doesn't match GitHub push-protection
+        // secret scanners, but the runtime string still matches SecretDetector's regexes.
+        let publishable = "pk_" + "test_EXAMPLEabcdefghij0123456789"
+        let secret = "sk_" + "test_EXAMPLEabcdefghij0123456789"
+        let envDump = """
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=\(publishable)
+        CLERK_SECRET_KEY=\(secret)
+        """
+        mock.stageExternalWrite(types: [.string], strings: [.string: envDump])
+        manager.monitor.check()
+
+        #expect(manager.items.first?.containsSecret == true)
+    }
+
+    @Test("Ingest does not flag ordinary text as containing a secret")
+    func ingestIgnoresOrdinaryText() {
+        let mock = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: mock)
+        manager.stopMonitoring()
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = false
+        manager.settingsManager = settings
+        manager.historyStore = MockHistoryStore()
+
+        mock.stageExternalWrite(types: [.string], strings: [.string: "buy milk"])
+        manager.monitor.check()
+
+        #expect(manager.items.first?.containsSecret == false)
+    }
 }

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0C3D06236C907CF2C54842BB /* SettingsManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F765836B77D8125B2D0FA0 /* SettingsManagerTests.swift */; };
+		115646808595C1F3A916548E /* SecretDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B5B52EB28BCAA927E022A54 /* SecretDetectorTests.swift */; };
 		12DF98636556CE6B155F4FD1 /* ContentCategoryDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B1A96B6CDA5A1A3BBE8255D /* ContentCategoryDetectorTests.swift */; };
 		188AACBC23D957F146689633 /* ClipboardMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066E4CB1C1EED70FEC5B92B3 /* ClipboardMutationTests.swift */; };
 		1A2864ABDD81569780A4E320 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FDC0C297508025A53AE5707 /* HotkeyManager.swift */; };
@@ -77,6 +78,7 @@
 		772B9A8C65330E9C65639409 /* DeveloperContentDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeveloperContentDetectorTests.swift; sourceTree = "<group>"; };
 		7FDC0C297508025A53AE5707 /* HotkeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyManager.swift; sourceTree = "<group>"; };
 		85D36BFA794118193B17BDE4 /* LinkMetadataFetcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LinkMetadataFetcherTests.swift; sourceTree = "<group>"; };
+		8B5B52EB28BCAA927E022A54 /* SecretDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecretDetectorTests.swift; sourceTree = "<group>"; };
 		93CFB892C7E740CE9E415498 /* ClipboardMutationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardMutationService.swift; sourceTree = "<group>"; };
 		957D008431B90D04F473FD4C /* SearchBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchBar.swift; sourceTree = "<group>"; };
 		96F82AFB9240A56E0943E9CF /* ClipboardHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistory.swift; sourceTree = "<group>"; };
@@ -160,6 +162,7 @@
 				2F6F037392724562003B5664 /* MarkdownConverterTests.swift */,
 				14EF1138879F0B5F8561D0F0 /* Mocks.swift */,
 				C4DF206B53663182D482B97F /* PasteboardIngestionTests.swift */,
+				8B5B52EB28BCAA927E022A54 /* SecretDetectorTests.swift */,
 				71F765836B77D8125B2D0FA0 /* SettingsManagerTests.swift */,
 				B32585FDFDB0DB300F891443 /* SVGHandlingTests.swift */,
 			);
@@ -313,6 +316,7 @@
 				D3F30A64B4F3EA1BF62D90B6 /* Mocks.swift in Sources */,
 				4C345C787E2A915204D6A494 /* PasteboardIngestionTests.swift in Sources */,
 				602ED2B4147FEFEE1919D9F0 /* SVGHandlingTests.swift in Sources */,
+				115646808595C1F3A916548E /* SecretDetectorTests.swift in Sources */,
 				0C3D06236C907CF2C54842BB /* SettingsManagerTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
