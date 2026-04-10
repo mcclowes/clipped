@@ -53,13 +53,13 @@ final class PasteboardMonitor {
     /// Invoked on the main actor whenever the monitor observes new pasteboard content.
     var onNewItem: ((NewItemEvent) -> Void)?
 
-    private let pasteboard: NSPasteboard
+    let pasteboard: PasteboardProtocol
     private var pollTimer: Timer?
     private var lastChangeCount: Int
 
     private static let pollInterval: TimeInterval = 0.5
 
-    init(pasteboard: NSPasteboard = .general) {
+    init(pasteboard: PasteboardProtocol = NSPasteboard.general) {
         self.pasteboard = pasteboard
         lastChangeCount = pasteboard.changeCount
     }
@@ -92,14 +92,16 @@ final class PasteboardMonitor {
 
     /// Write to the pasteboard without triggering our own monitoring as a new copy.
     /// Updates the change-count high-water mark so the next poll ignores our own write.
-    func write(_ body: () -> Void) {
-        body()
+    func write(_ body: (PasteboardProtocol) -> Void) {
+        body(pasteboard)
         lastChangeCount = pasteboard.changeCount
     }
 
     // MARK: - Polling
 
-    private func check() {
+    /// Run one poll cycle. Exposed as `internal` so tests can drive the monitor deterministically
+    /// without waiting for the `Timer`.
+    func check() {
         // MainActor is serial; no re-entrancy guard needed.
         let currentCount = pasteboard.changeCount
         guard currentCount != lastChangeCount else { return }

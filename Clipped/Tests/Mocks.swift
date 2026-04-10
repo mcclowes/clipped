@@ -1,6 +1,72 @@
+import AppKit
 import Carbon
 @testable import Clipped
 import Foundation
+
+/// In-memory pasteboard that records writes and can simulate external writes from other apps.
+/// Matches `NSPasteboard`'s surface via `PasteboardProtocol` so both `PasteboardMonitor`
+/// and `ClipboardManager` write paths can be unit-tested without touching the real clipboard.
+@MainActor
+final class MockPasteboard: PasteboardProtocol {
+    private(set) var changeCount: Int = 0
+    private var availableTypes: [NSPasteboard.PasteboardType] = []
+    private var dataByType: [NSPasteboard.PasteboardType: Data] = [:]
+    private var stringByType: [NSPasteboard.PasteboardType: String] = [:]
+
+    var types: [NSPasteboard.PasteboardType]? {
+        availableTypes.isEmpty ? nil : availableTypes
+    }
+
+    func data(forType type: NSPasteboard.PasteboardType) -> Data? {
+        dataByType[type]
+    }
+
+    func string(forType type: NSPasteboard.PasteboardType) -> String? {
+        stringByType[type]
+    }
+
+    @discardableResult
+    func clearContents() -> Int {
+        availableTypes.removeAll()
+        dataByType.removeAll()
+        stringByType.removeAll()
+        changeCount += 1
+        return changeCount
+    }
+
+    @discardableResult
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+        stringByType[type] = string
+        if !availableTypes.contains(type) {
+            availableTypes.append(type)
+        }
+        return true
+    }
+
+    @discardableResult
+    func setData(_ data: Data?, forType type: NSPasteboard.PasteboardType) -> Bool {
+        guard let data else { return false }
+        dataByType[type] = data
+        if !availableTypes.contains(type) {
+            availableTypes.append(type)
+        }
+        return true
+    }
+
+    /// Simulate an external app writing to the pasteboard: clears prior state, installs the
+    /// given types/values, and bumps `changeCount` so the next `PasteboardMonitor.check()`
+    /// treats it as fresh content.
+    func stageExternalWrite(
+        types: [NSPasteboard.PasteboardType],
+        strings: [NSPasteboard.PasteboardType: String] = [:],
+        data: [NSPasteboard.PasteboardType: Data] = [:]
+    ) {
+        availableTypes = types
+        stringByType = strings
+        dataByType = data
+        changeCount += 1
+    }
+}
 
 /// Sendable test double for HistoryStoring. State is protected by an internal actor
 /// so the mock can be used from async tests and matches the production actor shape.
