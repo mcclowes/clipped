@@ -95,9 +95,11 @@ actor HistoryStore: HistoryStoring {
 
         // Hydrate image payloads from the side files. If a legacy history.json still has
         // imageData embedded, pass it through untouched — the next save() will migrate it
-        // to a side file.
+        // to a side file. SVG entries are also stored under contentType "Image" but keep
+        // their bytes inline via `svgData`, so skip the sidecar lookup for those.
         return decoded.map { entry in
-            guard entry.contentType == "Image", entry.imageData == nil else { return entry }
+            guard entry.contentType == "Image", entry.imageData == nil, entry.svgData == nil
+            else { return entry }
             guard let payload = loadImageFile(for: entry.id) else { return entry }
             return entry.withImageData(payload)
         }
@@ -171,6 +173,9 @@ struct StoredEntry: Codable {
     let imageData: Data?
     let imageWidth: Double?
     let imageHeight: Double?
+    /// Raw SVG markup bytes. Stored inline in `history.json` since SVG is text —
+    /// the external image-file path is reserved for raster payloads.
+    let svgData: Data?
     let sourceAppName: String?
     let sourceAppBundleID: String?
     let timestamp: Date
@@ -194,6 +199,7 @@ struct StoredEntry: Codable {
             imageData: nil,
             imageWidth: imageWidth,
             imageHeight: imageHeight,
+            svgData: svgData,
             sourceAppName: sourceAppName,
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
@@ -217,6 +223,7 @@ struct StoredEntry: Codable {
             imageData: data,
             imageWidth: imageWidth,
             imageHeight: imageHeight,
+            svgData: svgData,
             sourceAppName: sourceAppName,
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
@@ -237,6 +244,7 @@ extension StoredEntry {
         let rtfData: Data?
         let urlString: String?
         let imageData: Data?
+        let svgData: Data?
         let imageWidth: Double?
         let imageHeight: Double?
 
@@ -246,6 +254,7 @@ extension StoredEntry {
             rtfData = nil
             urlString = nil
             imageData = nil
+            svgData = nil
             imageWidth = nil
             imageHeight = nil
         case let .richText(data, plain):
@@ -253,6 +262,7 @@ extension StoredEntry {
             rtfData = data
             urlString = nil
             imageData = nil
+            svgData = nil
             imageWidth = nil
             imageHeight = nil
         case let .url(url):
@@ -260,6 +270,7 @@ extension StoredEntry {
             rtfData = nil
             urlString = url.absoluteString
             imageData = nil
+            svgData = nil
             imageWidth = nil
             imageHeight = nil
         case let .image(data, size):
@@ -267,6 +278,15 @@ extension StoredEntry {
             rtfData = nil
             urlString = nil
             imageData = data
+            svgData = nil
+            imageWidth = size.width
+            imageHeight = size.height
+        case let .svg(data, size):
+            textContent = nil
+            rtfData = nil
+            urlString = nil
+            imageData = nil
+            svgData = data
             imageWidth = size.width
             imageHeight = size.height
         }
@@ -280,6 +300,7 @@ extension StoredEntry {
             imageData: imageData,
             imageWidth: imageWidth,
             imageHeight: imageHeight,
+            svgData: svgData,
             sourceAppName: item.sourceAppName,
             sourceAppBundleID: item.sourceAppBundleID,
             timestamp: item.timestamp,
@@ -295,31 +316,9 @@ extension StoredEntry {
     }
 
     func toClipboardItem() -> ClipboardItem? {
-        // Map legacy "Code" type to plainText
         let resolvedType = contentType == "Code" ? "Text" : contentType
-        guard let type = ContentType(rawValue: resolvedType) else { return nil }
-
-        let content: ClipboardContent
-        switch type {
-        case .plainText:
-            guard let text = textContent else { return nil }
-            content = .text(text)
-        case .richText:
-            if let rtf = rtfData, let plain = textContent {
-                content = .richText(rtf, plain)
-            } else if let text = textContent {
-                content = .text(text)
-            } else {
-                return nil
-            }
-        case .url:
-            guard let str = urlString, let url = URL(string: str) else { return nil }
-            content = .url(url)
-        case .image:
-            guard let data = imageData else { return nil }
-            let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
-            content = .image(data, size)
-        }
+        guard let type = ContentType(rawValue: resolvedType),
+              let content = decodeContent(for: type) else { return nil }
 
         let decodedCategories: Set<ContentCategory> = Set(
             (detectedCategories ?? []).compactMap(ContentCategory.init(rawValue:))
@@ -339,5 +338,27 @@ extension StoredEntry {
         item.linkFavicon = linkFavicon
         item.mutationsApplied = mutationsApplied ?? []
         return item
+    }
+
+    private func decodeContent(for type: ContentType) -> ClipboardContent? {
+        switch type {
+        case .plainText:
+            return textContent.map(ClipboardContent.text)
+        case .richText:
+            if let rtf = rtfData, let plain = textContent {
+                return .richText(rtf, plain)
+            }
+            return textContent.map(ClipboardContent.text)
+        case .url:
+            guard let str = urlString, let url = URL(string: str) else { return nil }
+            return .url(url)
+        case .image:
+            let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
+            // SVG entries ride on ContentType.image but carry their bytes in `svgData`.
+            if let data = svgData {
+                return .svg(data, size)
+            }
+            return imageData.map { .image($0, size) }
+        }
     }
 }

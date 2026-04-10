@@ -263,6 +263,19 @@ final class ClipboardManager {
                 // Sniff magic bytes so we advertise the real format.
                 let pasteboardType: NSPasteboard.PasteboardType = Self.isPNGData(data) ? .png : .tiff
                 pasteboard.setData(data, forType: pasteboardType)
+            case let .svg(data, _):
+                // Write three representations so paste works everywhere:
+                // 1. The SVG markup as a string — code editors, text fields, terminals.
+                // 2. The vector source under `public.svg-image` — design tools that
+                //    understand SVG will preserve it losslessly.
+                // 3. A rasterized TIFF fallback — Keynote, Slack, Mail, etc.
+                if let markup = String(data: data, encoding: .utf8) {
+                    pasteboard.setString(markup, forType: .string)
+                }
+                pasteboard.setData(data, forType: svgPasteboardType)
+                if let tiff = NSImage(data: data)?.tiffRepresentation {
+                    pasteboard.setData(tiff, forType: .tiff)
+                }
             }
         }
 

@@ -270,6 +270,26 @@ struct ClipboardItemRow: View {
                         .frame(maxHeight: 48)
                         .clipShape(.rect(cornerRadius: 4))
                 }
+            case let .svg(data, _):
+                if let nsImage = NSImage(data: data) {
+                    HStack(spacing: 8) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxHeight: 48)
+                            .clipShape(.rect(cornerRadius: 4))
+                        Text("SVG")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .foregroundStyle(.secondary)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 3)
+                                    .strokeBorder(.secondary.opacity(0.35), lineWidth: 0.5)
+                            )
+                    }
+                }
             case .url:
                 VStack(alignment: .leading, spacing: 2) {
                     if let title = item.linkTitle {

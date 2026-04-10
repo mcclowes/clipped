@@ -143,6 +143,8 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     var launchAtLogin = false
     var hotkeyKeyCode: UInt32 = 8
     var hotkeyModifiers: UInt32 = .init(optionKey)
+    var historyWindowHotkeyKeyCode: UInt32 = 8
+    var historyWindowHotkeyModifiers: UInt32 = .init(optionKey | shiftKey)
     var mutationRules: [String: Bool] = [:]
     var mutationAppOverrides: [String: Bool] = [:]
     var disabledFilterIDs: Set<String> = []
