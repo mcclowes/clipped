@@ -6,12 +6,16 @@ struct ContentTypeFilterBar: View {
     let visibleCategories: [ClipboardFilter]
 
     var body: some View {
-        HStack(spacing: 4) {
-            filterButton(label: "All", filter: nil)
-            ForEach(visibleCategories) { category in
-                filterButton(label: category.label, filter: category)
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 4) {
+                filterButton(label: "All", filter: nil)
+                ForEach(visibleCategories) { category in
+                    filterButton(label: category.label, filter: category)
+                }
             }
+            .padding(.horizontal, 2)
         }
+        .scrollClipDisabled()
     }
 
     private func filterButton(label: String, filter: ClipboardFilter?) -> some View {
@@ -26,6 +30,7 @@ struct ContentTypeFilterBar: View {
                 .padding(.vertical, 3)
                 .background(selection == filter ? Color.accentColor.opacity(0.15) : .clear)
                 .clipShape(.capsule)
+                .fixedSize()
         }
         .buttonStyle(.plain)
     }

@@ -22,17 +22,164 @@ enum ContentType: String, CaseIterable, Identifiable {
     }
 }
 
+/// Lightweight content-derived tags that can overlap freely with each other and with the
+/// developer flag. An item with the text "Email me at a@b.com" is both `.email` and regular
+/// text; the filter bar treats each as an independent pivot.
+enum ContentCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+    case email
+    case phoneNumber
+    case hexColor
+    case number
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .email: "Email"
+        case .phoneNumber: "Phone"
+        case .hexColor: "Color"
+        case .number: "Number"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .email: "envelope"
+        case .phoneNumber: "phone"
+        case .hexColor: "paintpalette"
+        case .number: "number"
+        }
+    }
+
+    var settingsDescription: String {
+        switch self {
+        case .email: "Items containing an email address"
+        case .phoneNumber: "Items containing a phone number"
+        case .hexColor: "Items containing a #RRGGBB hex color"
+        case .number: "Amounts, percentages, currency values"
+        }
+    }
+}
+
+/// Groups of source apps the user can filter by. The bundle-ID databases live here so
+/// both the monitor (for tagging dev content) and the filter (for bucketing by source)
+/// read from the same source of truth.
+enum SourceAppCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+    case communication
+    case browser
+    case codeEditor
+    case terminal
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .communication: "Chat"
+        case .browser: "Browser"
+        case .codeEditor: "Editor"
+        case .terminal: "Terminal"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .communication: "bubble.left.and.bubble.right"
+        case .browser: "safari"
+        case .codeEditor: "chevron.left.forwardslash.chevron.right"
+        case .terminal: "terminal"
+        }
+    }
+
+    var settingsDescription: String {
+        switch self {
+        case .communication: "Slack, Messages, Mail, Teams, Discord, Telegram\u{2026}"
+        case .browser: "Safari, Chrome, Firefox, Edge, Arc\u{2026}"
+        case .codeEditor: "Xcode, VS Code, Cursor, Sublime, JetBrains, Zed\u{2026}"
+        case .terminal: "Terminal, iTerm2, Alacritty, kitty, WezTerm\u{2026}"
+        }
+    }
+
+    var bundleIDs: Set<String> {
+        switch self {
+        case .communication:
+            [
+                "com.tinyspeck.slackmacgap", // Slack
+                "com.apple.iChat", // Messages
+                "com.apple.MobileSMS", // Messages (newer bundle)
+                "com.apple.mail", // Mail
+                "com.microsoft.teams", // Teams v1
+                "com.microsoft.teams2", // Teams v2
+                "com.microsoft.Outlook", // Outlook
+                "com.readdle.smartemail-Mac", // Spark
+                "com.hnc.Discord", // Discord
+                "net.whatsapp.WhatsApp", // WhatsApp
+                "ru.keepcoder.Telegram", // Telegram
+                "com.tdesktop.Telegram", // Telegram Desktop
+                "com.apple.FaceTime", // FaceTime
+                "us.zoom.xos", // Zoom
+            ]
+        case .browser:
+            [
+                "com.apple.Safari",
+                "com.apple.SafariTechnologyPreview",
+                "com.google.Chrome",
+                "com.google.Chrome.canary",
+                "org.mozilla.firefox",
+                "org.mozilla.firefoxdeveloperedition",
+                "com.brave.Browser",
+                "company.thebrowser.Browser", // Arc
+                "com.microsoft.edgemac",
+                "com.vivaldi.Vivaldi",
+                "com.operasoftware.Opera",
+            ]
+        case .codeEditor:
+            [
+                "com.microsoft.VSCode",
+                "com.microsoft.VSCodeInsiders",
+                "com.apple.dt.Xcode",
+                "com.sublimetext.4",
+                "com.jetbrains.intellij",
+                "com.jetbrains.pycharm",
+                "com.jetbrains.WebStorm",
+                "com.jetbrains.AppCode",
+                "com.jetbrains.goland",
+                "dev.zed.Zed",
+                "com.todesktop.230313mzl4w4u92", // Cursor
+                "com.github.atom",
+                "com.panic.Nova",
+            ]
+        case .terminal:
+            [
+                "com.apple.Terminal",
+                "com.googlecode.iterm2",
+                "io.alacritty",
+                "com.github.wez.wezterm",
+                "net.kovidgoyal.kitty",
+                "dev.warp.Warp-Stable",
+            ]
+        }
+    }
+
+    static func category(for bundleID: String) -> SourceAppCategory? {
+        allCases.first { $0.bundleIDs.contains(bundleID) }
+    }
+}
+
 /// Filter options for the clipboard panel, including content types and the developer meta-filter.
 enum ClipboardFilter: Hashable, Identifiable {
     case contentType(ContentType)
     case text // combines plainText + richText
     case developer
+    case category(ContentCategory)
+    case sourceApp(SourceAppCategory)
 
     var id: String {
         switch self {
         case let .contentType(type): type.rawValue
         case .text: "Text"
         case .developer: "Developer"
+        case let .category(cat): "Category.\(cat.rawValue)"
+        case let .sourceApp(app): "SourceApp.\(app.rawValue)"
         }
     }
 
@@ -41,6 +188,8 @@ enum ClipboardFilter: Hashable, Identifiable {
         case let .contentType(type): type.rawValue
         case .text: "Text"
         case .developer: "Dev"
+        case let .category(cat): cat.label
+        case let .sourceApp(app): app.label
         }
     }
 
@@ -49,6 +198,8 @@ enum ClipboardFilter: Hashable, Identifiable {
         case let .contentType(type): type.systemImage
         case .text: "doc.text"
         case .developer: "curlybraces"
+        case let .category(cat): cat.systemImage
+        case let .sourceApp(app): app.systemImage
         }
     }
 
@@ -67,18 +218,135 @@ enum ClipboardFilter: Hashable, Identifiable {
             "Plain text only"
         case .contentType(.richText):
             "Rich text only"
+        case let .category(cat):
+            cat.settingsDescription
+        case let .sourceApp(app):
+            app.settingsDescription
         }
     }
 
     /// Filter categories the user can show or hide in the panel's tab bar.
     /// "All" is implicit — it is always shown as the default selection.
-    /// Adding a new case here makes it opt-out (visible unless the user disables it).
-    static let toggleableCategories: [ClipboardFilter] = [
+    /// Composed from the three sub-groups so the ordering stays in sync with Settings.
+    static var toggleableCategories: [ClipboardFilter] {
+        contentTypeFilters + smartCategoryFilters + sourceAppFilters
+    }
+
+    /// IDs of filter tabs that default to hidden on first launch. Keeps the strip tidy for
+    /// existing users while still letting new users discover the extended set via settings.
+    static let defaultHiddenCategoryIDs: Set<String> = [
+        ClipboardFilter.category(.email).id,
+        ClipboardFilter.category(.phoneNumber).id,
+        ClipboardFilter.category(.hexColor).id,
+        ClipboardFilter.category(.number).id,
+        ClipboardFilter.sourceApp(.communication).id,
+        ClipboardFilter.sourceApp(.browser).id,
+        ClipboardFilter.sourceApp(.codeEditor).id,
+        ClipboardFilter.sourceApp(.terminal).id,
+    ]
+
+    /// Filter tabs that pivot on the clipboard item's native content type.
+    static let contentTypeFilters: [ClipboardFilter] = [
         .text,
         .contentType(.url),
         .developer,
         .contentType(.image),
     ]
+
+    /// Filter tabs powered by `ContentCategoryDetector` — free-form content pattern matches.
+    static let smartCategoryFilters: [ClipboardFilter] = ContentCategory.allCases.map(ClipboardFilter.category)
+
+    /// Filter tabs powered by `SourceAppCategory` — bucketed by where the item was copied from.
+    static let sourceAppFilters: [ClipboardFilter] = SourceAppCategory.allCases.map(ClipboardFilter.sourceApp)
+}
+
+/// Detects lightweight content categories (email, phone, color, number) in plain text.
+/// These run in addition to the developer-content detector and produce a set so that
+/// an item can fall into multiple categories at once.
+enum ContentCategoryDetector {
+    static func detect(in text: String) -> Set<ContentCategory> {
+        var results: Set<ContentCategory> = []
+        if EmailDetector.contains(text) { results.insert(.email) }
+        if PhoneNumberDetector.contains(text) { results.insert(.phoneNumber) }
+        if HexColorParser.firstColor(in: text) != nil { results.insert(.hexColor) }
+        if NumberDetector.contains(text) { results.insert(.number) }
+        return results
+    }
+}
+
+enum EmailDetector {
+    // Intentionally strict on the TLD length (2+ letters) to reduce false positives on
+    // things like "foo@bar" or "a@b.c".
+    // swiftlint:disable:next force_try
+    private static let pattern = try! NSRegularExpression(
+        pattern: "\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b",
+        options: .caseInsensitive
+    )
+
+    static func contains(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        return pattern.firstMatch(in: text, range: range) != nil
+    }
+}
+
+enum PhoneNumberDetector {
+    // NSDataDetector handles international formats, separators, and extensions for free.
+    // It occasionally matches long digit runs, so we also require at least 7 digits to
+    // rule out things like short order numbers.
+    private static let detector: NSDataDetector? = try? NSDataDetector(
+        types: NSTextCheckingResult.CheckingType.phoneNumber.rawValue
+    )
+
+    static func contains(_ text: String) -> Bool {
+        guard let detector else { return false }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = detector.firstMatch(in: text, options: [], range: range),
+              let matchRange = Range(match.range, in: text) else { return false }
+        let digitCount = text[matchRange].filter(\.isNumber).count
+        return digitCount >= 7
+    }
+}
+
+/// Detects numeric/currency/percent content. Favors precision over recall: only matches
+/// patterns that are unambiguously "a number" so that plain sentences with digits
+/// (e.g. "the year 2024") don't leak into the Number filter.
+enum NumberDetector {
+    // Currency symbol followed by a digit: "$100", "€50.00", "£1,234.56"
+    // swiftlint:disable:next force_try
+    private static let currencyPattern = try! NSRegularExpression(
+        pattern: "[$€£¥₹₩₪₺฿]\\s?-?\\d"
+    )
+
+    // Digit followed by a percent sign: "50%", "12.5 %"
+    // swiftlint:disable:next force_try
+    private static let percentPattern = try! NSRegularExpression(
+        pattern: "\\d(?:[.,]\\d+)?\\s?%"
+    )
+
+    // Thousands-separated number: "1,234", "1,234,567.89"
+    // swiftlint:disable:next force_try
+    private static let thousandsPattern = try! NSRegularExpression(
+        pattern: "\\b\\d{1,3}(?:,\\d{3})+(?:\\.\\d+)?\\b"
+    )
+
+    // Entire trimmed text is a bare number: "420", "-3.14", "+1.5"
+    // swiftlint:disable:next force_try
+    private static let bareNumberPattern = try! NSRegularExpression(
+        pattern: "^[-+]?\\d+(?:[.,]\\d+)?$"
+    )
+
+    static func contains(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        if currencyPattern.firstMatch(in: text, range: range) != nil { return true }
+        if percentPattern.firstMatch(in: text, range: range) != nil { return true }
+        if thousandsPattern.firstMatch(in: text, range: range) != nil { return true }
+
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRange = NSRange(trimmed.startIndex..., in: trimmed)
+        if bareNumberPattern.firstMatch(in: trimmed, range: trimmedRange) != nil { return true }
+
+        return false
+    }
 }
 
 /// Detects developer-oriented content in plain text: UUIDs, code blocks, JSON, hashes, JWTs, file paths.
@@ -147,10 +415,19 @@ final class ClipboardItem: Identifiable {
     var isPinned: Bool
     var isSensitive: Bool
     var isDeveloperContent: Bool
+    var detectedCategories: Set<ContentCategory>
     var linkTitle: String?
     var linkFavicon: Data?
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
+
+    /// Convenience lookup for the source app's broad category, derived from the
+    /// bundle ID at access time so the classification stays consistent with any
+    /// changes to `SourceAppCategory.bundleIDs`.
+    var sourceAppCategory: SourceAppCategory? {
+        guard let bundleID = sourceAppBundleID else { return nil }
+        return SourceAppCategory.category(for: bundleID)
+    }
 
     var wasMutated: Bool {
         !mutationsApplied.isEmpty
@@ -187,7 +464,8 @@ final class ClipboardItem: Identifiable {
         timestamp: Date = Date(),
         isPinned: Bool = false,
         isSensitive: Bool = false,
-        isDeveloperContent: Bool = false
+        isDeveloperContent: Bool = false,
+        detectedCategories: Set<ContentCategory> = []
     ) {
         self.id = id
         self.content = content
@@ -198,6 +476,7 @@ final class ClipboardItem: Identifiable {
         self.isPinned = isPinned
         self.isSensitive = isSensitive
         self.isDeveloperContent = isDeveloperContent
+        self.detectedCategories = detectedCategories
     }
 }
 

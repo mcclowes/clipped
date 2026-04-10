@@ -176,7 +176,9 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         if let stored = UserDefaults.standard.array(forKey: "disabledFilterIDs") as? [String] {
             disabledFilterIDs = Set(stored)
         } else {
-            disabledFilterIDs = []
+            // First launch — default the extended content + source-app filters to hidden
+            // so the tab strip stays tidy. Users can opt in from Settings → General.
+            disabledFilterIDs = ClipboardFilter.defaultHiddenCategoryIDs
         }
 
         let storedKeyCode = UserDefaults.standard.integer(forKey: "hotkeyKeyCode")

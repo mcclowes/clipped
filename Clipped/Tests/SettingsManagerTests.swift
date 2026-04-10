@@ -21,11 +21,19 @@ struct SettingsManagerTests {
         #expect(settings.maxHistorySize >= 10)
     }
 
-    @Test("Toggleable filter categories are all enabled by default")
-    func defaultFilterCategoriesEnabled() {
+    @Test("Core content-type filter categories are enabled by default")
+    func defaultContentTypeFiltersEnabled() {
         let settings = MockSettingsManager()
-        for category in ClipboardFilter.toggleableCategories {
+        for category in ClipboardFilter.contentTypeFilters {
             #expect(!settings.disabledFilterIDs.contains(category.id))
+        }
+    }
+
+    @Test("Extended filter categories live in defaultHiddenCategoryIDs")
+    func defaultHiddenCategoriesCoverExtendedFilters() {
+        let extended = ClipboardFilter.smartCategoryFilters + ClipboardFilter.sourceAppFilters
+        for category in extended {
+            #expect(ClipboardFilter.defaultHiddenCategoryIDs.contains(category.id))
         }
     }
 

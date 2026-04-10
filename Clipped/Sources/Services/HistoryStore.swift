@@ -179,6 +179,8 @@ struct StoredEntry: Codable {
     let linkTitle: String?
     let linkFavicon: Data?
     let mutationsApplied: [String]?
+    /// Nullable for backward compat with v1 history files that predate content categories.
+    let detectedCategories: [String]?
 
     /// Copy of this entry with `imageData` cleared, used when writing the JSON envelope
     /// so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
@@ -199,7 +201,8 @@ struct StoredEntry: Codable {
             isDeveloperContent: isDeveloperContent,
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
-            mutationsApplied: mutationsApplied
+            mutationsApplied: mutationsApplied,
+            detectedCategories: detectedCategories
         )
     }
 
@@ -221,7 +224,8 @@ struct StoredEntry: Codable {
             isDeveloperContent: isDeveloperContent,
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
-            mutationsApplied: mutationsApplied
+            mutationsApplied: mutationsApplied,
+            detectedCategories: detectedCategories
         )
     }
 }
@@ -283,7 +287,10 @@ extension StoredEntry {
             isDeveloperContent: item.isDeveloperContent,
             linkTitle: item.linkTitle,
             linkFavicon: item.linkFavicon,
-            mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied
+            mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied,
+            detectedCategories: item.detectedCategories.isEmpty
+                ? nil
+                : item.detectedCategories.map(\.rawValue).sorted()
         )
     }
 
@@ -314,6 +321,9 @@ extension StoredEntry {
             content = .image(data, size)
         }
 
+        let decodedCategories: Set<ContentCategory> = Set(
+            (detectedCategories ?? []).compactMap(ContentCategory.init(rawValue:))
+        )
         let item = ClipboardItem(
             id: id,
             content: content,
@@ -322,7 +332,8 @@ extension StoredEntry {
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
             isPinned: isPinned,
-            isDeveloperContent: isDeveloperContent ?? false
+            isDeveloperContent: isDeveloperContent ?? false,
+            detectedCategories: decodedCategories
         )
         item.linkTitle = linkTitle
         item.linkFavicon = linkFavicon

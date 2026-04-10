@@ -143,14 +143,33 @@ private struct GeneralSettingsTab: View {
             }
 
             Section {
-                ForEach(ClipboardFilter.toggleableCategories) { category in
+                ForEach(ClipboardFilter.contentTypeFilters) { category in
                     FilterCategoryToggleRow(category: category)
                 }
             } header: {
-                Text("Filter tabs")
+                Text("Filter tabs — content type")
             } footer: {
                 Text("Show or hide the category tabs above the clipboard history. " +
                     "The \u{201C}All\u{201D} tab is always available.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Section("Filter tabs — smart categories") {
+                ForEach(ClipboardFilter.smartCategoryFilters) { category in
+                    FilterCategoryToggleRow(category: category)
+                }
+            }
+
+            Section {
+                ForEach(ClipboardFilter.sourceAppFilters) { category in
+                    FilterCategoryToggleRow(category: category)
+                }
+            } header: {
+                Text("Filter tabs — source app")
+            } footer: {
+                Text("Group clipboard items by where they were copied from. Matching is " +
+                    "based on bundle identifiers of common apps in each category.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

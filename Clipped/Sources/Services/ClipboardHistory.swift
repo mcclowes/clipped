@@ -59,6 +59,10 @@ final class ClipboardHistory {
             result = result.filter { $0.contentType == .plainText || $0.contentType == .richText }
         case .developer:
             result = result.filter(\.isDeveloperContent)
+        case let .category(category):
+            result = result.filter { $0.detectedCategories.contains(category) }
+        case let .sourceApp(sourceCategory):
+            result = result.filter { $0.sourceAppCategory == sourceCategory }
         case nil:
             break
         }
