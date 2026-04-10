@@ -95,9 +95,11 @@ actor HistoryStore: HistoryStoring {
 
         // Hydrate image payloads from the side files. If a legacy history.json still has
         // imageData embedded, pass it through untouched — the next save() will migrate it
-        // to a side file.
+        // to a side file. SVG entries are also stored under contentType "Image" but keep
+        // their bytes inline via `svgData`, so skip the sidecar lookup for those.
         return decoded.map { entry in
-            guard entry.contentType == "Image", entry.imageData == nil else { return entry }
+            guard entry.contentType == "Image", entry.imageData == nil, entry.svgData == nil
+            else { return entry }
             guard let payload = loadImageFile(for: entry.id) else { return entry }
             return entry.withImageData(payload)
         }
@@ -171,6 +173,9 @@ struct StoredEntry: Codable {
     let imageData: Data?
     let imageWidth: Double?
     let imageHeight: Double?
+    /// Raw SVG markup bytes. Stored inline in `history.json` since SVG is text —
+    /// the external image-file path is reserved for raster payloads.
+    let svgData: Data?
     let sourceAppName: String?
     let sourceAppBundleID: String?
     let timestamp: Date
@@ -192,6 +197,7 @@ struct StoredEntry: Codable {
             imageData: nil,
             imageWidth: imageWidth,
             imageHeight: imageHeight,
+            svgData: svgData,
             sourceAppName: sourceAppName,
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
@@ -214,6 +220,7 @@ struct StoredEntry: Codable {
             imageData: data,
             imageWidth: imageWidth,
             imageHeight: imageHeight,
+            svgData: svgData,
             sourceAppName: sourceAppName,
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
@@ -233,6 +240,7 @@ extension StoredEntry {
         let rtfData: Data?
         let urlString: String?
         let imageData: Data?
+        let svgData: Data?
         let imageWidth: Double?
         let imageHeight: Double?
 
@@ -242,6 +250,7 @@ extension StoredEntry {
             rtfData = nil
             urlString = nil
             imageData = nil
+            svgData = nil
             imageWidth = nil
             imageHeight = nil
         case let .richText(data, plain):
@@ -249,6 +258,7 @@ extension StoredEntry {
             rtfData = data
             urlString = nil
             imageData = nil
+            svgData = nil
             imageWidth = nil
             imageHeight = nil
         case let .url(url):
@@ -256,6 +266,7 @@ extension StoredEntry {
             rtfData = nil
             urlString = url.absoluteString
             imageData = nil
+            svgData = nil
             imageWidth = nil
             imageHeight = nil
         case let .image(data, size):
@@ -263,6 +274,15 @@ extension StoredEntry {
             rtfData = nil
             urlString = nil
             imageData = data
+            svgData = nil
+            imageWidth = size.width
+            imageHeight = size.height
+        case let .svg(data, size):
+            textContent = nil
+            rtfData = nil
+            urlString = nil
+            imageData = nil
+            svgData = data
             imageWidth = size.width
             imageHeight = size.height
         }
@@ -276,6 +296,7 @@ extension StoredEntry {
             imageData: imageData,
             imageWidth: imageWidth,
             imageHeight: imageHeight,
+            svgData: svgData,
             sourceAppName: item.sourceAppName,
             sourceAppBundleID: item.sourceAppBundleID,
             timestamp: item.timestamp,
@@ -309,9 +330,15 @@ extension StoredEntry {
             guard let str = urlString, let url = URL(string: str) else { return nil }
             content = .url(url)
         case .image:
-            guard let data = imageData else { return nil }
-            let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
-            content = .image(data, size)
+            // SVG entries ride on ContentType.image but carry their bytes in `svgData`.
+            if let data = svgData {
+                let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
+                content = .svg(data, size)
+            } else {
+                guard let data = imageData else { return nil }
+                let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
+                content = .image(data, size)
+            }
         }
 
         let item = ClipboardItem(

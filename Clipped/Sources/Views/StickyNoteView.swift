@@ -117,6 +117,21 @@ struct StickyNoteView: View {
                     .aspectRatio(contentMode: .fit)
                     .clipShape(.rect(cornerRadius: 6))
             }
+
+        case let .svg(data, _):
+            if let nsImage = NSImage(data: data) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .clipShape(.rect(cornerRadius: 6))
+                    if let markup = String(data: data, encoding: .utf8) {
+                        selectableText(markup, isCode: true)
+                    }
+                }
+            }
         }
     }
 
