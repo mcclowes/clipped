@@ -177,4 +177,29 @@ final class StatusBarController {
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow = window
     }
+
+    private var historyWindow: NSWindow?
+
+    func openHistoryWindow(contentView: some View) {
+        if let existing = historyWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        close()
+
+        let hostingController = NSHostingController(rootView: contentView)
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Clipboard History"
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.setContentSize(NSSize(width: 920, height: 600))
+        window.minSize = NSSize(width: 780, height: 460)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        historyWindow = window
+    }
 }

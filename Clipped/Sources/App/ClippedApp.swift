@@ -43,6 +43,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     .environment(screenshotWatcher)
                 statusBar.openSettings(contentView: settingsContent)
             },
+            onOpenHistoryWindow: { [weak self] in
+                guard let self else { return }
+                let historyContent = HistoryWindowView()
+                    .environment(clipboardManager)
+                    .environment(settingsManager)
+                statusBar.openHistoryWindow(contentView: historyContent)
+            },
             onClosePanel: { [weak statusBar] in
                 statusBar?.close()
             }

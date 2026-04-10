@@ -1,10 +1,15 @@
 import SwiftUI
 
 struct ClipboardPanelView: View {
+    /// Max number of non-pinned recent items shown in the quick-access panel.
+    /// The full history is reachable via the "See more" button which opens `HistoryWindowView`.
+    static let quickAccessLimit = 50
+
     @Environment(ClipboardManager.self) private var manager
 
     /// Callbacks injected by the composition root so the panel never reaches for globals.
     let onOpenSettings: () -> Void
+    let onOpenHistoryWindow: () -> Void
     let onClosePanel: () -> Void
 
     @State private var showClearConfirmation = false
@@ -16,8 +21,18 @@ struct ClipboardPanelView: View {
     @State private var copiedToastToken = 0
     @FocusState private var isSearchFocused: Bool
 
+    /// Recent items trimmed to the quick-access cap. Pinned items are always shown in full.
+    private var visibleRecentItems: [ClipboardItem] {
+        Array(manager.filteredItems.prefix(Self.quickAccessLimit))
+    }
+
+    /// True when the underlying recent-item list has more entries than the quick-access cap.
+    private var hasMoreRecentItems: Bool {
+        manager.filteredItems.count > Self.quickAccessLimit
+    }
+
     private var allVisibleItems: [ClipboardItem] {
-        manager.filteredPinnedItems + manager.filteredItems
+        manager.filteredPinnedItems + visibleRecentItems
     }
 
     var body: some View {
@@ -166,9 +181,9 @@ struct ClipboardPanelView: View {
                                 }
                             }
 
-                            if !manager.filteredItems.isEmpty {
+                            if !visibleRecentItems.isEmpty {
                                 Section {
-                                    ForEach(manager.filteredItems) { item in
+                                    ForEach(visibleRecentItems) { item in
                                         ClipboardItemRow(
                                             item: item,
                                             isSelected: indexOf(item) == selectedIndex,
@@ -181,6 +196,10 @@ struct ClipboardPanelView: View {
                                         sectionHeader("Recent")
                                     }
                                 }
+                            }
+
+                            if hasMoreRecentItems {
+                                seeMoreButton
                             }
                         }
                         .padding(.horizontal, 8)
@@ -238,6 +257,30 @@ struct ClipboardPanelView: View {
         }
     }
 
+    private var seeMoreButton: some View {
+        Button(action: openHistoryWindow) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.system(size: 11))
+                Text("See full history (\(manager.filteredItems.count))")
+                    .font(.system(size: 11, weight: .medium))
+                Spacer()
+                Image(systemName: "arrow.up.right.square")
+                    .font(.system(size: 10))
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
+        .padding(.horizontal, 4)
+        .help("Open the full clipboard history in a window")
+    }
+
     private var emptyState: some View {
         VStack(spacing: 8) {
             Spacer()
@@ -276,9 +319,16 @@ struct ClipboardPanelView: View {
 
             Spacer()
 
+            Button(action: openHistoryWindow) {
+                Label("Full history", systemImage: "clock.arrow.circlepath")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Open the full clipboard history window")
+
             Button {
-                let allTextItems = manager.filteredPinnedItems + manager.filteredItems
-                manager.exportItems(allTextItems)
+                manager.exportItems(allVisibleItems)
             } label: {
                 Label("Export visible items", systemImage: "square.and.arrow.up")
                     .labelStyle(.iconOnly)
@@ -286,7 +336,7 @@ struct ClipboardPanelView: View {
             }
             .buttonStyle(.plain)
             .help("Export all visible items to clipboard")
-            .disabled(manager.filteredPinnedItems.isEmpty && manager.filteredItems.isEmpty)
+            .disabled(allVisibleItems.isEmpty)
 
             Button(action: openSettings) {
                 Label("Settings", systemImage: "gear")
@@ -420,6 +470,11 @@ struct ClipboardPanelView: View {
 
     private func openSettings() {
         onOpenSettings()
+    }
+
+    private func openHistoryWindow() {
+        onClosePanel()
+        onOpenHistoryWindow()
     }
 }
 
