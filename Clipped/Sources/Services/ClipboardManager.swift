@@ -187,7 +187,7 @@ final class ClipboardManager {
         let policy = passwordPolicy(hasConcealed: event.hasConcealedType, bundleID: event.bundleID)
         if policy.shouldSkip { return }
 
-        var item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
+        let item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
         // regardless of whether secure mode UI behavior is enabled.
