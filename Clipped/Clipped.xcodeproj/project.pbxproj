@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0C3D06236C907CF2C54842BB /* SettingsManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F765836B77D8125B2D0FA0 /* SettingsManagerTests.swift */; };
+		12DF98636556CE6B155F4FD1 /* ContentCategoryDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B1A96B6CDA5A1A3BBE8255D /* ContentCategoryDetectorTests.swift */; };
 		188AACBC23D957F146689633 /* ClipboardMutationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 066E4CB1C1EED70FEC5B92B3 /* ClipboardMutationTests.swift */; };
 		1A2864ABDD81569780A4E320 /* HotkeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FDC0C297508025A53AE5707 /* HotkeyManager.swift */; };
 		1D8DB8F64C7DE01B9B98FE55 /* ClippedApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 684F2A63920CAD7CB463ADA2 /* ClippedApp.swift */; };
@@ -61,6 +62,7 @@
 		22C6E332241D4A9B8F5C83E0 /* ClipboardManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardManagerTests.swift; sourceTree = "<group>"; };
 		2F6F037392724562003B5664 /* MarkdownConverterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownConverterTests.swift; sourceTree = "<group>"; };
 		35E276E1387F31A49338A586 /* ContentTypeFilterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentTypeFilterBar.swift; sourceTree = "<group>"; };
+		3B1A96B6CDA5A1A3BBE8255D /* ContentCategoryDetectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentCategoryDetectorTests.swift; sourceTree = "<group>"; };
 		3CCD4241FF6A2AA2487B4AB9 /* StickyNoteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickyNoteView.swift; sourceTree = "<group>"; };
 		3D406C3E7E44055D5824EFE2 /* MarkdownConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownConverter.swift; sourceTree = "<group>"; };
 		52E0ED086CA7C448C273F041 /* ClippedTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClippedTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -145,6 +147,7 @@
 			children = (
 				22C6E332241D4A9B8F5C83E0 /* ClipboardManagerTests.swift */,
 				066E4CB1C1EED70FEC5B92B3 /* ClipboardMutationTests.swift */,
+				3B1A96B6CDA5A1A3BBE8255D /* ContentCategoryDetectorTests.swift */,
 				772B9A8C65330E9C65639409 /* DeveloperContentDetectorTests.swift */,
 				5E54980733220E71B60FC4E3 /* HexColorParserTests.swift */,
 				1879C700D0DE87BA372C77DF /* HistoryStoreTests.swift */,
@@ -295,6 +298,7 @@
 			files = (
 				1DBEA970275D4B3ADE0DA981 /* ClipboardManagerTests.swift in Sources */,
 				188AACBC23D957F146689633 /* ClipboardMutationTests.swift in Sources */,
+				12DF98636556CE6B155F4FD1 /* ContentCategoryDetectorTests.swift in Sources */,
 				DAE3F690432331353378BB7E /* DeveloperContentDetectorTests.swift in Sources */,
 				B9A2AC0DF8ABA01B6EB1F817 /* HexColorParserTests.swift in Sources */,
 				8E9BF64A3129EFB0BD7CFD94 /* HistoryStoreTests.swift in Sources */,
