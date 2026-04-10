@@ -12,6 +12,7 @@ protocol SettingsManaging: AnyObject {
     var secureTimeout: Int { get }
     var playSoundOnCopy: Bool { get }
     var captureScreenshots: Bool { get }
+    var fetchLinkPreviews: Bool { get set }
     var launchAtLogin: Bool { get set }
     var hotkeyKeyCode: UInt32 { get set }
     var hotkeyModifiers: UInt32 { get set }
@@ -47,6 +48,10 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
 
     var captureScreenshots: Bool {
         didSet { UserDefaults.standard.set(captureScreenshots, forKey: "captureScreenshots") }
+    }
+
+    var fetchLinkPreviews: Bool {
+        didSet { UserDefaults.standard.set(fetchLinkPreviews, forKey: "fetchLinkPreviews") }
     }
 
     var hotkeyKeyCode: UInt32 {
@@ -138,6 +143,9 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
         captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
+        fetchLinkPreviews = UserDefaults.standard.object(forKey: "fetchLinkPreviews") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "fetchLinkPreviews")
 
         if let rulesData = UserDefaults.standard.data(forKey: "mutationRules"),
            let decoded = try? JSONDecoder().decode([String: Bool].self, from: rulesData)

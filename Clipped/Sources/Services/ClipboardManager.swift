@@ -221,6 +221,9 @@ final class ClipboardManager {
     }
 
     private func scheduleLinkMetadataFetch(for url: URL, itemID: UUID) {
+        // Respect the user's privacy preference — when previews are disabled we never
+        // reach out to the remote origin.
+        guard settingsManager?.fetchLinkPreviews ?? true else { return }
         let fetcher = linkMetadataFetcher
         Task { [weak self] in
             let metadata = await fetcher.fetchMetadata(for: url)

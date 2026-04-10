@@ -131,6 +131,17 @@ private struct GeneralSettingsTab: View {
                 }
             }
 
+            Section {
+                Toggle("Fetch link previews", isOn: $settings.fetchLinkPreviews)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("When enabled, Clipped fetches the title and favicon of copied URLs " +
+                    "from their origin server. Disable to keep copied URLs fully local.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("Keyboard shortcut") {
                 HStack {
                     Text("Open clipboard panel")
@@ -159,9 +170,13 @@ private struct GeneralSettingsTab: View {
             Section("About") {
                 Text("Clipped v\(Self.appVersion)")
                     .foregroundStyle(.secondary)
-                Text("Clipboard history never leaves your device.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                Text(
+                    "Clipboard contents stay on your device. The only outbound network " +
+                        "requests are link previews (titles and favicons for copied URLs), which " +
+                        "can be turned off above."
+                )
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             }
         }
         .formStyle(.grouped)
