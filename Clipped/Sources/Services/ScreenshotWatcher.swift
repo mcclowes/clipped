@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Observation
 import os
 import UserNotifications
@@ -11,14 +12,16 @@ final class ScreenshotWatcher {
     private(set) var isWatching = false
     private(set) var watchedFolder: URL?
     private var knownFiles: Set<String> = []
-    /// Files we've seen appear but are waiting to confirm are fully written before ingesting.
-    /// Map: filename → last-observed mtime.
-    private var pendingFiles: [String: Date] = [:]
-    private var pollTimer: Timer?
+    private var dispatchSource: DispatchSourceFileSystemObject?
+    private var watchedFD: Int32 = -1
 
     var clipboardManager: ClipboardManager?
 
     private static let bookmarkKey = "screenshotFolderBookmark"
+
+    /// Short settle delay after a directory change before reading new files, so `screencapture`
+    /// has time to flush its write when it creates the file entry before writing the image bytes.
+    private static let settleDelay: Duration = .milliseconds(250)
 
     var hasStoredFolder: Bool {
         UserDefaults.standard.data(forKey: Self.bookmarkKey) != nil
@@ -81,21 +84,41 @@ final class ScreenshotWatcher {
             Self.logger.error("Failed to access security-scoped resource for screenshot folder")
             return
         }
-        watchedFolder = folder
 
+        let fd = open(folder.path, O_EVTONLY)
+        guard fd >= 0 else {
+            Self.logger.error("Failed to open folder for watching: \(folder.path)")
+            folder.stopAccessingSecurityScopedResource()
+            return
+        }
+
+        watchedFolder = folder
+        watchedFD = fd
         knownFiles = Set(imageFiles(in: folder))
 
-        isWatching = true
-        pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkForNewScreenshots()
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete],
+            queue: DispatchQueue.global(qos: .utility)
+        )
+        source.setEventHandler {
+            Task { @MainActor [weak self] in
+                self?.handleDirectoryChange()
             }
         }
+        source.setCancelHandler { [fd] in
+            close(fd)
+        }
+        dispatchSource = source
+        source.resume()
+
+        isWatching = true
     }
 
     func stopWatching() {
-        pollTimer?.invalidate()
-        pollTimer = nil
+        dispatchSource?.cancel()
+        dispatchSource = nil
+        watchedFD = -1
         isWatching = false
         watchedFolder?.stopAccessingSecurityScopedResource()
         watchedFolder = nil
@@ -106,69 +129,46 @@ final class ScreenshotWatcher {
         UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
     }
 
-    private func checkForNewScreenshots() {
+    private func handleDirectoryChange() {
         guard let folder = watchedFolder else { return }
 
         let currentFiles = Set(imageFiles(in: folder))
         let newlyAppeared = currentFiles.subtracting(knownFiles)
-
-        // Stage new files into `pendingFiles` and wait a poll-cycle so `screencapture`
-        // has finished writing before we try to read them.
-        for fileName in newlyAppeared where pendingFiles[fileName] == nil {
-            let fileURL = folder.appendingPathComponent(fileName)
-            if let mtime = modificationDate(of: fileURL) {
-                pendingFiles[fileName] = mtime
-            }
-        }
-
-        // Ingest any pending file whose mtime hasn't moved since the last poll.
-        var ingested: [String] = []
-        for (fileName, previousMtime) in pendingFiles {
-            let fileURL = folder.appendingPathComponent(fileName)
-            guard let currentMtime = modificationDate(of: fileURL) else {
-                ingested.append(fileName)
-                continue
-            }
-            if currentMtime != previousMtime {
-                // File is still being written; remember the new mtime and try again next poll.
-                pendingFiles[fileName] = currentMtime
-                continue
-            }
-
-            defer { ingested.append(fileName) }
-
-            guard let imageData = try? Data(contentsOf: fileURL),
-                  let image = NSImage(data: imageData)
-            else { continue }
-
-            Self.logger.info("New screenshot detected: \(fileName)")
-            let item = ClipboardItem(
-                content: .image(imageData, image.size),
-                contentType: .image,
-                sourceAppName: "Screenshot",
-                sourceAppBundleID: "com.apple.screencaptureui"
-            )
-            clipboardManager?.items.insert(item, at: 0)
-
-            // Copy screenshot to system clipboard so user can paste immediately
-            clipboardManager?.copyToClipboard(item)
-
-            clipboardManager?.trimToMaxSize()
-            clipboardManager?.saveHistory()
-
-            // Show a disappearing notification
-            sendScreenshotNotification(fileName: fileName)
-        }
-
-        for fileName in ingested {
-            pendingFiles.removeValue(forKey: fileName)
-        }
-
         knownFiles = currentFiles
+
+        guard !newlyAppeared.isEmpty else { return }
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.settleDelay)
+            guard let self, let folder = watchedFolder else { return }
+            for fileName in newlyAppeared {
+                ingestScreenshot(fileName: fileName, in: folder)
+            }
+        }
     }
 
-    private func modificationDate(of url: URL) -> Date? {
-        (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
+    private func ingestScreenshot(fileName: String, in folder: URL) {
+        let fileURL = folder.appendingPathComponent(fileName)
+        guard let imageData = try? Data(contentsOf: fileURL),
+              let image = NSImage(data: imageData)
+        else { return }
+
+        Self.logger.info("New screenshot detected: \(fileName)")
+        let item = ClipboardItem(
+            content: .image(imageData, image.size),
+            contentType: .image,
+            sourceAppName: "Screenshot",
+            sourceAppBundleID: "com.apple.screencaptureui"
+        )
+        clipboardManager?.items.insert(item, at: 0)
+
+        // Copy screenshot to system clipboard so user can paste immediately
+        clipboardManager?.copyToClipboard(item)
+
+        clipboardManager?.trimToMaxSize()
+        clipboardManager?.saveHistory()
+
+        sendScreenshotNotification(fileName: fileName)
     }
 
     private func sendScreenshotNotification(fileName: String) {
