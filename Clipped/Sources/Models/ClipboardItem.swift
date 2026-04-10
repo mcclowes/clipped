@@ -133,6 +133,7 @@ final class ClipboardItem: Identifiable {
         case let .text(string): string
         case let .richText(_, plainFallback): plainFallback
         case let .url(url): url.absoluteString
+        case let .svg(data, _): String(data: data, encoding: .utf8)
         default: nil
         }
     }
@@ -147,6 +148,8 @@ final class ClipboardItem: Identifiable {
             url.absoluteString
         case let .image(_, size):
             "Image — \(Int(size.width))×\(Int(size.height))"
+        case let .svg(_, size):
+            "SVG — \(Int(size.width))×\(Int(size.height))"
         }
     }
 
@@ -178,6 +181,59 @@ enum ClipboardContent: Equatable {
     case richText(Data, String) // RTF data + plain text fallback
     case url(URL)
     case image(Data, CGSize) // image data + dimensions
+    case svg(Data, CGSize) // SVG markup (UTF-8 bytes) + rendered dimensions
+}
+
+/// Lightweight detector for SVG markup copied as plain text. We intentionally stay
+/// loose: anything that begins (after optional whitespace / XML / DOCTYPE prolog)
+/// with an `<svg` tag is treated as SVG. Copying an HTML fragment that *contains*
+/// an `<svg>` but starts with other markup will not trigger, which is the behavior
+/// we want — otherwise pasting an article into the clipboard would misclassify it.
+enum SVGDetector {
+    /// Maximum bytes we'll consider when sniffing so we don't walk an enormous string.
+    private static let maxSniffBytes = 2048
+
+    static func looksLikeSVG(_ text: String) -> Bool {
+        let trimmed = text.drop { $0.isWhitespace || $0.isNewline }
+        // Fast rejects: empty or doesn't start with `<`.
+        guard let first = trimmed.first, first == "<" else { return false }
+
+        // Walk only the first chunk so giant strings stay cheap.
+        let head = String(trimmed.prefix(maxSniffBytes)).lowercased()
+
+        // Direct `<svg` (with space, newline, or `>` after).
+        if head.hasPrefix("<svg>") || head.hasPrefix("<svg ") || head.hasPrefix("<svg\n")
+            || head.hasPrefix("<svg\t") || head.hasPrefix("<svg/")
+        {
+            return true
+        }
+
+        // XML / DOCTYPE prolog → look for the root `<svg` afterwards.
+        if head.hasPrefix("<?xml") || head.hasPrefix("<!doctype") {
+            // Must find a root svg element, not just "<svg" inside a comment.
+            // Simple scan: the first non-prolog `<` element should be `<svg`.
+            var rest = Substring(head)
+            // Skip `<?xml ... ?>` and `<!DOCTYPE ... >` declarations.
+            while rest.hasPrefix("<?xml") || rest.hasPrefix("<!doctype") {
+                guard let end = rest.firstIndex(of: ">") else { return false }
+                rest = rest[rest.index(after: end)...]
+                    .drop { $0.isWhitespace || $0.isNewline }
+            }
+            // Skip leading comments `<!-- ... -->`.
+            while rest.hasPrefix("<!--") {
+                guard let endRange = rest.range(of: "-->") else { return false }
+                rest = rest[endRange.upperBound...]
+                    .drop { $0.isWhitespace || $0.isNewline }
+            }
+            if rest.hasPrefix("<svg>") || rest.hasPrefix("<svg ") || rest.hasPrefix("<svg\n")
+                || rest.hasPrefix("<svg\t") || rest.hasPrefix("<svg/")
+            {
+                return true
+            }
+        }
+
+        return false
+    }
 }
 
 enum HexColorParser {
