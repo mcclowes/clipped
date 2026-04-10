@@ -1,64 +1,74 @@
 import SwiftUI
 
 @MainActor
-final class AppState: Observable {
-    static let shared = AppState()
-
+final class AppDelegate: NSObject, NSApplicationDelegate {
     let clipboardManager = ClipboardManager()
     let settingsManager = SettingsManager()
     let screenshotWatcher = ScreenshotWatcher()
 
-    private init() {}
-}
+    let statusBarController: StatusBarController
 
-@MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+    override init() {
+        statusBarController = StatusBarController()
+        super.init()
+        statusBarController.clipboardManager = clipboardManager
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let state = AppState.shared
-        let cm = state.clipboardManager
-        let sm = state.settingsManager
-        let sw = state.screenshotWatcher
-
-        cm.settingsManager = sm
-        if let mutationService = cm.mutationService as? ClipboardMutationService {
-            mutationService.rulesProvider = sm
+        clipboardManager.settingsManager = settingsManager
+        if let mutationService = clipboardManager.mutationService as? ClipboardMutationService {
+            mutationService.rulesProvider = settingsManager
         }
-        sw.clipboardManager = cm
-        sw.requestNotificationPermission()
-        if sm.captureScreenshots,
-           let folder = sw.resolveBookmark()
+        screenshotWatcher.clipboardManager = clipboardManager
+        screenshotWatcher.requestNotificationPermission()
+        if settingsManager.captureScreenshots,
+           let folder = screenshotWatcher.resolveBookmark()
         {
-            sw.startWatching(folder: folder)
+            screenshotWatcher.startWatching(folder: folder)
         }
 
         // Bootstrap the clipboard manager: load persisted history, then start monitoring.
         // This must happen *before* the first poll so persisted items aren't clobbered.
         Task { @MainActor in
-            await cm.bootstrap()
+            await clipboardManager.bootstrap()
         }
 
-        let panelContent = ClipboardPanelView()
-            .environment(cm)
-            .environment(sm)
+        let statusBar = statusBarController
+        let panelContent = ClipboardPanelView(
+            onOpenSettings: { [weak self] in
+                guard let self else { return }
+                let settingsContent = SettingsView()
+                    .environment(clipboardManager)
+                    .environment(settingsManager)
+                    .environment(screenshotWatcher)
+                statusBar.openSettings(contentView: settingsContent)
+            },
+            onClosePanel: { [weak statusBar] in
+                statusBar?.close()
+            }
+        )
+        .environment(clipboardManager)
+        .environment(settingsManager)
 
-        StatusBarController.shared.setup(contentView: panelContent)
+        statusBar.setup(contentView: panelContent)
 
         if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
             let onboardingContent = OnboardingView {
                 UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
-                StatusBarController.shared.closeOnboarding()
-                StatusBarController.shared.show()
+                statusBar.closeOnboarding()
+                statusBar.show()
             }
-            .environment(sm)
-            StatusBarController.shared.openOnboarding(contentView: onboardingContent)
+            .environment(settingsManager)
+            statusBar.openOnboarding(contentView: onboardingContent)
         }
 
         HotkeyManager.shared.register(
-            keyCode: sm.hotkeyKeyCode,
-            modifiers: sm.hotkeyModifiers
-        ) {
-            cm.openedViaHotkey = true
-            StatusBarController.shared.toggle()
+            keyCode: settingsManager.hotkeyKeyCode,
+            modifiers: settingsManager.hotkeyModifiers
+        ) { [weak self] in
+            guard let self else { return }
+            clipboardManager.openedViaHotkey = true
+            statusBarController.toggle()
         }
     }
 }
@@ -66,13 +76,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct ClippedApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    private var state = AppState.shared
 
     var body: some Scene {
         WindowGroup("Sticky Note", for: UUID.self) { $itemID in
             if let itemID {
                 StickyNoteView(itemID: itemID)
-                    .environment(state.clipboardManager)
+                    .environment(appDelegate.clipboardManager)
             }
         }
         .windowStyle(.hiddenTitleBar)
@@ -81,9 +90,9 @@ struct ClippedApp: App {
 
         Settings {
             SettingsView()
-                .environment(state.clipboardManager)
-                .environment(state.settingsManager)
-                .environment(state.screenshotWatcher)
+                .environment(appDelegate.clipboardManager)
+                .environment(appDelegate.settingsManager)
+                .environment(appDelegate.screenshotWatcher)
         }
     }
 }
