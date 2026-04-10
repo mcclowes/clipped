@@ -70,12 +70,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         HotkeyManager.shared.register(
+            id: .panel,
             keyCode: settingsManager.hotkeyKeyCode,
             modifiers: settingsManager.hotkeyModifiers
         ) { [weak self] in
             guard let self else { return }
             clipboardManager.openedViaHotkey = true
             statusBarController.toggle()
+        }
+
+        HotkeyManager.shared.register(
+            id: .historyWindow,
+            keyCode: settingsManager.historyWindowHotkeyKeyCode,
+            modifiers: settingsManager.historyWindowHotkeyModifiers
+        ) { [weak self] in
+            guard let self else { return }
+            let historyContent = HistoryWindowView()
+                .environment(clipboardManager)
+                .environment(settingsManager)
+            statusBarController.openHistoryWindow(contentView: historyContent)
         }
     }
 }

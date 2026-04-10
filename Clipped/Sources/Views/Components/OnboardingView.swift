@@ -126,6 +126,7 @@ struct OnboardingView: View {
                 modifiers: $settings.hotkeyModifiers,
                 onChanged: {
                     HotkeyManager.shared.reregister(
+                        id: .panel,
                         keyCode: settings.hotkeyKeyCode,
                         modifiers: settings.hotkeyModifiers
                     )
@@ -232,7 +233,7 @@ struct OnboardingView: View {
                 .font(.title.bold())
 
             Text(
-                "Look for the clipboard icon in your menu bar. Copy anything and it'll appear there.\n\nUse \(HotkeyManager.shared.displayString) to open from anywhere."
+                "Look for the clipboard icon in your menu bar. Copy anything and it'll appear there.\n\nUse \(HotkeyManager.shared.displayString(for: .panel)) to open from anywhere."
             )
             .font(.body)
             .foregroundStyle(.secondary)
