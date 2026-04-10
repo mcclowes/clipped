@@ -108,8 +108,26 @@ final class ClipboardManager {
     /// Must be called from the AppDelegate after all dependencies have been wired.
     func bootstrap() async {
         await history.loadPersistedHistory()
+        seedOnboardingExamplesIfNeeded()
         monitor.resetBaseline()
         monitor.startMonitoring()
+    }
+
+    /// On very first launch, inject one example of each content type so the clipboard
+    /// panel isn't empty when the user opens it. Skipped if the history already contains
+    /// anything — including pinned items restored from disk — so we never overwrite real
+    /// clipboard data on an existing install.
+    func seedOnboardingExamplesIfNeeded(
+        defaults: UserDefaults = .standard,
+        now: Date = Date()
+    ) {
+        guard OnboardingSeeder.shouldSeed(defaults: defaults) else { return }
+        defer { OnboardingSeeder.markSeeded(defaults: defaults) }
+
+        guard history.items.isEmpty, history.pinnedItems.isEmpty else { return }
+
+        history.items = OnboardingSeeder.makeSeedItems(now: now)
+        history.saveHistory()
     }
 
     func startMonitoring() {
