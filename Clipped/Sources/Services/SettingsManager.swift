@@ -16,6 +16,8 @@ protocol SettingsManaging: AnyObject {
     var launchAtLogin: Bool { get set }
     var hotkeyKeyCode: UInt32 { get set }
     var hotkeyModifiers: UInt32 { get set }
+    var historyWindowHotkeyKeyCode: UInt32 { get set }
+    var historyWindowHotkeyModifiers: UInt32 { get set }
     var mutationRules: [String: Bool] { get set }
     var mutationAppOverrides: [String: Bool] { get set }
 }
@@ -60,6 +62,18 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
 
     var hotkeyModifiers: UInt32 {
         didSet { UserDefaults.standard.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers") }
+    }
+
+    var historyWindowHotkeyKeyCode: UInt32 {
+        didSet {
+            UserDefaults.standard.set(Int(historyWindowHotkeyKeyCode), forKey: "historyWindowHotkeyKeyCode")
+        }
+    }
+
+    var historyWindowHotkeyModifiers: UInt32 {
+        didSet {
+            UserDefaults.standard.set(Int(historyWindowHotkeyModifiers), forKey: "historyWindowHotkeyModifiers")
+        }
     }
 
     /// Per-content-type mutation rules. Key: "mutationID:contentType", Value: enabled.
@@ -167,6 +181,13 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         hotkeyKeyCode = storedKeyCode > 0 ? UInt32(storedKeyCode) : 8 // Default: 'C'
         let storedModifiers = UserDefaults.standard.integer(forKey: "hotkeyModifiers")
         hotkeyModifiers = storedModifiers > 0 ? UInt32(storedModifiers) : UInt32(optionKey) // Default: Option
+
+        let storedHistoryKeyCode = UserDefaults.standard.integer(forKey: "historyWindowHotkeyKeyCode")
+        historyWindowHotkeyKeyCode = storedHistoryKeyCode > 0 ? UInt32(storedHistoryKeyCode) : 8 // Default: 'C'
+        let storedHistoryModifiers = UserDefaults.standard.integer(forKey: "historyWindowHotkeyModifiers")
+        historyWindowHotkeyModifiers = storedHistoryModifiers > 0
+            ? UInt32(storedHistoryModifiers)
+            : UInt32(optionKey | shiftKey) // Default: Option+Shift
 
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

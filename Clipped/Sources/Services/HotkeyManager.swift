@@ -4,45 +4,137 @@ import os
 
 @MainActor
 final class HotkeyManager {
+    /// Identifies a distinct global hotkey slot. `rawValue` is sent through
+    /// Carbon's `EventHotKeyID` so incoming events can be routed back to the
+    /// matching registration.
+    enum HotkeyID: UInt32 {
+        case panel = 1
+        case historyWindow = 2
+    }
+
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "HotkeyManager")
 
     static let shared = HotkeyManager()
 
-    private var eventHandler: EventHandlerRef?
-    private var hotkeyRef: EventHotKeyRef?
-    private var callback: (@MainActor @Sendable () -> Void)?
-
-    private(set) var currentKeyCode: UInt32 = 8
-    private(set) var currentModifiers: UInt32 = .init(optionKey)
-
-    var displayString: String {
-        Self.formatShortcut(keyCode: currentKeyCode, modifiers: currentModifiers)
+    private struct Registration {
+        var hotkeyRef: EventHotKeyRef?
+        var keyCode: UInt32
+        var modifiers: UInt32
+        var callback: @MainActor @Sendable () -> Void
     }
 
-    private init() {}
+    private var eventHandler: EventHandlerRef?
+    private var registrations: [HotkeyID: Registration] = [:]
 
     /// The most recent registration error, if any, so the settings UI can surface it.
     private(set) var lastRegistrationError: String?
 
+    private init() {}
+
+    // MARK: - Introspection
+
+    func keyCode(for id: HotkeyID) -> UInt32 {
+        registrations[id]?.keyCode ?? 0
+    }
+
+    func modifiers(for id: HotkeyID) -> UInt32 {
+        registrations[id]?.modifiers ?? 0
+    }
+
+    func displayString(for id: HotkeyID) -> String {
+        guard let registration = registrations[id] else { return "" }
+        return Self.formatShortcut(keyCode: registration.keyCode, modifiers: registration.modifiers)
+    }
+
+    // MARK: - Registration
+
     @discardableResult
     func register(
-        keyCode: UInt32 = 8,
-        modifiers: UInt32 = UInt32(optionKey),
+        id: HotkeyID,
+        keyCode: UInt32,
+        modifiers: UInt32,
         callback: @escaping @MainActor @Sendable () -> Void
     ) -> Bool {
-        Self.logger.debug("Registering global hotkey")
-        self.callback = callback
-        currentKeyCode = keyCode
-        currentModifiers = modifiers
+        Self.logger.debug("Registering global hotkey \(id.rawValue)")
+
+        installEventHandlerIfNeeded()
+
+        // Drop any prior registration for this slot before claiming it again.
+        if let existingRef = registrations[id]?.hotkeyRef {
+            UnregisterEventHotKey(existingRef)
+            registrations[id] = nil
+        }
+
+        let hotkeyID = EventHotKeyID(signature: 0x434C_4950, id: id.rawValue) // "CLIP"
+        var hotkeyRef: EventHotKeyRef?
+
+        let registerStatus = RegisterEventHotKey(
+            keyCode,
+            modifiers,
+            hotkeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotkeyRef
+        )
+
+        guard registerStatus == noErr, let hotkeyRef else {
+            // eventHotKeyExistsErr = -9878; other conflicts are also mapped as OSStatus.
+            let message = "Shortcut is unavailable (already in use or invalid). OSStatus \(registerStatus)."
+            Self.logger.error("\(message)")
+            lastRegistrationError = message
+            return false
+        }
+
+        registrations[id] = Registration(
+            hotkeyRef: hotkeyRef,
+            keyCode: keyCode,
+            modifiers: modifiers,
+            callback: callback
+        )
+        lastRegistrationError = nil
+        return true
+    }
+
+    func reregister(id: HotkeyID, keyCode: UInt32, modifiers: UInt32) {
+        guard let existing = registrations[id] else { return }
+        register(id: id, keyCode: keyCode, modifiers: modifiers, callback: existing.callback)
+    }
+
+    func unregister(id: HotkeyID) {
+        if let hotkeyRef = registrations[id]?.hotkeyRef {
+            UnregisterEventHotKey(hotkeyRef)
+        }
+        registrations[id] = nil
+    }
+
+    private func fire(rawID: UInt32) {
+        guard let id = HotkeyID(rawValue: rawID) else { return }
+        registrations[id]?.callback()
+    }
+
+    private func installEventHandlerIfNeeded() {
+        guard eventHandler == nil else { return }
 
         var eventType = EventTypeSpec(
             eventClass: OSType(kEventClassKeyboard),
             eventKind: UInt32(kEventHotKeyPressed)
         )
 
-        let handlerBlock: EventHandlerUPP = { _, _, _ -> OSStatus in
+        let handlerBlock: EventHandlerUPP = { _, event, _ -> OSStatus in
+            var hkID = EventHotKeyID()
+            let status = GetEventParameter(
+                event,
+                EventParamName(kEventParamDirectObject),
+                EventParamType(typeEventHotKeyID),
+                nil,
+                MemoryLayout<EventHotKeyID>.size,
+                nil,
+                &hkID
+            )
+            guard status == noErr else { return status }
+            let rawID = hkID.id
             Task { @MainActor in
-                HotkeyManager.shared.callback?()
+                HotkeyManager.shared.fire(rawID: rawID)
             }
             return noErr
         }
@@ -56,52 +148,11 @@ final class HotkeyManager {
             &eventHandler
         )
 
-        guard installStatus == noErr else {
+        if installStatus != noErr {
             let message = "InstallEventHandler failed (OSStatus \(installStatus))"
             Self.logger.error("\(message)")
             lastRegistrationError = message
-            return false
         }
-
-        let hotkeyID = EventHotKeyID(signature: 0x434C_4950, id: 1) // "CLIP"
-
-        let registerStatus = RegisterEventHotKey(
-            keyCode,
-            modifiers,
-            hotkeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotkeyRef
-        )
-
-        guard registerStatus == noErr else {
-            // eventHotKeyExistsErr = -9878; other conflicts are also mapped as OSStatus.
-            let message = "Shortcut is unavailable (already in use or invalid). OSStatus \(registerStatus)."
-            Self.logger.error("\(message)")
-            lastRegistrationError = message
-            return false
-        }
-
-        lastRegistrationError = nil
-        return true
-    }
-
-    func reregister(keyCode: UInt32, modifiers: UInt32) {
-        guard let callback else { return }
-        unregister()
-        register(keyCode: keyCode, modifiers: modifiers, callback: callback)
-    }
-
-    func unregister() {
-        if let hotkeyRef {
-            UnregisterEventHotKey(hotkeyRef)
-            self.hotkeyRef = nil
-        }
-        if let eventHandler {
-            RemoveEventHandler(eventHandler)
-            self.eventHandler = nil
-        }
-        callback = nil
     }
 
     // MARK: - Display formatting

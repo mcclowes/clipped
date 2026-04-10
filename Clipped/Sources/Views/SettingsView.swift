@@ -142,7 +142,7 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.tertiary)
             }
 
-            Section("Keyboard shortcut") {
+            Section("Keyboard shortcuts") {
                 HStack {
                     Text("Open clipboard panel")
                     Spacer()
@@ -151,6 +151,7 @@ private struct GeneralSettingsTab: View {
                         modifiers: $settings.hotkeyModifiers,
                         onChanged: {
                             HotkeyManager.shared.reregister(
+                                id: .panel,
                                 keyCode: settings.hotkeyKeyCode,
                                 modifiers: settings.hotkeyModifiers
                             )
@@ -158,10 +159,37 @@ private struct GeneralSettingsTab: View {
                     )
                 }
 
-                Button("Reset to default (\u{2325}C)") {
+                HStack {
+                    Text("Open full history window")
+                    Spacer()
+                    KeyRecorderView(
+                        keyCode: $settings.historyWindowHotkeyKeyCode,
+                        modifiers: $settings.historyWindowHotkeyModifiers,
+                        onChanged: {
+                            HotkeyManager.shared.reregister(
+                                id: .historyWindow,
+                                keyCode: settings.historyWindowHotkeyKeyCode,
+                                modifiers: settings.historyWindowHotkeyModifiers
+                            )
+                        }
+                    )
+                }
+
+                Button("Reset to defaults (\u{2325}C, \u{2325}\u{21E7}C)") {
                     settings.hotkeyKeyCode = 8
                     settings.hotkeyModifiers = UInt32(optionKey)
-                    HotkeyManager.shared.reregister(keyCode: 8, modifiers: UInt32(optionKey))
+                    HotkeyManager.shared.reregister(
+                        id: .panel,
+                        keyCode: 8,
+                        modifiers: UInt32(optionKey)
+                    )
+                    settings.historyWindowHotkeyKeyCode = 8
+                    settings.historyWindowHotkeyModifiers = UInt32(optionKey | shiftKey)
+                    HotkeyManager.shared.reregister(
+                        id: .historyWindow,
+                        keyCode: 8,
+                        modifiers: UInt32(optionKey | shiftKey)
+                    )
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
