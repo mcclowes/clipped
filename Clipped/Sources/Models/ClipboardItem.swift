@@ -25,13 +25,15 @@ enum ContentType: String, CaseIterable, Identifiable {
 /// Lightweight content-derived tags that can overlap freely with each other and with the
 /// developer flag. An item with the text "Email me at a@b.com" is both `.email` and regular
 /// text; the filter bar treats each as an independent pivot.
-enum ContentCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+enum ContentCategory: String, CaseIterable, Identifiable, Codable {
     case email
     case phoneNumber
     case hexColor
     case number
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var label: String {
         switch self {
@@ -64,13 +66,15 @@ enum ContentCategory: String, CaseIterable, Identifiable, Codable, Sendable {
 /// Groups of source apps the user can filter by. The bundle-ID databases live here so
 /// both the monitor (for tagging dev content) and the filter (for bucketing by source)
 /// read from the same source of truth.
-enum SourceAppCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+enum SourceAppCategory: String, CaseIterable, Identifiable, Codable {
     case communication
     case browser
     case codeEditor
     case terminal
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var label: String {
         switch self {
@@ -290,9 +294,9 @@ enum EmailDetector {
 }
 
 enum PhoneNumberDetector {
-    // NSDataDetector handles international formats, separators, and extensions for free.
-    // It occasionally matches long digit runs, so we also require at least 7 digits to
-    // rule out things like short order numbers.
+    /// NSDataDetector handles international formats, separators, and extensions for free.
+    /// It occasionally matches long digit runs, so we also require at least 7 digits to
+    /// rule out things like short order numbers.
     private static let detector: NSDataDetector? = try? NSDataDetector(
         types: NSTextCheckingResult.CheckingType.phoneNumber.rawValue
     )
