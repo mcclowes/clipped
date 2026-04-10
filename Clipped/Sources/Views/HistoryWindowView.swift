@@ -272,14 +272,20 @@ private struct HistoryItemRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(primaryLabel)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
+                    .font(.system(
+                        size: 12,
+                        weight: .semibold,
+                        design: item.isDeveloperContent ? .monospaced : .default
+                    ))
+                    .lineLimit(2)
                     .foregroundStyle(.primary)
 
-                Text(secondaryLabel)
-                    .font(.system(size: 11))
-                    .lineLimit(2)
-                    .foregroundStyle(.secondary)
+                if let secondary = secondaryLabel {
+                    Text(secondary)
+                        .font(.system(size: 11))
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                }
 
                 HStack(spacing: 6) {
                     Text(relativeTimeString(for: item.timestamp))
@@ -311,15 +317,20 @@ private struct HistoryItemRow: View {
 
     private var primaryLabel: String {
         switch item.content {
-        case .text: "Text"
-        case .richText: "Rich Text"
-        case .url: item.linkTitle ?? "Link"
-        case let .image(_, size): "Image — \(Int(size.width))×\(Int(size.height))"
+        case .text, .richText:
+            item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .url:
+            item.linkTitle ?? item.preview
+        case let .image(_, size):
+            "Image — \(Int(size.width))×\(Int(size.height))"
         }
     }
 
-    private var secondaryLabel: String {
-        item.preview.trimmingCharacters(in: .whitespacesAndNewlines)
+    private var secondaryLabel: String? {
+        if case .url = item.content, item.linkTitle != nil {
+            return item.preview
+        }
+        return nil
     }
 
     @ViewBuilder
