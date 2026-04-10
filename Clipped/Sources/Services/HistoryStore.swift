@@ -184,6 +184,8 @@ struct StoredEntry: Codable {
     let linkTitle: String?
     let linkFavicon: Data?
     let mutationsApplied: [String]?
+    /// Nullable for backward compat with v1 history files that predate content categories.
+    let detectedCategories: [String]?
 
     /// Copy of this entry with `imageData` cleared, used when writing the JSON envelope
     /// so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
@@ -205,7 +207,8 @@ struct StoredEntry: Codable {
             isDeveloperContent: isDeveloperContent,
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
-            mutationsApplied: mutationsApplied
+            mutationsApplied: mutationsApplied,
+            detectedCategories: detectedCategories
         )
     }
 
@@ -228,7 +231,8 @@ struct StoredEntry: Codable {
             isDeveloperContent: isDeveloperContent,
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
-            mutationsApplied: mutationsApplied
+            mutationsApplied: mutationsApplied,
+            detectedCategories: detectedCategories
         )
     }
 }
@@ -304,43 +308,21 @@ extension StoredEntry {
             isDeveloperContent: item.isDeveloperContent,
             linkTitle: item.linkTitle,
             linkFavicon: item.linkFavicon,
-            mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied
+            mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied,
+            detectedCategories: item.detectedCategories.isEmpty
+                ? nil
+                : item.detectedCategories.map(\.rawValue).sorted()
         )
     }
 
     func toClipboardItem() -> ClipboardItem? {
-        // Map legacy "Code" type to plainText
         let resolvedType = contentType == "Code" ? "Text" : contentType
-        guard let type = ContentType(rawValue: resolvedType) else { return nil }
+        guard let type = ContentType(rawValue: resolvedType),
+              let content = decodeContent(for: type) else { return nil }
 
-        let content: ClipboardContent
-        switch type {
-        case .plainText:
-            guard let text = textContent else { return nil }
-            content = .text(text)
-        case .richText:
-            if let rtf = rtfData, let plain = textContent {
-                content = .richText(rtf, plain)
-            } else if let text = textContent {
-                content = .text(text)
-            } else {
-                return nil
-            }
-        case .url:
-            guard let str = urlString, let url = URL(string: str) else { return nil }
-            content = .url(url)
-        case .image:
-            // SVG entries ride on ContentType.image but carry their bytes in `svgData`.
-            if let data = svgData {
-                let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
-                content = .svg(data, size)
-            } else {
-                guard let data = imageData else { return nil }
-                let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
-                content = .image(data, size)
-            }
-        }
-
+        let decodedCategories: Set<ContentCategory> = Set(
+            (detectedCategories ?? []).compactMap(ContentCategory.init(rawValue:))
+        )
         let item = ClipboardItem(
             id: id,
             content: content,
@@ -349,11 +331,34 @@ extension StoredEntry {
             sourceAppBundleID: sourceAppBundleID,
             timestamp: timestamp,
             isPinned: isPinned,
-            isDeveloperContent: isDeveloperContent ?? false
+            isDeveloperContent: isDeveloperContent ?? false,
+            detectedCategories: decodedCategories
         )
         item.linkTitle = linkTitle
         item.linkFavicon = linkFavicon
         item.mutationsApplied = mutationsApplied ?? []
         return item
+    }
+
+    private func decodeContent(for type: ContentType) -> ClipboardContent? {
+        switch type {
+        case .plainText:
+            return textContent.map(ClipboardContent.text)
+        case .richText:
+            if let rtf = rtfData, let plain = textContent {
+                return .richText(rtf, plain)
+            }
+            return textContent.map(ClipboardContent.text)
+        case .url:
+            guard let str = urlString, let url = URL(string: str) else { return nil }
+            return .url(url)
+        case .image:
+            let size = CGSize(width: imageWidth ?? 0, height: imageHeight ?? 0)
+            // SVG entries ride on ContentType.image but carry their bytes in `svgData`.
+            if let data = svgData {
+                return .svg(data, size)
+            }
+            return imageData.map { .image($0, size) }
+        }
     }
 }

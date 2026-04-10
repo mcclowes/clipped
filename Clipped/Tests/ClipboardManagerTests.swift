@@ -318,6 +318,78 @@ struct ClipboardManagerTests {
         #expect(allDev)
     }
 
+    @Test("Content category filter returns items tagged with that category")
+    func categoryFilter() {
+        let (manager, _, _, _) = makeManager()
+
+        let emailItem = ClipboardItem(
+            content: .text("ping alice@example.com"),
+            contentType: .plainText,
+            detectedCategories: [.email]
+        )
+        let phoneItem = ClipboardItem(
+            content: .text("+1 415 555 0199"),
+            contentType: .plainText,
+            detectedCategories: [.phoneNumber]
+        )
+        let plain = ClipboardItem(content: .text("nothing here"), contentType: .plainText)
+
+        manager.items = [emailItem, phoneItem, plain]
+
+        manager.selectedFilter = .category(.email)
+        #expect(manager.filteredItems.count == 1)
+        #expect(manager.filteredItems.first?.detectedCategories.contains(.email) == true)
+
+        manager.selectedFilter = .category(.phoneNumber)
+        #expect(manager.filteredItems.count == 1)
+        #expect(manager.filteredItems.first?.detectedCategories.contains(.phoneNumber) == true)
+    }
+
+    @Test("Source app filter returns items from apps in that category")
+    func sourceAppFilter() {
+        let (manager, _, _, _) = makeManager()
+
+        let fromSafari = ClipboardItem(
+            content: .text("browser text"),
+            contentType: .plainText,
+            sourceAppBundleID: "com.apple.Safari"
+        )
+        let fromXcode = ClipboardItem(
+            content: .text("editor text"),
+            contentType: .plainText,
+            sourceAppBundleID: "com.apple.dt.Xcode"
+        )
+        let fromSlack = ClipboardItem(
+            content: .text("chat text"),
+            contentType: .plainText,
+            sourceAppBundleID: "com.tinyspeck.slackmacgap"
+        )
+
+        manager.items = [fromSafari, fromXcode, fromSlack]
+
+        manager.selectedFilter = .sourceApp(.browser)
+        #expect(manager.filteredItems.count == 1)
+        #expect(manager.filteredItems.first?.sourceAppBundleID == "com.apple.Safari")
+
+        manager.selectedFilter = .sourceApp(.codeEditor)
+        #expect(manager.filteredItems.count == 1)
+        #expect(manager.filteredItems.first?.sourceAppBundleID == "com.apple.dt.Xcode")
+
+        manager.selectedFilter = .sourceApp(.communication)
+        #expect(manager.filteredItems.count == 1)
+        #expect(manager.filteredItems.first?.sourceAppBundleID == "com.tinyspeck.slackmacgap")
+    }
+
+    @Test("Source app category is derived from bundle ID")
+    func sourceAppCategoryDerived() {
+        let item = ClipboardItem(
+            content: .text("hello"),
+            contentType: .plainText,
+            sourceAppBundleID: "com.google.Chrome"
+        )
+        #expect(item.sourceAppCategory == .browser)
+    }
+
     @Test("Trim to max size preserves developer content items")
     func trimPreservesDevContent() {
         let (manager, _, settings, _) = makeManager()

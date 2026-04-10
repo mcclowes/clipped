@@ -192,7 +192,8 @@ private func copyItem(
         timestamp: item.timestamp,
         isPinned: item.isPinned,
         isSensitive: item.isSensitive,
-        isDeveloperContent: item.isDeveloperContent
+        isDeveloperContent: item.isDeveloperContent,
+        detectedCategories: item.detectedCategories
     )
     copy.linkTitle = item.linkTitle
     copy.linkFavicon = item.linkFavicon

@@ -142,6 +142,38 @@ private struct GeneralSettingsTab: View {
                     .foregroundStyle(.tertiary)
             }
 
+            Section {
+                ForEach(ClipboardFilter.contentTypeFilters) { category in
+                    FilterCategoryToggleRow(category: category)
+                }
+            } header: {
+                Text("Filter tabs — content type")
+            } footer: {
+                Text("Show or hide the category tabs above the clipboard history. " +
+                    "The \u{201C}All\u{201D} tab is always available.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
+            Section("Filter tabs — smart categories") {
+                ForEach(ClipboardFilter.smartCategoryFilters) { category in
+                    FilterCategoryToggleRow(category: category)
+                }
+            }
+
+            Section {
+                ForEach(ClipboardFilter.sourceAppFilters) { category in
+                    FilterCategoryToggleRow(category: category)
+                }
+            } header: {
+                Text("Filter tabs — source app")
+            } footer: {
+                Text("Group clipboard items by where they were copied from. Matching is " +
+                    "based on bundle identifiers of common apps in each category.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             Section("Keyboard shortcuts") {
                 HStack {
                     Text("Open clipboard panel")
@@ -212,6 +244,40 @@ private struct GeneralSettingsTab: View {
 
     private static var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+}
+
+private struct FilterCategoryToggleRow: View {
+    @Environment(SettingsManager.self) private var settings
+    let category: ClipboardFilter
+
+    private var isEnabled: Binding<Bool> {
+        Binding(
+            get: { !settings.disabledFilterIDs.contains(category.id) },
+            set: { newValue in
+                if newValue {
+                    settings.disabledFilterIDs.remove(category.id)
+                } else {
+                    settings.disabledFilterIDs.insert(category.id)
+                }
+            }
+        )
+    }
+
+    var body: some View {
+        Toggle(isOn: isEnabled) {
+            HStack(spacing: 8) {
+                Image(systemName: category.systemImage)
+                    .frame(width: 16)
+                    .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.label)
+                    Text(category.settingsDescription)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 }
 

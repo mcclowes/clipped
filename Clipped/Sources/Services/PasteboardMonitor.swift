@@ -3,23 +3,6 @@ import Foundation
 import Observation
 import os
 
-private let codeEditorBundleIDs: Set<String> = [
-    "com.microsoft.VSCode",
-    "com.apple.dt.Xcode",
-    "com.sublimetext.4",
-    "com.jetbrains.intellij",
-    "dev.zed.Zed",
-    "com.todesktop.230313mzl4w4u92", // Cursor
-]
-
-private let terminalBundleIDs: Set<String> = [
-    "com.apple.Terminal",
-    "com.googlecode.iterm2",
-    "io.alacritty",
-    "com.github.wez.wezterm",
-    "net.kovidgoyal.kitty",
-]
-
 /// Industry-standard pasteboard types set by apps to flag content that should be skipped.
 /// See https://nspasteboard.org
 let concealedPasteboardType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
@@ -212,16 +195,18 @@ final class PasteboardMonitor {
                 return item
             }
 
-            let isFromCodeEditor = bundleID.map { codeEditorBundleIDs.contains($0) } ?? false
-            let isFromTerminal = bundleID.map { terminalBundleIDs.contains($0) } ?? false
-            let isDevContent = isFromCodeEditor || isFromTerminal
+            let sourceCategory = bundleID.flatMap(SourceAppCategory.category(for:))
+            let isFromDevApp = sourceCategory == .codeEditor || sourceCategory == .terminal
+            let isDevContent = isFromDevApp
                 || DeveloperContentDetector.isDeveloperContent(string)
+            let detectedCategories = ContentCategoryDetector.detect(in: string)
             return ClipboardItem(
                 content: .text(string),
                 contentType: .plainText,
                 sourceAppName: appName,
                 sourceAppBundleID: bundleID,
-                isDeveloperContent: isDevContent
+                isDeveloperContent: isDevContent,
+                detectedCategories: detectedCategories
             )
         }
 

@@ -5,8 +5,8 @@ import Testing
 
 @MainActor
 struct SVGHandlingTests {
-    // A minimal valid SVG: one red 100x100 rectangle, no extensions, will round-trip
-    // through `NSImage(data:)` cleanly on macOS 15.
+    /// A minimal valid SVG: one red 100x100 rectangle, no extensions, will round-trip
+    /// through `NSImage(data:)` cleanly on macOS 15.
     private static let minimalSVG = """
     <?xml version="1.0" encoding="UTF-8"?>
     <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">

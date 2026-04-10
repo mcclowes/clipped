@@ -6,6 +6,7 @@ struct ClipboardPanelView: View {
     static let quickAccessLimit = 50
 
     @Environment(ClipboardManager.self) private var manager
+    @Environment(SettingsManager.self) private var settings
 
     /// Callbacks injected by the composition root so the panel never reaches for globals.
     let onOpenSettings: () -> Void
@@ -33,6 +34,10 @@ struct ClipboardPanelView: View {
 
     private var allVisibleItems: [ClipboardItem] {
         manager.filteredPinnedItems + visibleRecentItems
+    }
+
+    private var visibleFilterCategories: [ClipboardFilter] {
+        ClipboardFilter.toggleableCategories.filter { !settings.disabledFilterIDs.contains($0.id) }
     }
 
     var body: some View {
@@ -154,9 +159,14 @@ struct ClipboardPanelView: View {
             .padding(.top, 12)
             .padding(.bottom, 8)
 
-            ContentTypeFilterBar(selection: $manager.selectedFilter)
+            if !visibleFilterCategories.isEmpty {
+                ContentTypeFilterBar(
+                    selection: $manager.selectedFilter,
+                    visibleCategories: visibleFilterCategories
+                )
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
+            }
 
             Divider()
 
@@ -245,6 +255,13 @@ struct ClipboardPanelView: View {
         }
         .onChange(of: manager.searchQuery) {
             selectedIndex = nil
+        }
+        .onChange(of: settings.disabledFilterIDs) {
+            // If the active filter was just hidden, fall back to "All" so the user isn't
+            // left with an invisible filter applied.
+            if let current = manager.selectedFilter, settings.disabledFilterIDs.contains(current.id) {
+                manager.selectedFilter = nil
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSPopover.didShowNotification)) { _ in
             isSearchFocused = true

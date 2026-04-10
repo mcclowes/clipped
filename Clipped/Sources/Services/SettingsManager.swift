@@ -20,6 +20,7 @@ protocol SettingsManaging: AnyObject {
     var historyWindowHotkeyModifiers: UInt32 { get set }
     var mutationRules: [String: Bool] { get set }
     var mutationAppOverrides: [String: Bool] { get set }
+    var disabledFilterIDs: Set<String> { get set }
 }
 
 @MainActor
@@ -91,6 +92,15 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             if let data = try? JSONEncoder().encode(mutationAppOverrides) {
                 UserDefaults.standard.set(data, forKey: "mutationAppOverrides")
             }
+        }
+    }
+
+    /// IDs of filter tabs the user has hidden from the panel. Stored as disabled rather
+    /// than enabled so that new filter categories added in future releases show up by
+    /// default without needing a migration.
+    var disabledFilterIDs: Set<String> {
+        didSet {
+            UserDefaults.standard.set(Array(disabledFilterIDs), forKey: "disabledFilterIDs")
         }
     }
 
@@ -175,6 +185,14 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             mutationAppOverrides = decoded
         } else {
             mutationAppOverrides = [:]
+        }
+
+        if let stored = UserDefaults.standard.array(forKey: "disabledFilterIDs") as? [String] {
+            disabledFilterIDs = Set(stored)
+        } else {
+            // First launch — default the extended content + source-app filters to hidden
+            // so the tab strip stays tidy. Users can opt in from Settings → General.
+            disabledFilterIDs = ClipboardFilter.defaultHiddenCategoryIDs
         }
 
         let storedKeyCode = UserDefaults.standard.integer(forKey: "hotkeyKeyCode")

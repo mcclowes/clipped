@@ -323,6 +323,8 @@ private struct HistoryItemRow: View {
             item.linkTitle ?? item.preview
         case let .image(_, size):
             "Image — \(Int(size.width))×\(Int(size.height))"
+        case let .svg(_, size):
+            "SVG — \(Int(size.width))×\(Int(size.height))"
         }
     }
 
@@ -341,6 +343,17 @@ private struct HistoryItemRow: View {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            } else {
+                Image(systemName: item.contentType.systemImage)
+                    .foregroundStyle(.secondary)
+            }
+        case let .svg(data, _):
+            if let nsImage = NSImage(data: data) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
@@ -460,6 +473,13 @@ private struct HistoryDetailView: View {
                     .buttonStyle(.bordered)
             }
         case let .image(data, _):
+            if let nsImage = NSImage(data: data) {
+                Image(nsImage: nsImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+            }
+        case let .svg(data, _):
             if let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
