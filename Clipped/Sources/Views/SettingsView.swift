@@ -118,7 +118,7 @@ private struct GeneralSettingsTab: View {
                 }
             }
 
-            Section("Security") {
+            Section {
                 Toggle("Secure mode (password manager entries)", isOn: $settings.secureMode)
 
                 if settings.secureMode {
@@ -129,6 +129,13 @@ private struct GeneralSettingsTab: View {
                         Text("Remove after 60s").tag(60)
                     }
                 }
+            } header: {
+                Text("Security")
+            } footer: {
+                Text("Clipboard history is encrypted at rest with a 256-bit key stored in " +
+                    "your login Keychain. The key never leaves this device.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
 
             Section {

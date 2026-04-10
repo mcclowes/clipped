@@ -40,11 +40,16 @@ Requires **macOS 15.0 (Sequoia)** or later.
 - **Sticky notes** — Pin any item as a floating note on your desktop
 - **Export** — Merge and copy multiple items at once
 - **Persistence** — Optionally keep your history across app restarts
+- **Encrypted at rest** — Clipboard history on disk is encrypted with an authenticated key held in your login Keychain
 - **Launch at login** — Start Clipped automatically when you log in
 
 ## Privacy & security
 
-Clipped runs entirely on your Mac. No data is sent anywhere — your clipboard history stays local, stored in `~/Library/Application Support/Clipped/`. Sensitive entries from password managers can be automatically skipped or expired.
+Clipped runs entirely on your Mac. No data is sent anywhere — your clipboard history stays local, stored in `~/Library/Application Support/Clipped/`.
+
+- **Encrypted at rest** — `history.enc` and cached clipboard images are encrypted with ChaCha20-Poly1305. The 256-bit key is generated on first launch and stored in your login Keychain with `WhenUnlockedThisDeviceOnly`, so it never leaves the device and can't be read while the Mac is locked. Time Machine snapshots, cloud backups, and forensic disk access only ever see ciphertext.
+- **Secure mode** — Entries from password managers can be automatically skipped or expired.
+- **No telemetry, no sync** — Clipped never phones home and has no cloud component.
 
 ## Building from source
 

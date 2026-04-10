@@ -106,14 +106,32 @@ final class MockHistoryStore: HistoryStoring, @unchecked Sendable {
         await state.clear()
     }
 
+    func lastLoadError() async -> HistoryLoadError? {
+        await state.lastLoadError
+    }
+
+    func startFresh() async {
+        await state.startFresh()
+    }
+
+    func setLastLoadError(_ error: HistoryLoadError?) async {
+        await state.setLastLoadError(error)
+    }
+
     private actor MockState {
         var savedEntries: [StoredEntry] = []
         var saveCallCount = 0
         var clearCallCount = 0
         var loadResult: [StoredEntry] = []
+        var lastLoadError: HistoryLoadError?
+        var startFreshCallCount = 0
 
         func setLoadResult(_ entries: [StoredEntry]) {
             loadResult = entries
+        }
+
+        func setLastLoadError(_ error: HistoryLoadError?) {
+            lastLoadError = error
         }
 
         func save(entries: [StoredEntry]) {
@@ -127,6 +145,11 @@ final class MockHistoryStore: HistoryStoring, @unchecked Sendable {
 
         func clear() {
             clearCallCount += 1
+        }
+
+        func startFresh() {
+            startFreshCallCount += 1
+            lastLoadError = nil
         }
     }
 }
