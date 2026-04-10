@@ -175,13 +175,15 @@ final class ClipboardMutationService: ClipboardMutating {
 
 // MARK: - Built-in mutations
 
-/// Helper to create a new ClipboardItem preserving all metadata.
+/// Helper to create a new ClipboardItem preserving *all* metadata. Never drop fields here —
+/// a mutation should only ever change `content`, never strip developer tagging, link previews,
+/// prior mutation history, or similar.
 @MainActor
 private func copyItem(
     _ item: ClipboardItem,
     content: ClipboardContent
 ) -> ClipboardItem {
-    ClipboardItem(
+    let copy = ClipboardItem(
         id: item.id,
         content: content,
         contentType: item.contentType,
@@ -189,8 +191,14 @@ private func copyItem(
         sourceAppBundleID: item.sourceAppBundleID,
         timestamp: item.timestamp,
         isPinned: item.isPinned,
-        isSensitive: item.isSensitive
+        isSensitive: item.isSensitive,
+        isDeveloperContent: item.isDeveloperContent
     )
+    copy.linkTitle = item.linkTitle
+    copy.linkFavicon = item.linkFavicon
+    copy.originalContent = item.originalContent
+    copy.mutationsApplied = item.mutationsApplied
+    return copy
 }
 
 /// Strips common tracking parameters from URLs (utm_*, fbclid, gclid, etc.)
@@ -301,25 +309,28 @@ final class SmartQuotesToStraightMutation: ClipboardMutation {
     let id = MutationID.smartQuotesToStraight
     let name = "Straightened quotes"
 
-    private static let replacements: [(Character, Character)] = [
-        ("\u{2018}", "'"), // left single
-        ("\u{2019}", "'"), // right single
-        ("\u{201C}", "\""), // left double
-        ("\u{201D}", "\""), // right double
-    ]
-
     func mutate(_ item: ClipboardItem) -> ClipboardItem {
         guard case let .text(string) = item.content else { return item }
 
-        var result = string
-        for (smart, straight) in Self.replacements {
-            result = result.map { $0 == smart ? straight : $0 }
-                .reduce(into: "") { $0.append($1) }
+        // Single-pass replacement; avoids the O(n) allocations per replacement rule
+        // that the previous implementation produced.
+        var didChange = false
+        let mapped = string.map { (char: Character) -> Character in
+            switch char {
+            case "\u{2018}", "\u{2019}":
+                didChange = true
+                return "'"
+            case "\u{201C}", "\u{201D}":
+                didChange = true
+                return "\""
+            default:
+                return char
+            }
         }
 
-        guard result != string else { return item }
+        guard didChange else { return item }
 
-        return copyItem(item, content: .text(result))
+        return copyItem(item, content: .text(String(mapped)))
     }
 }
 
@@ -357,10 +368,9 @@ final class StripToPlainTextMutation: ClipboardMutation {
     let name = "Stripped to plain text"
 
     func mutate(_ item: ClipboardItem) -> ClipboardItem {
-        guard case let .richText(_, plainFallback) = item.content,
-              !plainFallback.isEmpty
-        else { return item }
-
+        guard case let .richText(_, plainFallback) = item.content else { return item }
+        // Note: we no longer guard on !plainFallback.isEmpty. Stripping formatting from
+        // rich text with no plain-text fallback is a valid (if unusual) result.
         return copyItem(item, content: .text(plainFallback))
     }
 }
@@ -472,17 +482,11 @@ final class DetectCodeSnippetMutation: ClipboardMutation {
 
         guard looksLikeCode(string) else { return item }
 
-        return ClipboardItem(
-            id: item.id,
-            content: item.content,
-            contentType: item.contentType,
-            sourceAppName: item.sourceAppName,
-            sourceAppBundleID: item.sourceAppBundleID,
-            timestamp: item.timestamp,
-            isPinned: item.isPinned,
-            isSensitive: item.isSensitive,
-            isDeveloperContent: true
-        )
+        // Flip the flag on a metadata-preserving copy. We keep the *same* content so we
+        // round-trip through the normal copy helper and preserve linkTitle/favicon/etc.
+        let copy = copyItem(item, content: item.content)
+        copy.isDeveloperContent = true
+        return copy
     }
 
     private func looksLikeCode(_ text: String) -> Bool {

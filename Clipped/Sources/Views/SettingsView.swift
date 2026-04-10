@@ -59,6 +59,7 @@ struct SettingsView: View {
 private struct GeneralSettingsTab: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(ScreenshotWatcher.self) private var screenshotWatcher
+    @Environment(ClipboardManager.self) private var clipboardManager
 
     var body: some View {
         @Bindable var settings = settings
@@ -72,6 +73,10 @@ private struct GeneralSettingsTab: View {
                     ForEach([10, 25, 50, 100, 250, 500], id: \.self) { size in
                         Text("\(size)").tag(size)
                     }
+                }
+                .onChange(of: settings.maxHistorySize) { _, _ in
+                    // Apply new cap immediately so the UI doesn't lie about its size.
+                    clipboardManager.trimToMaxSize()
                 }
             }
 
@@ -152,7 +157,7 @@ private struct GeneralSettingsTab: View {
             }
 
             Section("About") {
-                Text("Clipped v1.0.0")
+                Text("Clipped v\(Self.appVersion)")
                     .foregroundStyle(.secondary)
                 Text("Clipboard history never leaves your device.")
                     .font(.caption)
@@ -160,6 +165,10 @@ private struct GeneralSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private static var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
     }
 }
 

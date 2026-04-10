@@ -252,6 +252,34 @@ struct ClipboardMutationTests {
         #expect(result.contentType == .url)
     }
 
+    @Test("Mutation pipeline preserves developer tagging and link metadata")
+    func pipelinePreservesAdditionalFields() throws {
+        // Ensures the copyItem helper never drops side-channel fields. The previous bug was
+        // that isDeveloperContent/linkTitle/linkFavicon/mutationsApplied were silently reset
+        // whenever any mutation produced a new copy of the item.
+        let service = ClipboardMutationService()
+        let url = try #require(URL(string: "https://example.com/?utm_source=test"))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+        item.linkTitle = "Example"
+        item.linkFavicon = Data([0xDE, 0xAD, 0xBE, 0xEF])
+        item.isDeveloperContent = true
+
+        let result = service.apply(to: item, sourceAppBundleID: nil)
+
+        // StripTrackingParams runs and rewrites content. All prior fields must survive.
+        #expect(result.linkTitle == "Example")
+        #expect(result.linkFavicon == Data([0xDE, 0xAD, 0xBE, 0xEF]))
+        #expect(result.isDeveloperContent == true)
+    }
+
+    @Test("Mutation ordering: detectCodeSnippets runs last in default pipeline")
+    func detectCodeSnippetsRunsLast() {
+        // The pipeline depends on DetectCodeSnippet being last so it sees the final text.
+        // If this invariant breaks (re-ordering), developer tagging behavior may regress.
+        let defaults = ClipboardMutationService.defaultMutations()
+        #expect(defaults.last?.id == .detectCodeSnippets)
+    }
+
     // MARK: - CleanAmazonLinksMutation
 
     @Test("Cleans Amazon product URL to /dp/ASIN path")

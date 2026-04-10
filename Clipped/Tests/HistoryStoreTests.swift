@@ -3,75 +3,94 @@ import Foundation
 import Testing
 
 @MainActor
+@Suite(.serialized)
 struct HistoryStoreTests {
+    private func makeEntry(
+        text: String,
+        isPinned: Bool = false,
+        isDeveloperContent: Bool = false
+    ) -> StoredEntry {
+        let item = ClipboardItem(
+            content: .text(text),
+            contentType: .plainText,
+            isPinned: isPinned,
+            isDeveloperContent: isDeveloperContent
+        )
+        return StoredEntry(item: item)
+    }
+
     @Test("Save and load round-trips items")
-    func roundTrip() {
+    func roundTrip() async {
         let store = HistoryStore()
-        let item = ClipboardItem(content: .text("test"), contentType: .plainText)
-        store.save(items: [item], pinnedItems: [])
+        await store.clear()
 
-        let (loaded, pinned) = store.load()
+        let entry = makeEntry(text: "test")
+        await store.save(entries: [entry])
+
+        let loaded = await store.load()
         #expect(loaded.count == 1)
-        #expect(loaded.first?.plainText == "test")
-        #expect(pinned.isEmpty)
+        #expect(loaded.first?.toClipboardItem()?.plainText == "test")
 
-        store.clear()
+        await store.clear()
     }
 
     @Test("Save and load preserves pinned items")
-    func pinnedItems() {
+    func pinnedItems() async {
         let store = HistoryStore()
-        let pinned = ClipboardItem(content: .text("pinned"), contentType: .plainText, isPinned: true)
-        store.save(items: [], pinnedItems: [pinned])
+        await store.clear()
 
-        let (items, loadedPinned) = store.load()
-        #expect(items.isEmpty)
-        #expect(loadedPinned.count == 1)
-        #expect(loadedPinned.first?.isPinned == true)
+        let pinned = makeEntry(text: "pinned", isPinned: true)
+        await store.save(entries: [pinned])
 
-        store.clear()
-    }
-
-    @Test("Sensitive items are not persisted")
-    func sensitiveItemsExcluded() {
-        let store = HistoryStore()
-        let sensitive = ClipboardItem(content: .text("secret"), contentType: .plainText, isSensitive: true)
-        let normal = ClipboardItem(content: .text("normal"), contentType: .plainText)
-        store.save(items: [sensitive, normal], pinnedItems: [])
-
-        let (loaded, _) = store.load()
+        let loaded = await store.load()
         #expect(loaded.count == 1)
-        #expect(loaded.first?.plainText == "normal")
+        #expect(loaded.first?.isPinned == true)
 
-        store.clear()
+        await store.clear()
     }
 
     @Test("Clear removes all stored data")
-    func clear() {
+    func clear() async {
         let store = HistoryStore()
-        store.save(items: [ClipboardItem(content: .text("data"), contentType: .plainText)], pinnedItems: [])
-        store.clear()
+        await store.save(entries: [makeEntry(text: "data")])
+        await store.clear()
 
-        let (items, pinned) = store.load()
-        #expect(items.isEmpty)
-        #expect(pinned.isEmpty)
+        let loaded = await store.load()
+        #expect(loaded.isEmpty)
     }
 
     @Test("Load returns empty when no file exists")
-    func loadEmpty() {
+    func loadEmpty() async {
         let store = HistoryStore()
-        store.clear()
+        await store.clear()
 
-        let (items, pinned) = store.load()
-        #expect(items.isEmpty)
-        #expect(pinned.isEmpty)
+        let loaded = await store.load()
+        #expect(loaded.isEmpty)
     }
 
     @Test("Conforms to HistoryStoring protocol")
-    func protocolConformance() {
+    func protocolConformance() async {
         let store: any HistoryStoring = HistoryStore()
-        store.clear()
-        let (items, _) = store.load()
-        #expect(items.isEmpty)
+        await store.clear()
+        let loaded = await store.load()
+        #expect(loaded.isEmpty)
+    }
+
+    @Test("StoredEntry preserves mutationsApplied across round-trip")
+    func storedEntryMutationsApplied() async {
+        let store = HistoryStore()
+        await store.clear()
+
+        let item = ClipboardItem(content: .text("cleaned"), contentType: .plainText)
+        item.mutationsApplied = ["Stripped tracking parameters"]
+        let entry = StoredEntry(item: item)
+
+        await store.save(entries: [entry])
+        let loaded = await store.load()
+        let restored = loaded.first?.toClipboardItem()
+        #expect(restored?.mutationsApplied == ["Stripped tracking parameters"])
+        #expect(restored?.wasMutated == true)
+
+        await store.clear()
     }
 }

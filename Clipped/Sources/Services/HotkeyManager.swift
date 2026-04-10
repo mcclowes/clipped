@@ -21,11 +21,15 @@ final class HotkeyManager {
 
     private init() {}
 
+    /// The most recent registration error, if any, so the settings UI can surface it.
+    private(set) var lastRegistrationError: String?
+
+    @discardableResult
     func register(
         keyCode: UInt32 = 8,
         modifiers: UInt32 = UInt32(optionKey),
         callback: @escaping @MainActor @Sendable () -> Void
-    ) {
+    ) -> Bool {
         Self.logger.debug("Registering global hotkey")
         self.callback = callback
         currentKeyCode = keyCode
@@ -43,7 +47,7 @@ final class HotkeyManager {
             return noErr
         }
 
-        InstallEventHandler(
+        let installStatus = InstallEventHandler(
             GetApplicationEventTarget(),
             handlerBlock,
             1,
@@ -52,9 +56,16 @@ final class HotkeyManager {
             &eventHandler
         )
 
+        guard installStatus == noErr else {
+            let message = "InstallEventHandler failed (OSStatus \(installStatus))"
+            Self.logger.error("\(message)")
+            lastRegistrationError = message
+            return false
+        }
+
         let hotkeyID = EventHotKeyID(signature: 0x434C_4950, id: 1) // "CLIP"
 
-        RegisterEventHotKey(
+        let registerStatus = RegisterEventHotKey(
             keyCode,
             modifiers,
             hotkeyID,
@@ -62,6 +73,17 @@ final class HotkeyManager {
             0,
             &hotkeyRef
         )
+
+        guard registerStatus == noErr else {
+            // eventHotKeyExistsErr = -9878; other conflicts are also mapped as OSStatus.
+            let message = "Shortcut is unavailable (already in use or invalid). OSStatus \(registerStatus)."
+            Self.logger.error("\(message)")
+            lastRegistrationError = message
+            return false
+        }
+
+        lastRegistrationError = nil
+        return true
     }
 
     func reregister(keyCode: UInt32, modifiers: UInt32) {

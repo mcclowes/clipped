@@ -66,20 +66,24 @@ struct StickyNoteView: View {
             Button {
                 manager.copyToClipboard(item)
             } label: {
-                Image(systemName: "doc.on.doc")
+                Label("Copy", systemImage: "doc.on.doc")
+                    .labelStyle(.iconOnly)
                     .font(.system(size: 10))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .help("Copy to clipboard")
 
             Button {
                 dismissWindow(value: item.id)
             } label: {
-                Image(systemName: "xmark")
+                Label("Close", systemImage: "xmark")
+                    .labelStyle(.iconOnly)
                     .font(.system(size: 9, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
+            .help("Close sticky")
         }
         .padding(.horizontal, 12)
         .padding(.top, 8)

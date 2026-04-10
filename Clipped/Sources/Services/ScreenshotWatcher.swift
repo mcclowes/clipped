@@ -11,6 +11,9 @@ final class ScreenshotWatcher {
     private(set) var isWatching = false
     private(set) var watchedFolder: URL?
     private var knownFiles: Set<String> = []
+    /// Files we've seen appear but are waiting to confirm are fully written before ingesting.
+    /// Map: filename → last-observed mtime.
+    private var pendingFiles: [String: Date] = [:]
     private var pollTimer: Timer?
 
     var clipboardManager: ClipboardManager?
@@ -107,10 +110,33 @@ final class ScreenshotWatcher {
         guard let folder = watchedFolder else { return }
 
         let currentFiles = Set(imageFiles(in: folder))
-        let newFiles = currentFiles.subtracting(knownFiles)
+        let newlyAppeared = currentFiles.subtracting(knownFiles)
 
-        for fileName in newFiles {
+        // Stage new files into `pendingFiles` and wait a poll-cycle so `screencapture`
+        // has finished writing before we try to read them.
+        for fileName in newlyAppeared where pendingFiles[fileName] == nil {
             let fileURL = folder.appendingPathComponent(fileName)
+            if let mtime = modificationDate(of: fileURL) {
+                pendingFiles[fileName] = mtime
+            }
+        }
+
+        // Ingest any pending file whose mtime hasn't moved since the last poll.
+        var ingested: [String] = []
+        for (fileName, previousMtime) in pendingFiles {
+            let fileURL = folder.appendingPathComponent(fileName)
+            guard let currentMtime = modificationDate(of: fileURL) else {
+                ingested.append(fileName)
+                continue
+            }
+            if currentMtime != previousMtime {
+                // File is still being written; remember the new mtime and try again next poll.
+                pendingFiles[fileName] = currentMtime
+                continue
+            }
+
+            defer { ingested.append(fileName) }
+
             guard let imageData = try? Data(contentsOf: fileURL),
                   let image = NSImage(data: imageData)
             else { continue }
@@ -134,7 +160,15 @@ final class ScreenshotWatcher {
             sendScreenshotNotification(fileName: fileName)
         }
 
+        for fileName in ingested {
+            pendingFiles.removeValue(forKey: fileName)
+        }
+
         knownFiles = currentFiles
+    }
+
+    private func modificationDate(of url: URL) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
     }
 
     private func sendScreenshotNotification(fileName: String) {

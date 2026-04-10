@@ -247,15 +247,18 @@ struct ClipboardItemRow: View {
                 Text("••••••••")
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
+                    .accessibilityLabel("Hidden sensitive content")
                 Button {
                     isRevealed = true
                 } label: {
-                    Image(systemName: "eye")
+                    Label("Reveal", systemImage: "eye")
+                        .labelStyle(.iconOnly)
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Reveal sensitive content")
+                .accessibilityLabel("Reveal sensitive content")
             }
         } else {
             switch item.content {
@@ -323,7 +326,8 @@ struct ClipboardItemRow: View {
         Button {
             showNSActionMenu()
         } label: {
-            Image(systemName: "ellipsis")
+            Label("More actions", systemImage: "ellipsis")
+                .labelStyle(.iconOnly)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .frame(width: 24, height: 24)
@@ -331,7 +335,10 @@ struct ClipboardItemRow: View {
         }
         .buttonStyle(.plain)
         .help("Actions")
-        .opacity(isHovered ? 1 : 0)
+        // Keep the button in the hit-testing / a11y tree even when not visible so
+        // keyboard and VoiceOver users can reach it.
+        .opacity(isHovered || isSelected ? 1 : 0.01)
+        .accessibilityLabel("Actions for clipboard item")
     }
 }
 

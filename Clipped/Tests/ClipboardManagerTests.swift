@@ -61,19 +61,21 @@ struct ClipboardManagerTests {
     }
 
     @Test("Toggle pin moves item between lists")
-    func togglePin() {
+    func togglePin() async {
         let (manager, history, _, _) = makeManager()
         let item = ClipboardItem(content: .text("pin me"), contentType: .plainText)
         manager.items = [item]
 
         manager.togglePin(item)
+        await manager.flushPendingSaves()
 
         #expect(manager.items.isEmpty)
         #expect(manager.pinnedItems.count == 1)
         #expect(item.isPinned == true)
-        #expect(history.saveCallCount > 0)
+        #expect(await history.saveCallCount > 0)
 
         manager.togglePin(item)
+        await manager.flushPendingSaves()
 
         #expect(manager.items.count == 1)
         #expect(manager.pinnedItems.isEmpty)
@@ -81,15 +83,16 @@ struct ClipboardManagerTests {
     }
 
     @Test("Remove item removes from correct list")
-    func removeItem() {
+    func removeItem() async {
         let (manager, history, _, _) = makeManager()
         let item = ClipboardItem(content: .text("remove me"), contentType: .plainText)
         manager.items = [item]
 
         manager.removeItem(item)
+        await manager.flushPendingSaves()
 
         #expect(manager.items.isEmpty)
-        #expect(history.saveCallCount > 0)
+        #expect(await history.saveCallCount > 0)
     }
 
     @Test("Clear all preserves pinned items by default")
@@ -119,6 +122,26 @@ struct ClipboardManagerTests {
 
         #expect(manager.items.isEmpty)
         #expect(manager.pinnedItems.isEmpty)
+    }
+
+    @Test("Clear all returns snapshot that can be restored in original order")
+    func clearAllSnapshotRestoresOrder() {
+        let (manager, _, _, _) = makeManager()
+
+        let a = ClipboardItem(content: .text("a"), contentType: .plainText)
+        let b = ClipboardItem(content: .text("b"), contentType: .plainText)
+        let c = ClipboardItem(content: .text("c"), contentType: .plainText)
+        let pinnedOne = ClipboardItem(content: .text("p1"), contentType: .plainText, isPinned: true)
+
+        manager.items = [a, b, c]
+        manager.pinnedItems = [pinnedOne]
+
+        let snapshot = manager.clearAll()
+        #expect(manager.items.isEmpty)
+
+        manager.restore(snapshot)
+        #expect(manager.items.map(\.preview) == ["a", "b", "c"])
+        #expect(manager.pinnedItems.count == 1)
     }
 
     @Test("Trim to max size removes oldest unpinned items")
@@ -157,41 +180,42 @@ struct ClipboardManagerTests {
     }
 
     @Test("Load persisted history uses history store")
-    func loadPersistedHistory() {
+    func loadPersistedHistory() async {
         let (manager, history, settings, _) = makeManager()
         settings.persistAcrossReboots = true
 
         let item = ClipboardItem(content: .text("persisted"), contentType: .plainText)
-        history.loadResult = ([item], [])
+        await history.setLoadResult([StoredEntry(item: item)])
 
-        manager.loadPersistedHistory()
+        await manager.loadPersistedHistory()
 
         #expect(manager.items.count == 1)
         #expect(manager.items.first?.plainText == "persisted")
     }
 
     @Test("Load persisted history skipped when persistence disabled")
-    func loadPersistedHistoryDisabled() {
+    func loadPersistedHistoryDisabled() async {
         let (manager, history, settings, _) = makeManager()
         settings.persistAcrossReboots = false
 
         let item = ClipboardItem(content: .text("persisted"), contentType: .plainText)
-        history.loadResult = ([item], [])
+        await history.setLoadResult([StoredEntry(item: item)])
 
-        manager.loadPersistedHistory()
+        await manager.loadPersistedHistory()
 
         #expect(manager.items.isEmpty)
     }
 
     @Test("Save history skipped when persistence disabled")
-    func saveHistoryDisabled() {
+    func saveHistoryDisabled() async {
         let (manager, history, settings, _) = makeManager()
         settings.persistAcrossReboots = false
 
         manager.items = [ClipboardItem(content: .text("test"), contentType: .plainText)]
         manager.saveHistory()
+        await manager.flushPendingSaves()
 
-        #expect(history.saveCallCount == 0)
+        #expect(await history.saveCallCount == 0)
     }
 
     @Test("Content type detection")
@@ -290,7 +314,7 @@ struct ClipboardManagerTests {
         manager.selectedFilter = .developer
 
         #expect(manager.filteredItems.count == 2)
-        let allDev = try manager.filteredItems.allSatisfy(\.isDeveloperContent)
+        let allDev = manager.filteredItems.allSatisfy(\.isDeveloperContent)
         #expect(allDev)
     }
 

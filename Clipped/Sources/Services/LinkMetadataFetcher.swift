@@ -6,13 +6,13 @@ struct LinkMetadata {
     var favicon: Data?
 }
 
-@MainActor
-protocol LinkMetadataFetching: AnyObject {
+protocol LinkMetadataFetching: Sendable {
     func fetchMetadata(for url: URL) async -> LinkMetadata
 }
 
-@MainActor
-final class LinkMetadataFetcher: LinkMetadataFetching {
+/// Off-main-actor cache + network fetcher. Implemented as an `actor` so callers on the
+/// main actor don't block on the cache lookup or the URLSession response.
+actor LinkMetadataFetcher: LinkMetadataFetching {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "LinkMetadataFetcher")
 
     static let shared = LinkMetadataFetcher()

@@ -23,13 +23,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let mutationService = cm.mutationService as? ClipboardMutationService {
             mutationService.rulesProvider = sm
         }
-        cm.loadPersistedHistory()
         sw.clipboardManager = cm
         sw.requestNotificationPermission()
         if sm.captureScreenshots,
            let folder = sw.resolveBookmark()
         {
             sw.startWatching(folder: folder)
+        }
+
+        // Bootstrap the clipboard manager: load persisted history, then start monitoring.
+        // This must happen *before* the first poll so persisted items aren't clobbered.
+        Task { @MainActor in
+            await cm.bootstrap()
         }
 
         let panelContent = ClipboardPanelView()

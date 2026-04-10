@@ -4,23 +4,6 @@ import Observation
 import os
 import SwiftUI
 
-private let codeEditorBundleIDs: Set<String> = [
-    "com.microsoft.VSCode",
-    "com.apple.dt.Xcode",
-    "com.sublimetext.4",
-    "com.jetbrains.intellij",
-    "dev.zed.Zed",
-    "com.todesktop.230313mzl4w4u92", // Cursor
-]
-
-private let terminalBundleIDs: Set<String> = [
-    "com.apple.Terminal",
-    "com.googlecode.iterm2",
-    "io.alacritty",
-    "com.github.wez.wezterm",
-    "net.kovidgoyal.kitty",
-]
-
 private let passwordManagerBundleIDs: Set<String> = [
     "com.agilebits.onepassword7",
     "com.agilebits.onepassword-osx",
@@ -29,277 +12,236 @@ private let passwordManagerBundleIDs: Set<String> = [
     "org.keepassxc.keepassxc",
 ]
 
-/// Industry-standard pasteboard type set by password managers to mark concealed/sensitive content.
-/// See https://nspasteboard.org
-private let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
-
+/// Clipboard pipeline coordinator. Glues `PasteboardMonitor` (which produces raw items),
+/// `ClipboardHistory` (which stores filtered/pinned state), and the mutation + link-metadata
+/// services together. Also owns the pasteboard-writing actions (copy, paste, export).
+///
+/// This type used to be a 400-line god object; it is now narrow enough to be explained
+/// in one sentence. View-facing API is kept stable via computed-property forwarding so
+/// consumers of `@Environment(ClipboardManager.self)` do not churn.
 @MainActor
 @Observable
 final class ClipboardManager {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ClipboardManager")
 
-    var items: [ClipboardItem] = []
-    var pinnedItems: [ClipboardItem] = []
-    var searchQuery = ""
-    var selectedFilter: ClipboardFilter?
-    var openedViaHotkey = false
+    // MARK: - Collaborators
 
-    var settingsManager: (any SettingsManaging)?
-    var historyStore: any HistoryStoring = HistoryStore.shared
-    var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
+    let monitor: PasteboardMonitor
+    let history: ClipboardHistory
+
     var mutationService: any ClipboardMutating = ClipboardMutationService()
+    var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
 
-    private(set) var isMonitoring = false
-    private var pollTimer: Timer?
-    private var lastChangeCount: Int = 0
-    private var isCheckingClipboard = false
-    private var resumeMonitoringTask: Task<Void, Never>?
+    // MARK: - Transient UI state (not clipboard data)
 
-    static let maxHistorySize = 50
+    /// Set by the hotkey handler so the panel knows to suppress the quick-menu check.
+    var openedViaHotkey = false
+    /// Captured by `StatusBarController` when the user option-clicks the status bar icon,
+    /// so the panel can read it synchronously instead of racing `NSEvent.modifierFlags`.
+    var openedWithOption = false
 
-    private static let pollInterval: TimeInterval = 0.5
-    private static let monitoringResumeDelay: Duration = .milliseconds(200)
-    private static let vKeyCode: UInt16 = 0x09
+    // MARK: - Forwarded history API (keeps existing view/test call sites working)
 
-    /// Unique (bundleID, appName) pairs from current history, for settings UI.
-    var recentSourceApps: [(bundleID: String, appName: String)] {
-        var seen = Set<String>()
-        var result: [(bundleID: String, appName: String)] = []
-        for item in items + pinnedItems {
-            guard let bid = item.sourceAppBundleID, !seen.contains(bid) else { continue }
-            seen.insert(bid)
-            result.append((bid, item.sourceAppName ?? bid))
-        }
-        return result.sorted { $0.appName.localizedCaseInsensitiveCompare($1.appName) == .orderedAscending }
+    typealias ClearedSnapshot = ClipboardHistory.ClearedSnapshot
+
+    static let maxHistorySize = ClipboardHistory.defaultMaxHistorySize
+
+    var items: [ClipboardItem] {
+        get { history.items }
+        set { history.items = newValue }
     }
 
-    var filteredPinnedItems: [ClipboardItem] {
-        applyFilters(to: pinnedItems)
+    var pinnedItems: [ClipboardItem] {
+        get { history.pinnedItems }
+        set { history.pinnedItems = newValue }
+    }
+
+    var searchQuery: String {
+        get { history.searchQuery }
+        set { history.searchQuery = newValue }
+    }
+
+    var selectedFilter: ClipboardFilter? {
+        get { history.selectedFilter }
+        set { history.selectedFilter = newValue }
     }
 
     var filteredItems: [ClipboardItem] {
-        applyFilters(to: items)
+        history.filteredItems
     }
 
-    private func applyFilters(to source: [ClipboardItem]) -> [ClipboardItem] {
-        var result = source
-        switch selectedFilter {
-        case let .contentType(type):
-            result = result.filter { $0.contentType == type }
-        case .text:
-            result = result.filter { $0.contentType == .plainText || $0.contentType == .richText }
-        case .developer:
-            result = result.filter(\.isDeveloperContent)
-        case nil:
-            break
-        }
-        if !searchQuery.isEmpty {
-            result = result.filter { item in
-                item.preview.localizedCaseInsensitiveContains(searchQuery)
-            }
-        }
-        return result
+    var filteredPinnedItems: [ClipboardItem] {
+        history.filteredPinnedItems
     }
+
+    var recentSourceApps: [(bundleID: String, appName: String)] {
+        history.recentSourceApps
+    }
+
+    var isMonitoring: Bool {
+        monitor.isMonitoring
+    }
+
+    var settingsManager: (any SettingsManaging)? {
+        get { history.settingsManager }
+        set { history.settingsManager = newValue }
+    }
+
+    var historyStore: any HistoryStoring {
+        get { history.historyStore }
+        set { history.historyStore = newValue }
+    }
+
+    // MARK: - Init
 
     init() {
-        lastChangeCount = NSPasteboard.general.changeCount
-        startMonitoring()
+        monitor = PasteboardMonitor()
+        history = ClipboardHistory()
+        monitor.onNewItem = { [weak self] event in
+            self?.ingest(event)
+        }
     }
 
-    func loadPersistedHistory() {
-        guard settingsManager?.persistAcrossReboots == true else { return }
-        let (loaded, pinned) = historyStore.load()
-        if items.isEmpty { items = loaded }
-        if pinnedItems.isEmpty { pinnedItems = pinned }
-    }
+    // MARK: - Lifecycle
 
-    func saveHistory() {
-        guard settingsManager?.persistAcrossReboots == true else { return }
-        historyStore.save(items: items, pinnedItems: pinnedItems)
+    /// Load persisted history and then start clipboard monitoring.
+    /// Must be called from the AppDelegate after all dependencies have been wired.
+    func bootstrap() async {
+        await history.loadPersistedHistory()
+        monitor.resetBaseline()
+        monitor.startMonitoring()
     }
 
     func startMonitoring() {
-        guard !isMonitoring else { return }
-        Self.logger.debug("Starting clipboard monitoring")
-        isMonitoring = true
-        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.checkClipboard()
-            }
-        }
+        monitor.startMonitoring()
     }
 
     func stopMonitoring() {
-        Self.logger.debug("Stopping clipboard monitoring")
-        isMonitoring = false
-        pollTimer?.invalidate()
-        pollTimer = nil
+        monitor.stopMonitoring()
     }
 
-    /// Pause monitoring, perform a clipboard mutation, then resume after a brief delay.
-    private func withMonitoringPaused(_ body: () -> Void) {
-        resumeMonitoringTask?.cancel()
-        stopMonitoring()
-        body()
-        lastChangeCount = NSPasteboard.general.changeCount
-        resumeMonitoringTask = Task {
-            try? await Task.sleep(for: Self.monitoringResumeDelay)
-            guard !Task.isCancelled else { return }
-            startMonitoring()
+    // MARK: - Forwarded history mutations
+
+    func loadPersistedHistory() async {
+        await history.loadPersistedHistory()
+    }
+
+    func saveHistory() {
+        history.saveHistory()
+    }
+
+    func flushPendingSaves() async {
+        await history.flushPendingSaves()
+    }
+
+    func trimToMaxSize() {
+        history.trimToMaxSize()
+    }
+
+    func togglePin(_ item: ClipboardItem) {
+        history.togglePin(item)
+    }
+
+    func removeItem(_ item: ClipboardItem) {
+        history.removeItem(item)
+    }
+
+    @discardableResult
+    func clearAll(includePinned: Bool = false) -> ClearedSnapshot {
+        history.clearAll(includePinned: includePinned)
+    }
+
+    func restore(_ snapshot: ClearedSnapshot) {
+        history.restore(snapshot)
+    }
+
+    // MARK: - Pipeline ingestion
+
+    private struct PasswordManagerPolicy {
+        let isFromPasswordManager: Bool
+        let secureMode: Bool
+        let secureTimeout: Int
+
+        /// True when we should not ingest this item at all.
+        var shouldSkip: Bool {
+            isFromPasswordManager && secureMode && secureTimeout == 0
+        }
+
+        /// True when we ingest but schedule auto-removal (and do not persist).
+        var pendingRemoval: Bool {
+            isFromPasswordManager && secureMode && secureTimeout > 0
         }
     }
 
-    private func checkClipboard() {
-        guard !isCheckingClipboard else { return }
-        isCheckingClipboard = true
-        defer { isCheckingClipboard = false }
-        let pasteboard = NSPasteboard.general
-        let currentCount = pasteboard.changeCount
-        guard currentCount != lastChangeCount else { return }
-        lastChangeCount = currentCount
-
-        let frontmostApp = NSWorkspace.shared.frontmostApplication
-        let bundleID = frontmostApp?.bundleIdentifier
-
-        let hasConcealedType = pasteboard.types?.contains(concealedType) ?? false
-        let isFromPasswordManager = hasConcealedType
+    private func passwordPolicy(hasConcealed: Bool, bundleID: String?) -> PasswordManagerPolicy {
+        let isFromPasswordManager = hasConcealed
             || (bundleID.map { passwordManagerBundleIDs.contains($0) } ?? false)
-        let secureMode = settingsManager?.secureMode ?? true
-        let secureTimeout = settingsManager?.secureTimeout ?? 0
+        return PasswordManagerPolicy(
+            isFromPasswordManager: isFromPasswordManager,
+            secureMode: settingsManager?.secureMode ?? true,
+            secureTimeout: settingsManager?.secureTimeout ?? 0
+        )
+    }
 
-        // Secure mode: skip or auto-expire sensitive items
-        if isFromPasswordManager, secureMode, secureTimeout == 0 {
-            return
-        }
+    private func ingest(_ event: PasteboardMonitor.NewItemEvent) {
+        let policy = passwordPolicy(hasConcealed: event.hasConcealedType, bundleID: event.bundleID)
+        if policy.shouldSkip { return }
 
-        guard var item = readClipboardItem(
-            from: pasteboard,
-            appName: frontmostApp?.localizedName,
-            bundleID: bundleID
-        ) else { return }
-
-        // Apply clipboard mutations (strip tracking params, trim whitespace, etc.)
-        item = mutationService.apply(to: item, sourceAppBundleID: bundleID)
+        var item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
-        // regardless of whether secure mode UI behavior is enabled
-        if isFromPasswordManager {
+        // regardless of whether secure mode UI behavior is enabled.
+        if policy.isFromPasswordManager {
             item.isSensitive = true
         }
 
-        // Deduplicate: remove existing item with same content
-        items.removeAll { $0.content == item.content && !$0.isPinned }
+        history.insert(item)
 
-        items.insert(item, at: 0)
-
-        // Schedule auto-removal for password manager items — don't persist until removed
-        let pendingRemoval = isFromPasswordManager && secureMode && secureTimeout > 0
-        if pendingRemoval {
-            let itemID = item.id
-            Task {
-                try? await Task.sleep(for: .seconds(secureTimeout))
-                items.removeAll { $0.id == itemID }
-                saveHistory()
-            }
+        if policy.pendingRemoval {
+            scheduleSecureAutoRemoval(itemID: item.id, timeout: policy.secureTimeout)
         }
-
-        // Fetch link metadata (title + favicon) for URLs
         if case let .url(url) = item.content {
-            Task {
-                let metadata = await linkMetadataFetcher.fetchMetadata(for: url)
-                item.linkTitle = metadata.title
-                item.linkFavicon = metadata.favicon
-                saveHistory()
-            }
+            scheduleLinkMetadataFetch(for: url, itemID: item.id)
         }
 
-        trimToMaxSize()
+        history.trimToMaxSize()
 
-        if !pendingRemoval {
-            saveHistory()
+        if !policy.pendingRemoval {
+            history.saveHistory()
         }
     }
 
-    private func readClipboardItem(
-        from pasteboard: NSPasteboard,
-        appName: String?,
-        bundleID: String?
-    ) -> ClipboardItem? {
-        let types = pasteboard.types ?? []
-
-        // Check for image first
-        if types.contains(.tiff) || types.contains(.png) {
-            if let imageData = pasteboard.data(forType: .tiff) ?? pasteboard.data(forType: .png) {
-                if let image = NSImage(data: imageData) {
-                    return ClipboardItem(
-                        content: .image(imageData, image.size),
-                        contentType: .image,
-                        sourceAppName: appName,
-                        sourceAppBundleID: bundleID
-                    )
-                }
-            }
+    private func scheduleSecureAutoRemoval(itemID: UUID, timeout: Int) {
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(timeout))
+            guard let self else { return }
+            history.items.removeAll { $0.id == itemID }
+            history.saveHistory()
         }
+    }
 
-        // Check for URL
-        if types.contains(.URL), let url = URL(string: pasteboard.string(forType: .string) ?? "") {
-            if url.scheme == "http" || url.scheme == "https" {
-                return ClipboardItem(
-                    content: .url(url),
-                    contentType: .url,
-                    sourceAppName: appName,
-                    sourceAppBundleID: bundleID
-                )
-            }
-        }
-
-        // Check for rich text
-        if types.contains(.rtf), let rtfData = pasteboard.data(forType: .rtf) {
-            let plainText = pasteboard.string(forType: .string) ?? ""
-            return ClipboardItem(
-                content: .richText(rtfData, plainText),
-                contentType: .richText,
-                sourceAppName: appName,
-                sourceAppBundleID: bundleID
-            )
-        }
-
-        // Plain text / code
-        if let string = pasteboard.string(forType: .string), !string.isEmpty {
-            // Detect URLs pasted as plain text (no .URL pasteboard type)
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.contains(" "), !trimmed.contains("\n"),
-               let url = URL(string: trimmed),
-               url.scheme == "http" || url.scheme == "https"
+    private func scheduleLinkMetadataFetch(for url: URL, itemID: UUID) {
+        let fetcher = linkMetadataFetcher
+        Task { [weak self] in
+            let metadata = await fetcher.fetchMetadata(for: url)
+            guard let self else { return }
+            // Look up by ID in case the item was replaced/restored after mutation.
+            if let found = history.items.first(where: { $0.id == itemID })
+                ?? history.pinnedItems.first(where: { $0.id == itemID })
             {
-                return ClipboardItem(
-                    content: .url(url),
-                    contentType: .url,
-                    sourceAppName: appName,
-                    sourceAppBundleID: bundleID
-                )
+                found.linkTitle = metadata.title
+                found.linkFavicon = metadata.favicon
+                history.saveHistory()
             }
-
-            let isFromCodeEditor = bundleID.map { codeEditorBundleIDs.contains($0) } ?? false
-            let isFromTerminal = bundleID.map { terminalBundleIDs.contains($0) } ?? false
-            let isDevContent = isFromCodeEditor || isFromTerminal
-                || DeveloperContentDetector.isDeveloperContent(string)
-            return ClipboardItem(
-                content: .text(string),
-                contentType: .plainText,
-                sourceAppName: appName,
-                sourceAppBundleID: bundleID,
-                isDeveloperContent: isDevContent
-            )
         }
-
-        return nil
     }
 
-    // MARK: - Actions
+    // MARK: - Pasteboard-writing actions
+
+    private static let vKeyCode: UInt16 = 0x09
 
     func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
-        withMonitoringPaused {
+        monitor.write {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
 
@@ -316,7 +258,9 @@ final class ClipboardManager {
             case let .url(url):
                 pasteboard.setString(url.absoluteString, forType: .string)
             case let .image(data, _):
-                pasteboard.setData(data, forType: .tiff)
+                // Sniff magic bytes so we advertise the real format.
+                let pasteboardType: NSPasteboard.PasteboardType = Self.isPNGData(data) ? .png : .tiff
+                pasteboard.setData(data, forType: pasteboardType)
             }
         }
 
@@ -324,11 +268,14 @@ final class ClipboardManager {
             NSSound(named: "Pop")?.play()
         }
 
-        // Move item to top
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
-            let moved = items.remove(at: index)
-            items.insert(moved, at: 0)
-        }
+        history.moveToTop(item)
+    }
+
+    private static func isPNGData(_ data: Data) -> Bool {
+        // PNG magic: 89 50 4E 47 0D 0A 1A 0A
+        let magic: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
+        guard data.count >= magic.count else { return false }
+        return data.prefix(magic.count).elementsEqual(magic)
     }
 
     func pasteMatchingStyle(_ item: ClipboardItem) {
@@ -370,7 +317,7 @@ final class ClipboardManager {
             return
         }
 
-        withMonitoringPaused {
+        monitor.write {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
@@ -381,25 +328,11 @@ final class ClipboardManager {
         let merged = items.compactMap(\.plainText).joined(separator: "\n\n---\n\n")
         guard !merged.isEmpty else { return }
 
-        withMonitoringPaused {
+        monitor.write {
             let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(merged, forType: .string)
         }
-    }
-
-    func togglePin(_ item: ClipboardItem) {
-        item.isPinned.toggle()
-        if item.isPinned {
-            if let index = items.firstIndex(where: { $0.id == item.id }) {
-                items.remove(at: index)
-            }
-            pinnedItems.append(item)
-        } else {
-            pinnedItems.removeAll { $0.id == item.id }
-            items.insert(item, at: 0)
-        }
-        saveHistory()
     }
 
     func restoreOriginal(_ item: ClipboardItem) {
@@ -407,31 +340,6 @@ final class ClipboardManager {
         item.content = original
         item.originalContent = nil
         item.mutationsApplied = []
-        saveHistory()
-    }
-
-    func removeItem(_ item: ClipboardItem) {
-        items.removeAll { $0.id == item.id }
-        pinnedItems.removeAll { $0.id == item.id }
-        saveHistory()
-    }
-
-    func clearAll(includePinned: Bool = false) {
-        items.removeAll()
-        if includePinned {
-            pinnedItems.removeAll()
-        }
-        saveHistory()
-    }
-
-    /// Remove oldest unpinned items beyond the configured max history size.
-    /// Pinned and developer-content items are exempt from the cap.
-    func trimToMaxSize() {
-        let limit = settingsManager?.maxHistorySize ?? Self.maxHistorySize
-        while items.count(where: { !$0.isPinned && !$0.isDeveloperContent }) > limit {
-            if let lastTrimmable = items.lastIndex(where: { !$0.isPinned && !$0.isDeveloperContent }) {
-                items.remove(at: lastTrimmable)
-            }
-        }
+        history.saveHistory()
     }
 }

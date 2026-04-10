@@ -2,16 +2,15 @@ import AppKit
 import Foundation
 import os
 
-@MainActor
-protocol HistoryStoring: AnyObject {
-    func save(items: [ClipboardItem], pinnedItems: [ClipboardItem])
-    func load() -> (items: [ClipboardItem], pinned: [ClipboardItem])
-    func clear()
+protocol HistoryStoring: Sendable {
+    func save(entries: [StoredEntry]) async
+    func load() async -> [StoredEntry]
+    func clear() async
 }
 
 /// Persists clipboard history to a JSON file in the app's support directory.
-@MainActor
-final class HistoryStore: HistoryStoring {
+/// Disk I/O is isolated to this actor so callers on the main actor never block the UI.
+actor HistoryStore: HistoryStoring {
     static let shared = HistoryStore()
 
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "HistoryStore")
@@ -28,8 +27,7 @@ final class HistoryStore: HistoryStoring {
         fileURL = appDir.appendingPathComponent("history.json")
     }
 
-    func save(items: [ClipboardItem], pinnedItems: [ClipboardItem]) {
-        let entries = (items + pinnedItems).filter { !$0.isSensitive }.map { StoredEntry(from: $0) }
+    func save(entries: [StoredEntry]) async {
         do {
             let data = try JSONEncoder().encode(entries)
             // Write to a temp file with restricted permissions, then atomically move into place.
@@ -41,15 +39,19 @@ final class HistoryStore: HistoryStoring {
                 contents: data,
                 attributes: [.posixPermissions: 0o600]
             )
-            _ = try FileManager.default.replaceItemAt(fileURL, withItemAt: tempURL)
+            _ = try FileManager.default.replaceItemAt(
+                fileURL,
+                withItemAt: tempURL,
+                options: .usingNewMetadataOnly
+            )
         } catch {
             Self.logger.error("Failed to save clipboard history: \(error.localizedDescription)")
         }
     }
 
-    func load() -> (items: [ClipboardItem], pinned: [ClipboardItem]) {
+    func load() async -> [StoredEntry] {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            return ([], [])
+            return []
         }
 
         let data: Data
@@ -57,44 +59,31 @@ final class HistoryStore: HistoryStoring {
             data = try Data(contentsOf: fileURL)
         } catch {
             Self.logger.error("Failed to read history file: \(error.localizedDescription)")
-            return ([], [])
+            return []
         }
 
-        let entries: [StoredEntry]
         do {
-            entries = try JSONDecoder().decode([StoredEntry].self, from: data)
+            return try JSONDecoder().decode([StoredEntry].self, from: data)
         } catch {
             Self.logger.error("History file corrupted, backing up and starting fresh: \(error.localizedDescription)")
             let backupURL = fileURL.deletingLastPathComponent()
                 .appendingPathComponent("history.corrupted.json")
             try? FileManager.default.moveItem(at: fileURL, to: backupURL)
-            return ([], [])
+            return []
         }
-
-        var items: [ClipboardItem] = []
-        var pinned: [ClipboardItem] = []
-
-        for entry in entries {
-            guard let item = entry.toClipboardItem() else { continue }
-            if item.isPinned {
-                pinned.append(item)
-            } else {
-                items.append(item)
-            }
-        }
-
-        return (items, pinned)
     }
 
-    func clear() {
+    func clear() async {
         try? FileManager.default.removeItem(at: fileURL)
     }
 }
 
 // MARK: - Codable storage model
 
-@MainActor
-private struct StoredEntry: Codable {
+/// Serialization-friendly snapshot of a ClipboardItem. Conversions that touch
+/// ClipboardItem live in a @MainActor extension so this struct itself is Sendable
+/// by default (all stored properties are value types).
+struct StoredEntry: Codable {
     let id: UUID
     let contentType: String
     let textContent: String?
@@ -110,17 +99,18 @@ private struct StoredEntry: Codable {
     let isDeveloperContent: Bool?
     let linkTitle: String?
     let linkFavicon: Data?
+    let mutationsApplied: [String]?
+}
 
-    init(from item: ClipboardItem) {
-        id = item.id
-        contentType = item.contentType.rawValue
-        sourceAppName = item.sourceAppName
-        sourceAppBundleID = item.sourceAppBundleID
-        timestamp = item.timestamp
-        isPinned = item.isPinned
-        isDeveloperContent = item.isDeveloperContent
-        linkTitle = item.linkTitle
-        linkFavicon = item.linkFavicon
+@MainActor
+extension StoredEntry {
+    init(item: ClipboardItem) {
+        let textContent: String?
+        let rtfData: Data?
+        let urlString: String?
+        let imageData: Data?
+        let imageWidth: Double?
+        let imageHeight: Double?
 
         switch item.content {
         case let .text(string):
@@ -152,6 +142,25 @@ private struct StoredEntry: Codable {
             imageWidth = size.width
             imageHeight = size.height
         }
+
+        self.init(
+            id: item.id,
+            contentType: item.contentType.rawValue,
+            textContent: textContent,
+            rtfData: rtfData,
+            urlString: urlString,
+            imageData: imageData,
+            imageWidth: imageWidth,
+            imageHeight: imageHeight,
+            sourceAppName: item.sourceAppName,
+            sourceAppBundleID: item.sourceAppBundleID,
+            timestamp: item.timestamp,
+            isPinned: item.isPinned,
+            isDeveloperContent: item.isDeveloperContent,
+            linkTitle: item.linkTitle,
+            linkFavicon: item.linkFavicon,
+            mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied
+        )
     }
 
     func toClipboardItem() -> ClipboardItem? {
@@ -193,6 +202,7 @@ private struct StoredEntry: Codable {
         )
         item.linkTitle = linkTitle
         item.linkFavicon = linkFavicon
+        item.mutationsApplied = mutationsApplied ?? []
         return item
     }
 }

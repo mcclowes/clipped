@@ -75,17 +75,28 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         }
     }
 
+    /// Guards against re-entrant `didSet` when we roll back on a failed register/unregister.
+    private var isRevertingLaunchAtLogin = false
+
+    /// The most recent error surfaced from SMAppService so settings UI can display it.
+    private(set) var launchAtLoginError: String?
+
     var launchAtLogin: Bool {
         didSet {
+            guard !isRevertingLaunchAtLogin else { return }
             do {
                 if launchAtLogin {
                     try SMAppService.mainApp.register()
                 } else {
                     try SMAppService.mainApp.unregister()
                 }
+                launchAtLoginError = nil
             } catch {
                 Self.logger.error("Failed to update launch-at-login: \(error.localizedDescription)")
-                launchAtLogin.toggle()
+                launchAtLoginError = error.localizedDescription
+                isRevertingLaunchAtLogin = true
+                launchAtLogin = oldValue
+                isRevertingLaunchAtLogin = false
             }
         }
     }

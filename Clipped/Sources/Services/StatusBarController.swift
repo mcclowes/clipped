@@ -49,6 +49,10 @@ final class StatusBarController {
     }
 
     @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
+        // Capture modifier state at click time. Reading `NSEvent.modifierFlags` later
+        // (from a popover notification) races with the user releasing the key.
+        let optionHeld = NSApp.currentEvent?.modifierFlags.contains(.option) ?? false
+        AppState.shared.clipboardManager.openedWithOption = optionHeld
         toggle()
     }
 

@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Observation
 
 enum ContentType: String, CaseIterable, Identifiable {
     case plainText = "Text"
@@ -107,6 +108,7 @@ enum DeveloperContentDetector {
 }
 
 @MainActor
+@Observable
 final class ClipboardItem: Identifiable {
     let id: UUID
     var content: ClipboardContent

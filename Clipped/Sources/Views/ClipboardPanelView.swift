@@ -3,10 +3,12 @@ import SwiftUI
 struct ClipboardPanelView: View {
     @Environment(ClipboardManager.self) private var manager
     @State private var showClearConfirmation = false
-    @State private var recentlyClearedItems: [ClipboardItem]?
+    @State private var clearedSnapshot: ClipboardManager.ClearedSnapshot?
+    @State private var clearedCleanupTask: Task<Void, Never>?
     @State private var selectedIndex: Int?
     @State private var showQuickMenu = false
     @State private var showCopiedToast = false
+    @State private var copiedToastToken = 0
     @FocusState private var isSearchFocused: Bool
 
     private var allVisibleItems: [ClipboardItem] {
@@ -24,9 +26,14 @@ struct ClipboardPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSPopover.willShowNotification)) { _ in
             if manager.openedViaHotkey {
                 manager.openedViaHotkey = false
+                manager.openedWithOption = false
                 showQuickMenu = false
             } else {
-                showQuickMenu = NSEvent.modifierFlags.contains(.option)
+                // StatusBarController captures the modifier state at click time and sets
+                // openedWithOption — reading NSEvent.modifierFlags here is a race, the
+                // user will typically have released the key by the time the notification fires.
+                showQuickMenu = manager.openedWithOption
+                manager.openedWithOption = false
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSPopover.didCloseNotification)) { _ in
@@ -246,27 +253,16 @@ struct ClipboardPanelView: View {
     private var bottomBar: some View {
         HStack {
             Button("Clear All") {
-                recentlyClearedItems = manager.items
-                manager.clearAll()
-
-                Task {
-                    try? await Task.sleep(for: .seconds(3))
-                    recentlyClearedItems = nil
-                }
+                performClearAll()
             }
             .buttonStyle(.plain)
             .font(.caption)
             .foregroundStyle(.secondary)
             .disabled(manager.items.isEmpty)
 
-            if recentlyClearedItems != nil {
+            if clearedSnapshot != nil {
                 Button("Undo") {
-                    if let cleared = recentlyClearedItems {
-                        for item in cleared.reversed() {
-                            manager.items.append(item)
-                        }
-                        recentlyClearedItems = nil
-                    }
+                    performUndoClear()
                 }
                 .buttonStyle(.plain)
                 .font(.caption)
@@ -279,7 +275,8 @@ struct ClipboardPanelView: View {
                 let allTextItems = manager.filteredPinnedItems + manager.filteredItems
                 manager.exportItems(allTextItems)
             } label: {
-                Image(systemName: "square.and.arrow.up")
+                Label("Export visible items", systemImage: "square.and.arrow.up")
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
@@ -287,7 +284,8 @@ struct ClipboardPanelView: View {
             .disabled(manager.filteredPinnedItems.isEmpty && manager.filteredItems.isEmpty)
 
             Button(action: openSettings) {
-                Image(systemName: "gear")
+                Label("Settings", systemImage: "gear")
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
@@ -296,7 +294,8 @@ struct ClipboardPanelView: View {
             Button {
                 NSApplication.shared.terminate(nil)
             } label: {
-                Image(systemName: "power")
+                Label("Quit Clipped", systemImage: "power")
+                    .labelStyle(.iconOnly)
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
@@ -304,6 +303,25 @@ struct ClipboardPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private func performClearAll() {
+        clearedCleanupTask?.cancel()
+        clearedSnapshot = manager.clearAll()
+        clearedCleanupTask = Task {
+            try? await Task.sleep(for: .seconds(3))
+            guard !Task.isCancelled else { return }
+            clearedSnapshot = nil
+        }
+    }
+
+    private func performUndoClear() {
+        clearedCleanupTask?.cancel()
+        clearedCleanupTask = nil
+        if let snapshot = clearedSnapshot {
+            manager.restore(snapshot)
+        }
+        clearedSnapshot = nil
     }
 
     private func sectionHeader(_ title: String) -> some View {
@@ -376,11 +394,16 @@ struct ClipboardPanelView: View {
     }
 
     private func dismissAfterCopy() {
+        copiedToastToken &+= 1
+        let token = copiedToastToken
         withAnimation(.easeIn(duration: 0.15)) {
             showCopiedToast = true
         }
         Task {
             try? await Task.sleep(for: .milliseconds(400))
+            // Only dismiss if we're still the current toast; rapid copies must not
+            // race each other.
+            guard token == copiedToastToken else { return }
             showCopiedToast = false
             dismissPanel()
         }
