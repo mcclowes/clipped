@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import LinkPresentation
+@preconcurrency import LinkPresentation
 import os
 import UniformTypeIdentifiers
 

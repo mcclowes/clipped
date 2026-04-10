@@ -2,10 +2,12 @@
 import Testing
 
 struct SecretDetectorTests {
-    // Fixtures are assembled at runtime via concatenation so the literal source bytes
-    // never contain a full secret-looking token. This keeps GitHub push-protection happy
-    // while still giving the detector a string that matches its regexes.
-    private static func token(_ prefix: String, _ body: String) -> String { prefix + body }
+    /// Fixtures are assembled at runtime via concatenation so the literal source bytes
+    /// never contain a full secret-looking token. This keeps GitHub push-protection happy
+    /// while still giving the detector a string that matches its regexes.
+    private static func token(_ prefix: String, _ body: String) -> String {
+        prefix + body
+    }
 
     @Test("Detects Stripe/Clerk secret and publishable keys")
     func detectsStripeStyle() {
