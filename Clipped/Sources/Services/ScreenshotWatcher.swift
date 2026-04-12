@@ -101,12 +101,12 @@ final class ScreenshotWatcher {
             eventMask: [.write, .rename, .delete],
             queue: DispatchQueue.global(qos: .utility)
         )
-        source.setEventHandler {
-            Task { @MainActor [weak self] in
+        source.setEventHandler { @Sendable [weak self] in
+            Task { @MainActor in
                 self?.handleDirectoryChange()
             }
         }
-        source.setCancelHandler { [fd] in
+        source.setCancelHandler { @Sendable [fd] in
             close(fd)
         }
         dispatchSource = source

@@ -22,7 +22,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.clipped
-        MARKETING_VERSION: "1.4.1"
+        MARKETING_VERSION: "1.4.2"
         CURRENT_PROJECT_VERSION: 1
         INFOPLIST_FILE: Resources/Info.plist
         CODE_SIGN_ENTITLEMENTS: Resources/Clipped.entitlements
