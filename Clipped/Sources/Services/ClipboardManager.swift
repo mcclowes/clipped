@@ -235,7 +235,13 @@ final class ClipboardManager {
 
     private func scheduleSecureAutoRemoval(itemID: UUID, timeout: Int) {
         Task { [weak self] in
-            try? await Task.sleep(for: .seconds(timeout))
+            // Propagate cancellation: a cancelled sleep should NOT trigger removal (the opposite
+            // of `try?`, which would fire the removal immediately on cancel).
+            do {
+                try await Task.sleep(for: .seconds(timeout))
+            } catch {
+                return
+            }
             guard let self else { return }
             history.items.removeAll { $0.id == itemID }
             history.saveHistory()

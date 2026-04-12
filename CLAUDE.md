@@ -16,48 +16,21 @@ make clean     # Clean build artifacts
 
 ## Project structure
 
-```
-Clipped/
-  project.yml              # XcodeGen spec (source of truth for Xcode project)
-  Sources/
-    App/ClippedApp.swift   # Entry point, MenuBarExtra setup
-    Models/ClipboardItem.swift
-    Services/
-      ClipboardManager.swift        # Core clipboard polling + item management
-      ClipboardMutationService.swift # Clipboard content transformations
-      SettingsManager.swift         # UserDefaults + SMAppService wrapper
-      HistoryStore.swift            # JSON persistence to ~/Library/Application Support/Clipped/
-      HotkeyManager.swift          # Carbon global hotkey (Cmd+Shift+V)
-      LinkMetadataFetcher.swift     # Async URL title fetching
-      MarkdownConverter.swift       # RTF -> Markdown
-      ScreenshotWatcher.swift       # Monitors for new screenshots
-      StatusBarController.swift     # NSPopover-based menu bar controller
-    Views/
-      ClipboardPanelView.swift
-      SettingsView.swift
-      StickyNoteView.swift
-      Components/
-        ClipboardItemRow.swift
-        SearchBar.swift
-        ContentTypeFilterBar.swift
-        FloatingPanelModifier.swift
-        KeyRecorderView.swift
-        OnboardingOverlay.swift
-  Tests/
-    ClipboardManagerTests.swift
-    ClipboardMutationTests.swift
-    DeveloperContentDetectorTests.swift
-    HexColorParserTests.swift
-    HistoryStoreTests.swift
-    LinkMetadataFetcherTests.swift
-    MarkdownConverterTests.swift
-    SettingsManagerTests.swift
-    Mocks.swift
-  Resources/
-    Info.plist
-    Clipped.entitlements
-    Assets.xcassets/         # App icon
-```
+All Swift code lives under `Clipped/`. Run `find Clipped/Sources Clipped/Tests -name '*.swift'` for an
+authoritative listing — do not hand-maintain a tree here (it rots). Notable services:
+
+- `Sources/Services/ClipboardManager.swift` — orchestrator for ingestion, policy, history persistence scheduling
+- `Sources/Services/PasteboardMonitor.swift` — polls `NSPasteboard.changeCount`
+- `Sources/Services/ClipboardHistory.swift` — in-memory history + debounced save
+- `Sources/Services/HistoryStore.swift` + `HistoryCrypto.swift` + `KeychainKeyStore.swift` — encrypted persistence
+- `Sources/Services/LinkMetadataFetcher.swift` — `LPMetadataProvider` cache with SSRF filtering
+- `Sources/Services/ScreenshotWatcher.swift` — dispatch-source watch on `~/Desktop` screenshots
+- `Sources/Services/HotkeyManager.swift` — Carbon global hotkey
+- `Sources/Services/AppPasteboardProfiles.swift` — per-app pasteboard type profiles (e.g. Logic Pro)
+- `Sources/Services/OnboardingSeeder.swift` — first-launch example items
+
+Resources: `Resources/Info.plist`, `Resources/Clipped.entitlements`, `Resources/Assets.xcassets/`.
+Project spec: `Clipped/project.yml` (XcodeGen — source of truth).
 
 ## Pre-PR checklist
 
