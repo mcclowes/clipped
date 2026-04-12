@@ -353,6 +353,10 @@ struct StoredEntry: Codable {
     let mutationsApplied: [String]?
     /// Nullable for backward compat with v1 history files that predate content categories.
     let detectedCategories: [String]?
+    /// Opaque pasteboard payloads captured from apps with custom UTIs (Logic Pro, etc.)
+    /// so paste into the source app still works after history reload. Nullable for
+    /// backward compat with history files written before this existed.
+    let customPasteboardTypes: [String: Data]?
 
     /// Copy of this entry with `imageData` cleared, used when writing the JSON envelope
     /// so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
@@ -376,7 +380,8 @@ struct StoredEntry: Codable {
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
-            detectedCategories: detectedCategories
+            detectedCategories: detectedCategories,
+            customPasteboardTypes: nil
         )
     }
 
@@ -401,7 +406,8 @@ struct StoredEntry: Codable {
             linkTitle: linkTitle,
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
-            detectedCategories: detectedCategories
+            detectedCategories: detectedCategories,
+            customPasteboardTypes: customPasteboardTypes
         )
     }
 }
@@ -481,7 +487,8 @@ extension StoredEntry {
             mutationsApplied: item.mutationsApplied.isEmpty ? nil : item.mutationsApplied,
             detectedCategories: item.detectedCategories.isEmpty
                 ? nil
-                : item.detectedCategories.map(\.rawValue).sorted()
+                : item.detectedCategories.map(\.rawValue).sorted(),
+            customPasteboardTypes: item.customPasteboardTypes
         )
     }
 
@@ -508,6 +515,7 @@ extension StoredEntry {
         item.linkTitle = linkTitle
         item.linkFavicon = linkFavicon
         item.mutationsApplied = mutationsApplied ?? []
+        item.customPasteboardTypes = customPasteboardTypes
         return item
     }
 

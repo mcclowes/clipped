@@ -199,6 +199,7 @@ private func copyItem(
     copy.linkFavicon = item.linkFavicon
     copy.originalContent = item.originalContent
     copy.mutationsApplied = item.mutationsApplied
+    copy.customPasteboardTypes = item.customPasteboardTypes
     return copy
 }
 

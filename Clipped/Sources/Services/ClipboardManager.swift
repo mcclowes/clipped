@@ -266,9 +266,12 @@ final class ClipboardManager {
     private static let vKeyCode: UInt16 = 0x09
 
     func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
+        if !asPlainText, let customTypes = item.customPasteboardTypes {
+            replayCustomPasteboardTypes(customTypes, item: item)
+            return
+        }
         monitor.write { pasteboard in
             pasteboard.clearContents()
-
             switch item.content {
             case let .text(string):
                 pasteboard.setString(string, forType: .string)
@@ -305,6 +308,25 @@ final class ClipboardManager {
             NSSound(named: "Pop")?.play()
         }
 
+        history.moveToTop(item)
+    }
+
+    /// Replay a captured map of raw pasteboard type → data (Logic Pro regions, etc.)
+    /// so paste into the source app works. Keeps `copyToClipboard` under the project's
+    /// cyclomatic-complexity ceiling by extracting the early-return path.
+    private func replayCustomPasteboardTypes(
+        _ customTypes: [String: Data],
+        item: ClipboardItem
+    ) {
+        monitor.write { pasteboard in
+            pasteboard.clearContents()
+            for (rawType, data) in customTypes {
+                pasteboard.setData(data, forType: NSPasteboard.PasteboardType(rawType))
+            }
+        }
+        if settingsManager?.playSoundOnCopy ?? true {
+            NSSound(named: "Pop")?.play()
+        }
         history.moveToTop(item)
     }
 

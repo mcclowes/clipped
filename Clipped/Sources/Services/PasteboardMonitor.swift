@@ -200,7 +200,7 @@ final class PasteboardMonitor {
             let isDevContent = isFromDevApp
                 || DeveloperContentDetector.isDeveloperContent(string)
             let detectedCategories = ContentCategoryDetector.detect(in: string)
-            return ClipboardItem(
+            let item = ClipboardItem(
                 content: .text(string),
                 contentType: .plainText,
                 sourceAppName: appName,
@@ -208,9 +208,37 @@ final class PasteboardMonitor {
                 isDeveloperContent: isDevContent,
                 detectedCategories: detectedCategories
             )
+            attachCustomPasteboardTypesIfNeeded(to: item, bundleID: bundleID, types: types)
+            return item
         }
 
         return nil
+    }
+
+    private func attachCustomPasteboardTypesIfNeeded(
+        to item: ClipboardItem,
+        bundleID: String?,
+        types: [NSPasteboard.PasteboardType]
+    ) {
+        guard AppPasteboardProfiles.profile(for: bundleID) != nil else { return }
+        item.customPasteboardTypes = snapshotPasteboardTypes(types: types)
+    }
+
+    /// Snapshot every pasteboard type's data so we can replay the full payload on copy.
+    /// Total captured size is capped so a giant app payload can't blow up history memory.
+    private func snapshotPasteboardTypes(
+        types: [NSPasteboard.PasteboardType]
+    ) -> [String: Data]? {
+        var result: [String: Data] = [:]
+        var totalBytes = 0
+        let maxTotalBytes = 2 * 1024 * 1024
+        for type in types {
+            guard let data = pasteboard.data(forType: type) else { continue }
+            totalBytes += data.count
+            if totalBytes > maxTotalBytes { return nil }
+            result[type.rawValue] = data
+        }
+        return result.isEmpty ? nil : result
     }
 
     /// Validate SVG data by rendering it through `NSImage` and wrap it in a `.svg`

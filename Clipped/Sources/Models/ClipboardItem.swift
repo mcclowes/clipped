@@ -468,6 +468,10 @@ final class ClipboardItem: Identifiable {
     var linkFavicon: Data?
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
+    /// Raw pasteboard type → data snapshot captured for items that come from apps with
+    /// custom UTIs (Logic Pro regions, etc.). Replayed on copy so pasting back into the
+    /// source app still works. Keys are pasteboard type identifiers (UTIs).
+    var customPasteboardTypes: [String: Data]?
 
     /// Convenience lookup for the source app's broad category, derived from the
     /// bundle ID at access time so the classification stays consistent with any
@@ -491,8 +495,19 @@ final class ClipboardItem: Identifiable {
         }
     }
 
+    /// App-specific pretty preview (e.g. "Logic Pro region — Guitar") when the item was
+    /// captured from a known app with a custom pasteboard format. Falls back to `nil`
+    /// so callers can use the default `preview`.
+    var appSpecificPreview: String? {
+        guard let profile = AppPasteboardProfiles.profile(for: sourceAppBundleID),
+              case let .text(string) = content
+        else { return nil }
+        return profile.prettyPreview(string)
+    }
+
     var preview: String {
-        switch content {
+        if let pretty = appSpecificPreview { return pretty }
+        return switch content {
         case let .text(string):
             String(string.prefix(200))
         case let .richText(_, plain):
