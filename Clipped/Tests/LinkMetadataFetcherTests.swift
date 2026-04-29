@@ -48,7 +48,7 @@ struct LinkMetadataFetcherTests {
             "http://[fe80::1]/",
             "http://[fc00::1]/",
             "ftp://example.com/",
-            "file:///etc/passwd"
+            "file:///etc/passwd",
         ]
     )
     func rejectsPrivateHosts(_ raw: String) throws {
