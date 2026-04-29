@@ -21,9 +21,25 @@ final class StatusBarController {
     private var floatingPanel: NSPanel?
     private var eventMonitor: Any?
 
+    /// Builds a fresh `NSHostingController` over the configured SwiftUI panel content. We keep
+    /// a builder rather than a single hosting controller because `NSPopover` and the floating
+    /// `NSPanel` cannot share one — `NSViewController.parent` is exclusive, so handing the same
+    /// controller to the panel detaches it from the popover and produces an empty popover on the
+    /// next status-bar-screen click. (See issue #71.)
+    private var hostingControllerBuilder: (() -> NSHostingController<AnyView>)?
+    private var popoverHosting: NSHostingController<AnyView>?
+    private var panelHosting: NSHostingController<AnyView>?
+
     init() {}
 
     func setup(contentView: some View) {
+        let erased = AnyView(contentView)
+        hostingControllerBuilder = {
+            let controller = NSHostingController(rootView: erased)
+            controller.view.frame = NSRect(origin: .zero, size: Self.panelSize)
+            return controller
+        }
+
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.statusItem = statusItem
 
@@ -34,13 +50,30 @@ final class StatusBarController {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        let hostingController = NSHostingController(rootView: contentView)
-        hostingController.view.frame = NSRect(origin: .zero, size: Self.panelSize)
-
         popover.contentSize = Self.panelSize
         popover.behavior = .transient
         popover.animates = true
-        popover.contentViewController = hostingController
+        popover.contentViewController = makePopoverHosting()
+    }
+
+    private func makePopoverHosting() -> NSHostingController<AnyView> {
+        if let existing = popoverHosting { return existing }
+        guard let builder = hostingControllerBuilder else {
+            fatalError("StatusBarController.setup must be called before showing")
+        }
+        let controller = builder()
+        popoverHosting = controller
+        return controller
+    }
+
+    private func makePanelHosting() -> NSHostingController<AnyView> {
+        if let existing = panelHosting { return existing }
+        guard let builder = hostingControllerBuilder else {
+            fatalError("StatusBarController.setup must be called before showing")
+        }
+        let controller = builder()
+        panelHosting = controller
+        return controller
     }
 
     func updateIcon(hasItems: Bool) {
@@ -80,6 +113,10 @@ final class StatusBarController {
     private func showAsPopover() {
         guard let button = statusItem?.button else { return }
         closePanel()
+        let hosting = makePopoverHosting()
+        if popover.contentViewController !== hosting {
+            popover.contentViewController = hosting
+        }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
@@ -101,7 +138,7 @@ final class StatusBarController {
             panel.titlebarAppearsTransparent = true
             panel.isMovableByWindowBackground = true
             panel.hidesOnDeactivate = true
-            panel.contentViewController = popover.contentViewController
+            panel.contentViewController = makePanelHosting()
             floatingPanel = panel
         }
 
