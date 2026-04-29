@@ -181,6 +181,8 @@ private final class ContinuationState: @unchecked Sendable {
 // MARK: - IP literal range helpers
 
 private struct ParsedIPv4 {
+    // IPv4 addresses are exactly four octets — a fixed-size tuple is the natural representation.
+    // swiftlint:disable:next large_tuple
     let bytes: (UInt8, UInt8, UInt8, UInt8)
 
     init?(_ string: String) {
@@ -196,14 +198,14 @@ private struct ParsedIPv4 {
 
     var isPrivateOrReserved: Bool {
         let (a, b, _, _) = bytes
-        if a == 10 { return true }                              // 10.0.0.0/8
-        if a == 127 { return true }                             // loopback
-        if a == 172 && (16...31).contains(b) { return true }    // 172.16.0.0/12
-        if a == 192 && b == 168 { return true }                 // 192.168.0.0/16
-        if a == 169 && b == 254 { return true }                 // link-local
-        if a == 0 { return true }                               // "this network"
-        if a >= 224 { return true }                             // multicast + reserved
-        if a == 100 && (64...127).contains(b) { return true }   // CGNAT 100.64.0.0/10
+        if a == 10 { return true } // 10.0.0.0/8
+        if a == 127 { return true } // loopback
+        if a == 172, (16...31).contains(b) { return true } // 172.16.0.0/12
+        if a == 192, b == 168 { return true } // 192.168.0.0/16
+        if a == 169, b == 254 { return true } // link-local
+        if a == 0 { return true } // "this network"
+        if a >= 224 { return true } // multicast + reserved
+        if a == 100, (64...127).contains(b) { return true } // CGNAT 100.64.0.0/10
         return false
     }
 }
