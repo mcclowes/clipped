@@ -202,6 +202,9 @@ final class ClipboardManager {
     }
 
     private func ingest(_ event: PasteboardMonitor.NewItemEvent) {
+        let signpost = Signposts.clipboard.beginInterval("Ingest")
+        defer { Signposts.clipboard.endInterval("Ingest", signpost) }
+
         let policy = passwordPolicy(hasConcealed: event.hasConcealedType, bundleID: event.bundleID)
         if policy.shouldSkip { return }
 

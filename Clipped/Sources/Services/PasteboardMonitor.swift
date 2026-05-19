@@ -92,7 +92,11 @@ final class PasteboardMonitor {
         // MainActor is serial; no re-entrancy guard needed.
         let currentCount = pasteboard.changeCount
         guard currentCount != lastChangeCount else { return }
+        // A delta > 1 means writes arrived faster than the poll rate and were coalesced
+        // into a single observed change — useful for spotting missed clipboard events.
+        let changeDelta = currentCount - lastChangeCount
         lastChangeCount = currentCount
+        Signposts.clipboard.emitEvent("PasteboardChange", "delta: \(changeDelta)")
 
         // Skip content flagged by nspasteboard.org convention as transient or auto-generated.
         let types = pasteboard.types ?? []

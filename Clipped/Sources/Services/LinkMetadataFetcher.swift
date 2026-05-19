@@ -30,6 +30,9 @@ actor LinkMetadataFetcher: LinkMetadataFetching {
     init() {}
 
     func fetchMetadata(for url: URL) async -> LinkMetadata {
+        let signpost = Signposts.linkMetadata.beginInterval("FetchMetadata")
+        defer { Signposts.linkMetadata.endInterval("FetchMetadata", signpost) }
+
         guard Self.isFetchableURL(url) else { return LinkMetadata() }
 
         let originKey = Self.originKey(for: url)

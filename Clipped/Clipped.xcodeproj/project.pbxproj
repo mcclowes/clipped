@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		042A37BAE4601B3E93F9DE7D /* Signposts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D37FA58DC6F86A3DF7ACF95 /* Signposts.swift */; };
 		0C3D06236C907CF2C54842BB /* SettingsManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71F765836B77D8125B2D0FA0 /* SettingsManagerTests.swift */; };
 		115646808595C1F3A916548E /* SecretDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B5B52EB28BCAA927E022A54 /* SecretDetectorTests.swift */; };
 		12DF98636556CE6B155F4FD1 /* ContentCategoryDetectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B1A96B6CDA5A1A3BBE8255D /* ContentCategoryDetectorTests.swift */; };
@@ -96,6 +97,7 @@
 		96F82AFB9240A56E0943E9CF /* ClipboardHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardHistory.swift; sourceTree = "<group>"; };
 		9B5425D705B69A21B878AA47 /* PasteboardMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteboardMonitor.swift; sourceTree = "<group>"; };
 		9CBC59EF2FC43E6EBFD03E70 /* HistoryWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryWindowView.swift; sourceTree = "<group>"; };
+		9D37FA58DC6F86A3DF7ACF95 /* Signposts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Signposts.swift; sourceTree = "<group>"; };
 		9E042705010E6DA18CABCD1C /* ClipboardItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardItem.swift; sourceTree = "<group>"; };
 		A02C2BE0BB3F651DB8914787 /* Clipped.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Clipped.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A690AB8217B21C7AAE1B9D7C /* PasteboardProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteboardProtocol.swift; sourceTree = "<group>"; };
@@ -214,6 +216,7 @@
 				A690AB8217B21C7AAE1B9D7C /* PasteboardProtocol.swift */,
 				E81BE8E2D0C7FAC791BA7ED4 /* ScreenshotWatcher.swift */,
 				E6B976EDC7FE5D9BD3742088 /* SettingsManager.swift */,
+				9D37FA58DC6F86A3DF7ACF95 /* Signposts.swift */,
 				E0BD8EEAD1418A244C4688D6 /* StatusBarController.swift */,
 			);
 			path = Services;
@@ -375,6 +378,7 @@
 				D86A7AE1C9884450028489E6 /* SearchBar.swift in Sources */,
 				FDCC42FAFCDA4E70BCB21276 /* SettingsManager.swift in Sources */,
 				85DF0716F3965419FC78AFE0 /* SettingsView.swift in Sources */,
+				042A37BAE4601B3E93F9DE7D /* Signposts.swift in Sources */,
 				FA392848F1877FF2712DE87A /* StatusBarController.swift in Sources */,
 				B89AE3DDEE61F9194BA4F486 /* StickyNoteView.swift in Sources */,
 			);

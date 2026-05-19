@@ -28,9 +28,29 @@ authoritative listing — do not hand-maintain a tree here (it rots). Notable se
 - `Sources/Services/HotkeyManager.swift` — Carbon global hotkey
 - `Sources/Services/AppPasteboardProfiles.swift` — per-app pasteboard type profiles (e.g. Logic Pro)
 - `Sources/Services/OnboardingSeeder.swift` — first-launch example items
+- `Sources/Services/Signposts.swift` — `OSSignposter` handles for performance instrumentation
 
 Resources: `Resources/Info.plist`, `Resources/Clipped.entitlements`, `Resources/Assets.xcassets/`.
 Project spec: `Clipped/project.yml` (XcodeGen — source of truth).
+
+## Observability
+
+Logging uses `os.Logger` (subsystem `com.mcclowes.clipped`, one category per service).
+
+Performance is instrumented with `OSSignposter` via `Signposts.swift`. Attach Instruments
+(the *os_signpost* / *Points of Interest* instrument) and filter on subsystem
+`com.mcclowes.clipped` to see the clipboard pipeline. Signposts emitted:
+
+| Category     | Name                     | Kind     | Source                              |
+|--------------|--------------------------|----------|-------------------------------------|
+| Clipboard    | `Ingest`                 | interval | `ClipboardManager.ingest(_:)`       |
+| Clipboard    | `PasteboardChange`       | event    | `PasteboardMonitor.check()`         |
+| History      | `SaveHistory`            | interval | `ClipboardHistory.saveHistory()`    |
+| HistoryStore | `Save` / `Load`          | interval | `HistoryStore.save/load`            |
+| HistoryStore | `CorruptedHistoryBackup` | event    | `HistoryStore.load()` recovery path |
+| LinkMetadata | `FetchMetadata`          | interval | `LinkMetadataFetcher.fetchMetadata` |
+
+Signposts are near-zero cost with no tracing tool attached, so they ship in release builds.
 
 ## Pre-PR checklist
 
