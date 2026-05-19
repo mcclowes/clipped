@@ -336,6 +336,27 @@ final class ClipboardManager {
         history.moveToTop(item)
     }
 
+    /// Writes synthesized `text` to the clipboard and records it as a fresh plain-text
+    /// history entry. Unlike `copyToClipboard`, this content did not originate from
+    /// another app — it's generated in-app (e.g. an on-device summary) so there is no
+    /// existing item to move to the top. The monitor's own write suppression means we
+    /// must insert into history explicitly.
+    func copyText(_ text: String) {
+        monitor.write { pasteboard in
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+        }
+
+        let item = ClipboardItem(content: .text(text), contentType: .plainText)
+        history.insert(item)
+        history.trimToMaxSize()
+        history.saveHistory()
+
+        if settingsManager?.playSoundOnCopy ?? true {
+            NSSound(named: "Pop")?.play()
+        }
+    }
+
     private static func isPNGData(_ data: Data) -> Bool {
         // PNG magic: 89 50 4E 47 0D 0A 1A 0A
         let magic: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]

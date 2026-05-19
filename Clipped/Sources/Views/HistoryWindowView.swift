@@ -14,6 +14,13 @@ struct HistoryWindowView: View {
     @State private var selectedItemID: ClipboardItem.ID?
     @State private var searchQuery = ""
 
+    /// True once we've confirmed the on-device model can run — gates the Summarize action.
+    @State private var summarizationAvailable = false
+    /// The item whose summary popover is currently open, if any.
+    @State private var summarizingItemID: ClipboardItem.ID?
+    /// State of the in-flight / finished summarization for `summarizingItemID`.
+    @State private var summaryPhase: SummaryPopover.Phase?
+
     var body: some View {
         NavigationSplitView {
             sidebar
@@ -38,6 +45,9 @@ struct HistoryWindowView: View {
             if selectedItemID == nil {
                 selectedItemID = displayedItems.first?.id
             }
+        }
+        .task {
+            summarizationAvailable = Summarizer.isAvailable
         }
     }
 
@@ -89,6 +99,15 @@ struct HistoryWindowView: View {
                 HistoryItemRow(item: item)
                     .tag(Optional(item.id))
                     .contextMenu { itemContextMenu(for: item) }
+                    .popover(isPresented: summaryPopoverBinding(for: item), arrowEdge: .trailing) {
+                        if let summaryPhase {
+                            SummaryPopover(
+                                phase: summaryPhase,
+                                onCopy: copySummary,
+                                onDismiss: dismissSummary
+                            )
+                        }
+                    }
             }
         }
         .listStyle(.inset)
@@ -142,6 +161,11 @@ struct HistoryWindowView: View {
 
         Button("Open as sticky note") { openWindow(value: item.id) }
 
+        if summarizationAvailable, Summarizer.canSummarize(item) {
+            Divider()
+            Button("Summarize") { startSummarizing(item) }
+        }
+
         Divider()
 
         Button(item.isPinned ? "Unpin" : "Pin") { manager.togglePin(item) }
@@ -154,6 +178,47 @@ struct HistoryWindowView: View {
                 selectedItemID = displayedItems.first?.id
             }
         }
+    }
+
+    // MARK: - Summarization
+
+    /// One-way binding for a row's summary popover: reflects whether this item is the
+    /// active one, and treats any dismissal (Escape, click-away) as a cancel.
+    private func summaryPopoverBinding(for item: ClipboardItem) -> Binding<Bool> {
+        Binding(
+            get: { summarizingItemID == item.id },
+            set: { isPresented in
+                if !isPresented { dismissSummary() }
+            }
+        )
+    }
+
+    private func startSummarizing(_ item: ClipboardItem) {
+        summarizingItemID = item.id
+        summaryPhase = .loading
+        let text = item.plainText ?? ""
+        Task {
+            let phase: SummaryPopover.Phase
+            do {
+                let summary = try await Summarizer.summarize(text)
+                phase = .result(summary)
+            } catch {
+                phase = .failure(error.localizedDescription)
+            }
+            // Ignore the result if the user moved on to a different item meanwhile.
+            guard summarizingItemID == item.id else { return }
+            summaryPhase = phase
+        }
+    }
+
+    private func copySummary(_ summary: String) {
+        manager.copyText(summary)
+        dismissSummary()
+    }
+
+    private func dismissSummary() {
+        summarizingItemID = nil
+        summaryPhase = nil
     }
 
     // MARK: - Detail pane
