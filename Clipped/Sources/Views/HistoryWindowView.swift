@@ -56,6 +56,14 @@ struct HistoryWindowView: View {
                 sidebarRow(.images, label: "Images", systemImage: "photo", count: count(for: .images))
                 sidebarRow(.developer, label: "Developer", systemImage: "curlybraces", count: count(for: .developer))
             }
+
+            if !appGroups.isEmpty {
+                Section("Applications") {
+                    ForEach(appGroups) { group in
+                        appSidebarRow(group)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
@@ -79,6 +87,31 @@ struct HistoryWindowView: View {
                 }
             }
         }
+    }
+
+    private func appSidebarRow(_ group: SourceAppGroup) -> some View {
+        NavigationLink(value: HistoryCategory.app(group.name)) {
+            HStack {
+                Label {
+                    Text(group.name)
+                } icon: {
+                    if let icon = AppIconResolver.icon(for: group.bundleID) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: "app.dashed")
+                    }
+                }
+                Spacer()
+                // `sourceAppGroups` only emits apps with at least one item.
+                Text("\(group.count)")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .help("Items copied from \(group.name)")
     }
 
     // MARK: - Item list
@@ -192,6 +225,10 @@ struct HistoryWindowView: View {
         manager.items.count + manager.pinnedItems.count
     }
 
+    private var appGroups: [SourceAppGroup] {
+        HistoryCategory.sourceAppGroups(from: manager.pinnedItems + manager.items)
+    }
+
     private func count(for category: HistoryCategory) -> Int {
         items(for: category).count
     }
@@ -211,6 +248,8 @@ struct HistoryWindowView: View {
             return merged.filter { $0.contentType == .image }
         case .developer:
             return merged.filter(\.isDeveloperContent)
+        case let .app(name):
+            return merged.filter { $0.sourceAppName == name }
         }
     }
 
@@ -235,6 +274,8 @@ enum HistoryCategory: Hashable, Identifiable {
     case urls
     case images
     case developer
+    /// Items copied from a specific source app, keyed by its display name.
+    case app(String)
 
     var id: String {
         switch self {
@@ -244,6 +285,7 @@ enum HistoryCategory: Hashable, Identifiable {
         case .urls: "urls"
         case .images: "images"
         case .developer: "developer"
+        case let .app(name): "app:\(name)"
         }
     }
 
@@ -255,7 +297,70 @@ enum HistoryCategory: Hashable, Identifiable {
         case .urls: "Links"
         case .images: "Images"
         case .developer: "Developer"
+        case let .app(name): name
         }
+    }
+}
+
+// MARK: - Source app grouping
+
+/// One source app present in the clipboard history, with how many items came from it.
+/// Drives the "Applications" section of the history sidebar.
+struct SourceAppGroup: Identifiable, Hashable {
+    let name: String
+    let bundleID: String?
+    let count: Int
+
+    var id: String {
+        name
+    }
+}
+
+extension HistoryCategory {
+    /// Buckets `items` by their source app, ordered by item count descending then name
+    /// so the busiest apps surface first. Items without a `sourceAppName` are skipped.
+    static func sourceAppGroups(from items: [ClipboardItem]) -> [SourceAppGroup] {
+        var counts: [String: Int] = [:]
+        var bundleIDs: [String: String] = [:]
+        var order: [String] = []
+
+        for item in items {
+            guard let name = item.sourceAppName, !name.isEmpty else { continue }
+            if counts[name] == nil { order.append(name) }
+            counts[name, default: 0] += 1
+            // Keep the first non-nil bundle ID seen for the app.
+            if bundleIDs[name] == nil, let bundleID = item.sourceAppBundleID {
+                bundleIDs[name] = bundleID
+            }
+        }
+
+        return order
+            .map { SourceAppGroup(name: $0, bundleID: bundleIDs[$0], count: counts[$0] ?? 0) }
+            .sorted { lhs, rhs in
+                lhs.count == rhs.count
+                    ? lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                    : lhs.count > rhs.count
+            }
+    }
+}
+
+// MARK: - App icon resolution
+
+/// Resolves and caches `NSImage` icons for source apps by bundle ID. The lookup hits
+/// Launch Services, so results are memoized for the lifetime of the process.
+@MainActor
+enum AppIconResolver {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for bundleID: String?) -> NSImage? {
+        guard let bundleID, !bundleID.isEmpty else { return nil }
+        if let cached = cache[bundleID] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        cache[bundleID] = icon
+        return icon
     }
 }
 
