@@ -21,6 +21,7 @@ struct ClipboardPanelView: View {
     @State private var showCopiedToast = false
     @State private var copiedToastToken = 0
     @FocusState private var isSearchFocused: Bool
+    @ScaledMetric private var emptyStateIconSize: CGFloat = 32
 
     /// Recent items trimmed to the quick-access cap. Pinned items are always shown in full.
     private var visibleRecentItems: [ClipboardItem] {
@@ -278,12 +279,12 @@ struct ClipboardPanelView: View {
         Button(action: openHistoryWindow) {
             HStack(spacing: 6) {
                 Image(systemName: "clock.arrow.circlepath")
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                 Text("See full history (\(manager.filteredItems.count))")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(.subheadline, weight: .medium))
                 Spacer()
                 Image(systemName: "arrow.up.right.square")
-                    .font(.system(size: 10))
+                    .font(.caption)
             }
             .foregroundStyle(.secondary)
             .padding(.horizontal, 10)
@@ -302,7 +303,7 @@ struct ClipboardPanelView: View {
         VStack(spacing: 8) {
             Spacer()
             Image(systemName: "clipboard")
-                .font(.system(size: 32))
+                .font(.system(size: emptyStateIconSize))
                 .foregroundStyle(.tertiary)
             Text("No clipboard items")
                 .font(.headline)
@@ -456,7 +457,7 @@ struct ClipboardPanelView: View {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 Text("Copied")
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(.body, weight: .medium))
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)

@@ -11,12 +11,12 @@ struct SearchBar: View {
     var body: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundStyle(.tertiary)
 
             TextField("Search clipboard...", text: $text)
                 .textFieldStyle(.plain)
-                .font(.system(size: 12))
+                .font(.callout)
                 .focused(isFocused)
                 .onKeyPress(.upArrow) {
                     onArrowUp?()
@@ -49,7 +49,7 @@ struct SearchBar: View {
                     text = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 11))
+                        .font(.subheadline)
                         .foregroundStyle(.tertiary)
                 }
                 .buttonStyle(.plain)
