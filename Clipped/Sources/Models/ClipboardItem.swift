@@ -30,6 +30,8 @@ enum ContentCategory: String, CaseIterable, Identifiable, Codable {
     case phoneNumber
     case hexColor
     case number
+    case ipAddress
+    case macAddress
 
     var id: String {
         rawValue
@@ -41,6 +43,8 @@ enum ContentCategory: String, CaseIterable, Identifiable, Codable {
         case .phoneNumber: "Phone"
         case .hexColor: "Color"
         case .number: "Number"
+        case .ipAddress: "IP Address"
+        case .macAddress: "MAC Address"
         }
     }
 
@@ -50,6 +54,8 @@ enum ContentCategory: String, CaseIterable, Identifiable, Codable {
         case .phoneNumber: "phone"
         case .hexColor: "paintpalette"
         case .number: "number"
+        case .ipAddress: "network"
+        case .macAddress: "cable.connector"
         }
     }
 
@@ -59,6 +65,8 @@ enum ContentCategory: String, CaseIterable, Identifiable, Codable {
         case .phoneNumber: "Items containing a phone number"
         case .hexColor: "Items containing a #RRGGBB hex color"
         case .number: "Amounts, percentages, currency values"
+        case .ipAddress: "Items containing an IPv4 address"
+        case .macAddress: "Items containing a hardware (MAC) address"
         }
     }
 }
@@ -243,6 +251,8 @@ enum ClipboardFilter: Hashable, Identifiable {
         ClipboardFilter.category(.phoneNumber).id,
         ClipboardFilter.category(.hexColor).id,
         ClipboardFilter.category(.number).id,
+        ClipboardFilter.category(.ipAddress).id,
+        ClipboardFilter.category(.macAddress).id,
         ClipboardFilter.sourceApp(.communication).id,
         ClipboardFilter.sourceApp(.browser).id,
         ClipboardFilter.sourceApp(.codeEditor).id,
@@ -274,7 +284,38 @@ enum ContentCategoryDetector {
         if PhoneNumberDetector.contains(text) { results.insert(.phoneNumber) }
         if HexColorParser.firstColor(in: text) != nil { results.insert(.hexColor) }
         if NumberDetector.contains(text) { results.insert(.number) }
+        if IPAddressDetector.contains(text) { results.insert(.ipAddress) }
+        if MACAddressDetector.contains(text) { results.insert(.macAddress) }
         return results
+    }
+}
+
+/// Detects dotted-quad IPv4 addresses. Each octet is validated to 0–255 so partial
+/// matches like "999.1.1.1" don't register. IPv6 is intentionally out of scope: its
+/// grammar is too permissive to match without frequent false positives.
+enum IPAddressDetector {
+    // swiftlint:disable:next force_try
+    private static let pattern = try! NSRegularExpression(
+        pattern: #"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b"#
+    )
+
+    static func contains(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        return pattern.firstMatch(in: text, range: range) != nil
+    }
+}
+
+/// Detects hardware (MAC) addresses: six hex octets joined by a consistent `:` or `-`
+/// separator. Mixed separators are rejected since no real MAC notation uses them.
+enum MACAddressDetector {
+    // swiftlint:disable:next force_try
+    private static let pattern = try! NSRegularExpression(
+        pattern: #"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b|\b(?:[0-9A-Fa-f]{2}-){5}[0-9A-Fa-f]{2}\b"#
+    )
+
+    static func contains(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        return pattern.firstMatch(in: text, range: range) != nil
     }
 }
 

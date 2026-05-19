@@ -84,6 +84,42 @@ struct ContentCategoryDetectorTests {
         #expect(!NumberDetector.contains("meeting at 3pm"))
     }
 
+    // MARK: - IP addresses
+
+    @Test("Detects valid IPv4 addresses")
+    func detectsIPv4() {
+        #expect(IPAddressDetector.contains("192.168.1.1"))
+        #expect(IPAddressDetector.contains("Server is at 10.0.0.255 right now"))
+        #expect(IPAddressDetector.contains("127.0.0.1"))
+        #expect(IPAddressDetector.contains("8.8.8.8"))
+    }
+
+    @Test("Rejects strings that aren't valid IPv4 addresses")
+    func rejectsNonIPv4() {
+        #expect(!IPAddressDetector.contains("999.1.1.1"))
+        #expect(!IPAddressDetector.contains("256.0.0.1"))
+        #expect(!IPAddressDetector.contains("1.2.3"))
+        #expect(!IPAddressDetector.contains("hello world"))
+    }
+
+    // MARK: - MAC addresses
+
+    @Test("Detects MAC addresses with either separator")
+    func detectsMACAddresses() {
+        #expect(MACAddressDetector.contains("00:1B:44:11:3A:B7"))
+        #expect(MACAddressDetector.contains("device de-ad-be-ef-00-01 joined"))
+        #expect(MACAddressDetector.contains("a1:b2:c3:d4:e5:f6"))
+    }
+
+    @Test("Rejects strings that aren't MAC addresses")
+    func rejectsNonMACAddresses() {
+        // Mixed separators are not valid MAC notation.
+        #expect(!MACAddressDetector.contains("00:1B-44:11-3A:B7"))
+        // Timestamps have only three colon-separated groups.
+        #expect(!MACAddressDetector.contains("12:34:56"))
+        #expect(!MACAddressDetector.contains("not a mac address"))
+    }
+
     // MARK: - Aggregate detector
 
     @Test("Detect returns multiple categories when present together")
@@ -93,6 +129,13 @@ struct ContentCategoryDetectorTests {
         #expect(categories.contains(.email))
         #expect(categories.contains(.phoneNumber))
         #expect(categories.contains(.number))
+    }
+
+    @Test("Detect recognizes network identifiers")
+    func detectNetworkIdentifiers() {
+        let categories = ContentCategoryDetector.detect(in: "Bind 192.168.0.10 to NIC 00:1B:44:11:3A:B7")
+        #expect(categories.contains(.ipAddress))
+        #expect(categories.contains(.macAddress))
     }
 
     @Test("Detect returns empty set for plain text")
