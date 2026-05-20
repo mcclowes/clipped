@@ -25,7 +25,7 @@ struct ContentTypeFilterBar: View {
             }
         } label: {
             Text(label)
-                .font(.system(size: 10, weight: selection == filter ? .semibold : .regular))
+                .font(.system(.caption, weight: selection == filter ? .semibold : .regular))
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(selection == filter ? Color.accentColor.opacity(0.15) : .clear)

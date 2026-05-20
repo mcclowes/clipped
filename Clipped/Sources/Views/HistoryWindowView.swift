@@ -13,6 +13,7 @@ struct HistoryWindowView: View {
     @State private var selectedCategory: HistoryCategory = .all
     @State private var selectedItemID: ClipboardItem.ID?
     @State private var searchQuery = ""
+    @ScaledMetric private var placeholderIconSize: CGFloat = 44
 
     var body: some View {
         NavigationSplitView {
@@ -205,7 +206,7 @@ struct HistoryWindowView: View {
     private var placeholderDetail: some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 44))
+                .font(.system(size: placeholderIconSize))
                 .foregroundStyle(.tertiary)
             Text("Select an item")
                 .font(.title3)
@@ -378,31 +379,31 @@ private struct HistoryItemRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(primaryLabel)
                     .font(.system(
-                        size: 12,
-                        weight: .semibold,
-                        design: item.isDeveloperContent ? .monospaced : .default
+                        .callout,
+                        design: item.isDeveloperContent ? .monospaced : .default,
+                        weight: .semibold
                     ))
                     .lineLimit(2)
                     .foregroundStyle(.primary)
 
                 if let secondary = secondaryLabel {
                     Text(secondary)
-                        .font(.system(size: 11))
+                        .font(.subheadline)
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 6) {
                     Text(relativeTimeString(for: item.timestamp))
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundStyle(.tertiary)
 
                     if let app = item.sourceAppName {
                         Text("•")
-                            .font(.system(size: 10))
+                            .font(.caption)
                             .foregroundStyle(.tertiary)
                         Text(app)
-                            .font(.system(size: 10))
+                            .font(.caption)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
@@ -413,7 +414,7 @@ private struct HistoryItemRow: View {
 
             if item.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
+                    .font(.caption)
                     .foregroundStyle(.orange)
             }
         }
@@ -600,12 +601,12 @@ private struct HistoryDetailView: View {
         switch item.content {
         case let .text(string):
             Text(string)
-                .font(.system(size: 13, design: item.isDeveloperContent ? .monospaced : .default))
+                .font(.system(.body, design: item.isDeveloperContent ? .monospaced : .default))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case let .richText(_, plain):
             Text(plain)
-                .font(.system(size: 13))
+                .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case let .url(url):
@@ -614,7 +615,7 @@ private struct HistoryDetailView: View {
                     Text(title).font(.headline)
                 }
                 Link(url.absoluteString, destination: url)
-                    .font(.system(size: 13))
+                    .font(.body)
                     .textSelection(.enabled)
                 Button("Open in browser") { NSWorkspace.shared.open(url) }
                     .buttonStyle(.bordered)

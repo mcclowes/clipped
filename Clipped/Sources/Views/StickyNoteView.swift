@@ -56,11 +56,11 @@ struct StickyNoteView: View {
     private func dragBar(for item: ClipboardItem) -> some View {
         HStack {
             Image(systemName: item.contentType.systemImage)
-                .font(.system(size: 10))
+                .font(.caption)
                 .foregroundStyle(.tertiary)
 
             Text(item.contentType.rawValue)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(.caption, weight: .medium))
                 .foregroundStyle(.tertiary)
 
             Spacer()
@@ -70,7 +70,7 @@ struct StickyNoteView: View {
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
                     .labelStyle(.iconOnly)
-                    .font(.system(size: 10))
+                    .font(.caption)
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -81,7 +81,7 @@ struct StickyNoteView: View {
             } label: {
                 Label("Close", systemImage: "xmark")
                     .labelStyle(.iconOnly)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(.caption2, weight: .semibold))
             }
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
@@ -111,17 +111,17 @@ struct StickyNoteView: View {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(.orange)
                 Text("Sensitive content hidden")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(.callout, weight: .medium))
                     .foregroundStyle(.secondary)
             }
             Text("••••••••••••••••")
-                .font(.system(size: 12, design: .monospaced))
+                .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.tertiary)
             Button {
                 isRevealed = true
             } label: {
                 Label("Reveal", systemImage: "eye")
-                    .font(.system(size: 11))
+                    .font(.subheadline)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
@@ -142,10 +142,10 @@ struct StickyNoteView: View {
             VStack(alignment: .leading, spacing: 4) {
                 if let title = item.linkTitle {
                     Text(title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(.body, weight: .medium))
                 }
                 Text(url.absoluteString)
-                    .font(.system(size: 12))
+                    .font(.callout)
                     .foregroundStyle(.blue)
             }
 
@@ -176,7 +176,7 @@ struct StickyNoteView: View {
 
     private func selectableText(_ string: String, isCode: Bool) -> some View {
         Text(string)
-            .font(.system(size: 12, design: isCode ? .monospaced : .default))
+            .font(.system(.callout, design: isCode ? .monospaced : .default))
             .textSelection(.enabled)
     }
 }

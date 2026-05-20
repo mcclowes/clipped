@@ -12,6 +12,7 @@ enum OnboardingStep: Int, CaseIterable {
 struct OnboardingView: View {
     @Environment(SettingsManager.self) private var settings
     @State private var step: OnboardingStep = .welcome
+    @ScaledMetric private var heroIconSize: CGFloat = 48
     var onComplete: () -> Void
 
     var body: some View {
@@ -87,7 +88,7 @@ struct OnboardingView: View {
     private var welcomeStep: some View {
         VStack(spacing: 16) {
             Image(systemName: "clipboard.fill")
-                .font(.system(size: 48))
+                .font(.system(size: heroIconSize))
                 .foregroundStyle(.tint)
                 .symbolRenderingMode(.hierarchical)
 
@@ -108,7 +109,7 @@ struct OnboardingView: View {
 
         return VStack(spacing: 16) {
             Image(systemName: "keyboard")
-                .font(.system(size: 48))
+                .font(.system(size: heroIconSize))
                 .foregroundStyle(.tint)
                 .symbolRenderingMode(.hierarchical)
 
@@ -140,7 +141,7 @@ struct OnboardingView: View {
     private var transformationsStep: some View {
         VStack(spacing: 16) {
             Image(systemName: "wand.and.stars")
-                .font(.system(size: 48))
+                .font(.system(size: heroIconSize))
                 .foregroundStyle(.tint)
                 .symbolRenderingMode(.hierarchical)
 
@@ -181,7 +182,7 @@ struct OnboardingView: View {
     private func transformationRow(icon: String, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.body)
                 .foregroundStyle(.tint)
                 .frame(width: 20, alignment: .center)
                 .padding(.top, 2)
@@ -201,7 +202,7 @@ struct OnboardingView: View {
 
         return VStack(spacing: 16) {
             Image(systemName: "sunrise")
-                .font(.system(size: 48))
+                .font(.system(size: heroIconSize))
                 .foregroundStyle(.tint)
                 .symbolRenderingMode(.hierarchical)
 
@@ -225,7 +226,7 @@ struct OnboardingView: View {
     private var readyStep: some View {
         VStack(spacing: 16) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 48))
+                .font(.system(size: heroIconSize))
                 .foregroundStyle(.green)
                 .symbolRenderingMode(.hierarchical)
 
