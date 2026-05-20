@@ -4,9 +4,29 @@ import Observation
 import os
 import UserNotifications
 
+/// Abstraction over the screenshot directory watcher so tests and alternative
+/// implementations can stand in. Mirrors `SettingsManaging` and
+/// `LinkMetadataFetching`: views keep using the concrete `ScreenshotWatcher`
+/// via `@Environment(ScreenshotWatcher.self)`, while internal call sites and
+/// future mocks talk to the protocol.
+@MainActor
+protocol ScreenshotWatching: AnyObject {
+    var isWatching: Bool { get }
+    var watchedFolder: URL? { get }
+    var hasStoredFolder: Bool { get }
+    var clipboardManager: ClipboardManager? { get set }
+
+    func promptForFolder() -> URL?
+    func resolveBookmark() -> URL?
+    func requestNotificationPermission()
+    func startWatching(folder: URL)
+    func stopWatching()
+    func clearStoredFolder()
+}
+
 @MainActor
 @Observable
-final class ScreenshotWatcher {
+final class ScreenshotWatcher: ScreenshotWatching {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ScreenshotWatcher")
 
     private(set) var isWatching = false

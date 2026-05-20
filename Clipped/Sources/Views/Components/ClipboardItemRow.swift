@@ -17,13 +17,13 @@ struct ClipboardItemRow: View {
             Spacer(minLength: 4)
             if item.wasMutated {
                 Image(systemName: "wand.and.stars")
-                    .font(.system(size: 9))
+                    .font(.caption2)
                     .foregroundStyle(.purple.opacity(0.7))
                     .help(item.mutationsApplied.joined(separator: ", "))
             }
             if item.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 8))
+                    .font(.caption2)
                     .foregroundStyle(.orange)
             }
             ellipsisButton
@@ -215,7 +215,7 @@ struct ClipboardItemRow: View {
         Group {
             if shouldMask {
                 Image(systemName: "lock.fill")
-                    .font(.system(size: 12))
+                    .font(.callout)
                     .foregroundStyle(.orange)
             } else if case .url = item.content,
                       let faviconData = item.linkFavicon,
@@ -229,7 +229,7 @@ struct ClipboardItemRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 2))
             } else {
                 Image(systemName: item.contentType.systemImage)
-                    .font(.system(size: 12))
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
         }
@@ -245,7 +245,7 @@ struct ClipboardItemRow: View {
         if shouldMask {
             HStack(spacing: 6) {
                 Text("••••••••")
-                    .font(.system(size: 11))
+                    .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Hidden sensitive content")
                 Button {
@@ -253,7 +253,7 @@ struct ClipboardItemRow: View {
                 } label: {
                     Label("Reveal", systemImage: "eye")
                         .labelStyle(.iconOnly)
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -280,7 +280,7 @@ struct ClipboardItemRow: View {
                             .frame(maxHeight: 48)
                             .clipShape(.rect(cornerRadius: 4))
                         Text("SVG")
-                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .font(.system(.caption2, design: .monospaced, weight: .semibold))
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .foregroundStyle(.secondary)
@@ -294,12 +294,12 @@ struct ClipboardItemRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if let title = item.linkTitle {
                         Text(title)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(.subheadline, weight: .medium))
                             .lineLimit(1)
                             .foregroundStyle(.primary)
                     }
                     Text(item.preview)
-                        .font(.system(size: item.linkTitle != nil ? 10 : 11))
+                        .font(item.linkTitle != nil ? .caption : .subheadline)
                         .lineLimit(1)
                         .foregroundStyle(.blue)
                 }
@@ -307,12 +307,12 @@ struct ClipboardItemRow: View {
                 HStack(spacing: 6) {
                     if item.isDeveloperContent {
                         Text(item.preview)
-                            .font(.system(size: 11, design: .monospaced))
+                            .font(.system(.subheadline, design: .monospaced))
                             .lineLimit(2)
                             .foregroundStyle(.primary)
                     } else {
                         Text(item.preview)
-                            .font(.system(size: 11))
+                            .font(.subheadline)
                             .lineLimit(2)
                             .foregroundStyle(.primary)
                     }
@@ -348,7 +348,7 @@ struct ClipboardItemRow: View {
         } label: {
             Label("More actions", systemImage: "ellipsis")
                 .labelStyle(.iconOnly)
-                .font(.system(size: 12))
+                .font(.callout)
                 .foregroundStyle(.secondary)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())

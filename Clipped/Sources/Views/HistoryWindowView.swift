@@ -13,6 +13,7 @@ struct HistoryWindowView: View {
     @State private var selectedCategory: HistoryCategory = .all
     @State private var selectedItemID: ClipboardItem.ID?
     @State private var searchQuery = ""
+    @ScaledMetric private var placeholderIconSize: CGFloat = 44
 
     /// True once we've confirmed the on-device model can run — gates the Summarize action.
     @State private var summarizationAvailable = false
@@ -66,6 +67,14 @@ struct HistoryWindowView: View {
                 sidebarRow(.images, label: "Images", systemImage: "photo", count: count(for: .images))
                 sidebarRow(.developer, label: "Developer", systemImage: "curlybraces", count: count(for: .developer))
             }
+
+            if !appGroups.isEmpty {
+                Section("Applications") {
+                    ForEach(appGroups) { group in
+                        appSidebarRow(group)
+                    }
+                }
+            }
         }
         .listStyle(.sidebar)
         .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 260)
@@ -89,6 +98,31 @@ struct HistoryWindowView: View {
                 }
             }
         }
+    }
+
+    private func appSidebarRow(_ group: SourceAppGroup) -> some View {
+        NavigationLink(value: HistoryCategory.app(group.name)) {
+            HStack {
+                Label {
+                    Text(group.name)
+                } icon: {
+                    if let icon = AppIconResolver.icon(for: group.bundleID) {
+                        Image(nsImage: icon)
+                            .resizable()
+                            .frame(width: 16, height: 16)
+                    } else {
+                        Image(systemName: "app.dashed")
+                    }
+                }
+                Spacer()
+                // `sourceAppGroups` only emits apps with at least one item.
+                Text("\(group.count)")
+                    .font(.caption)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .help("Items copied from \(group.name)")
     }
 
     // MARK: - Item list
@@ -237,7 +271,7 @@ struct HistoryWindowView: View {
     private var placeholderDetail: some View {
         VStack(spacing: 12) {
             Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 44))
+                .font(.system(size: placeholderIconSize))
                 .foregroundStyle(.tertiary)
             Text("Select an item")
                 .font(.title3)
@@ -255,6 +289,10 @@ struct HistoryWindowView: View {
 
     private var totalCount: Int {
         manager.items.count + manager.pinnedItems.count
+    }
+
+    private var appGroups: [SourceAppGroup] {
+        HistoryCategory.sourceAppGroups(from: manager.pinnedItems + manager.items)
     }
 
     private func count(for category: HistoryCategory) -> Int {
@@ -276,6 +314,8 @@ struct HistoryWindowView: View {
             return merged.filter { $0.contentType == .image }
         case .developer:
             return merged.filter(\.isDeveloperContent)
+        case let .app(name):
+            return merged.filter { $0.sourceAppName == name }
         }
     }
 
@@ -300,6 +340,8 @@ enum HistoryCategory: Hashable, Identifiable {
     case urls
     case images
     case developer
+    /// Items copied from a specific source app, keyed by its display name.
+    case app(String)
 
     var id: String {
         switch self {
@@ -309,6 +351,7 @@ enum HistoryCategory: Hashable, Identifiable {
         case .urls: "urls"
         case .images: "images"
         case .developer: "developer"
+        case let .app(name): "app:\(name)"
         }
     }
 
@@ -320,7 +363,70 @@ enum HistoryCategory: Hashable, Identifiable {
         case .urls: "Links"
         case .images: "Images"
         case .developer: "Developer"
+        case let .app(name): name
         }
+    }
+}
+
+// MARK: - Source app grouping
+
+/// One source app present in the clipboard history, with how many items came from it.
+/// Drives the "Applications" section of the history sidebar.
+struct SourceAppGroup: Identifiable, Hashable {
+    let name: String
+    let bundleID: String?
+    let count: Int
+
+    var id: String {
+        name
+    }
+}
+
+extension HistoryCategory {
+    /// Buckets `items` by their source app, ordered by item count descending then name
+    /// so the busiest apps surface first. Items without a `sourceAppName` are skipped.
+    static func sourceAppGroups(from items: [ClipboardItem]) -> [SourceAppGroup] {
+        var counts: [String: Int] = [:]
+        var bundleIDs: [String: String] = [:]
+        var order: [String] = []
+
+        for item in items {
+            guard let name = item.sourceAppName, !name.isEmpty else { continue }
+            if counts[name] == nil { order.append(name) }
+            counts[name, default: 0] += 1
+            // Keep the first non-nil bundle ID seen for the app.
+            if bundleIDs[name] == nil, let bundleID = item.sourceAppBundleID {
+                bundleIDs[name] = bundleID
+            }
+        }
+
+        return order
+            .map { SourceAppGroup(name: $0, bundleID: bundleIDs[$0], count: counts[$0] ?? 0) }
+            .sorted { lhs, rhs in
+                lhs.count == rhs.count
+                    ? lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+                    : lhs.count > rhs.count
+            }
+    }
+}
+
+// MARK: - App icon resolution
+
+/// Resolves and caches `NSImage` icons for source apps by bundle ID. The lookup hits
+/// Launch Services, so results are memoized for the lifetime of the process.
+@MainActor
+enum AppIconResolver {
+    private static var cache: [String: NSImage] = [:]
+
+    static func icon(for bundleID: String?) -> NSImage? {
+        guard let bundleID, !bundleID.isEmpty else { return nil }
+        if let cached = cache[bundleID] { return cached }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        cache[bundleID] = icon
+        return icon
     }
 }
 
@@ -338,31 +444,31 @@ private struct HistoryItemRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(primaryLabel)
                     .font(.system(
-                        size: 12,
-                        weight: .semibold,
-                        design: item.isDeveloperContent ? .monospaced : .default
+                        .callout,
+                        design: item.isDeveloperContent ? .monospaced : .default,
+                        weight: .semibold
                     ))
                     .lineLimit(2)
                     .foregroundStyle(.primary)
 
                 if let secondary = secondaryLabel {
                     Text(secondary)
-                        .font(.system(size: 11))
+                        .font(.subheadline)
                         .lineLimit(1)
                         .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 6) {
                     Text(relativeTimeString(for: item.timestamp))
-                        .font(.system(size: 10))
+                        .font(.caption)
                         .foregroundStyle(.tertiary)
 
                     if let app = item.sourceAppName {
                         Text("•")
-                            .font(.system(size: 10))
+                            .font(.caption)
                             .foregroundStyle(.tertiary)
                         Text(app)
-                            .font(.system(size: 10))
+                            .font(.caption)
                             .foregroundStyle(.tertiary)
                             .lineLimit(1)
                     }
@@ -373,7 +479,7 @@ private struct HistoryItemRow: View {
 
             if item.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
+                    .font(.caption)
                     .foregroundStyle(.orange)
             }
         }
@@ -560,12 +666,12 @@ private struct HistoryDetailView: View {
         switch item.content {
         case let .text(string):
             Text(string)
-                .font(.system(size: 13, design: item.isDeveloperContent ? .monospaced : .default))
+                .font(.system(.body, design: item.isDeveloperContent ? .monospaced : .default))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case let .richText(_, plain):
             Text(plain)
-                .font(.system(size: 13))
+                .font(.body)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case let .url(url):
@@ -574,7 +680,7 @@ private struct HistoryDetailView: View {
                     Text(title).font(.headline)
                 }
                 Link(url.absoluteString, destination: url)
-                    .font(.system(size: 13))
+                    .font(.body)
                     .textSelection(.enabled)
                 Button("Open in browser") { NSWorkspace.shared.open(url) }
                     .buttonStyle(.bordered)

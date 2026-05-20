@@ -186,6 +186,53 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     }
 }
 
+@MainActor
+final class MockScreenshotWatcher: ScreenshotWatching {
+    var isWatching = false
+    var watchedFolder: URL?
+    var hasStoredFolder = false
+    var clipboardManager: ClipboardManager?
+
+    private(set) var promptCallCount = 0
+    private(set) var requestNotificationCount = 0
+    private(set) var startWatchingFolders: [URL] = []
+    private(set) var stopWatchingCount = 0
+    private(set) var clearStoredFolderCount = 0
+
+    /// What `promptForFolder` should hand back when invoked. Tests stage this.
+    var folderToReturn: URL?
+
+    func promptForFolder() -> URL? {
+        promptCallCount += 1
+        return folderToReturn
+    }
+
+    func resolveBookmark() -> URL? {
+        watchedFolder
+    }
+
+    func requestNotificationPermission() {
+        requestNotificationCount += 1
+    }
+
+    func startWatching(folder: URL) {
+        startWatchingFolders.append(folder)
+        watchedFolder = folder
+        isWatching = true
+    }
+
+    func stopWatching() {
+        stopWatchingCount += 1
+        isWatching = false
+        watchedFolder = nil
+    }
+
+    func clearStoredFolder() {
+        clearStoredFolderCount += 1
+        hasStoredFolder = false
+    }
+}
+
 final class MockLinkMetadataFetcher: LinkMetadataFetching, @unchecked Sendable {
     private let state: State
 
