@@ -63,6 +63,27 @@ Key lint rules to watch:
 
 Tests use the `Clipped` scheme (not a separate test scheme). The test target is `ClippedTests`.
 
+Test framework is **Swift Testing**, not XCTest. There are no `XCTest` imports anywhere in the suite — every test file uses:
+
+```swift
+@testable import Clipped
+import Testing
+
+@MainActor
+struct FooTests {
+    @Test("Sentence-case description of behaviour")
+    func someBehavior() { #expect(...) }
+}
+```
+
+Conventions when adding tests:
+
+- Group tests in a `struct` (typically `@MainActor` when the system under test is `@MainActor`, which most services are).
+- Use `@Test("…")` with a sentence-case description; the function name can be terse.
+- Prefer `#expect` for assertions and `#require` (with `try`) to unwrap-or-fail.
+- Reuse the test doubles in `Tests/Mocks.swift` rather than building new mocks per file.
+- Tests that exercise wiring between multiple services live in `IntegrationTests.swift`; per-service unit tests live next to the service.
+
 ## Deployment target
 
 macOS 15.0 (Sequoia), Xcode 16+, Swift 6.
