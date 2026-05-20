@@ -163,6 +163,7 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     var playSoundOnCopy = false
     var captureScreenshots = false
     var fetchLinkPreviews = true
+    var hideFromScreenSharing = true
     var launchAtLogin = false
     var hotkeyKeyCode: UInt32 = 8
     var hotkeyModifiers: UInt32 = .init(optionKey)

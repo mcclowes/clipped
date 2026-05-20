@@ -16,6 +16,13 @@ final class StatusBarController {
     /// write to `openedWithOption` without reaching through a global.
     weak var clipboardManager: ClipboardManager?
 
+    /// When `true`, app-owned windows set `NSWindow.sharingType = .none` so clipboard contents
+    /// stay out of screen captures, recordings, and screen-sharing sessions. AppDelegate keeps
+    /// this in sync with the user's `SettingsManager.hideFromScreenSharing` preference.
+    var hideFromScreenSharing: Bool = true {
+        didSet { applyScreenSharingPolicy() }
+    }
+
     private var statusItem: NSStatusItem?
     private let popover = NSPopover()
     private var floatingPanel: NSPanel?
@@ -119,7 +126,12 @@ final class StatusBarController {
         }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
-        popover.contentViewController?.view.window?.makeKey()
+        // The popover's backing window only exists once shown, so apply the screen-sharing
+        // policy here rather than at popover construction.
+        if let window = popover.contentViewController?.view.window {
+            window.sharingType = hideFromScreenSharing ? .none : .readOnly
+            window.makeKey()
+        }
     }
 
     private func showAsPanel(on screen: NSScreen) {
@@ -138,6 +150,7 @@ final class StatusBarController {
             panel.titlebarAppearsTransparent = true
             panel.isMovableByWindowBackground = true
             panel.hidesOnDeactivate = true
+            panel.sharingType = hideFromScreenSharing ? .none : .readOnly
             panel.contentViewController = makePanelHosting()
             floatingPanel = panel
         }
@@ -235,8 +248,18 @@ final class StatusBarController {
         window.minSize = NSSize(width: 780, height: 460)
         window.center()
         window.isReleasedWhenClosed = false
+        window.sharingType = hideFromScreenSharing ? .none : .readOnly
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         historyWindow = window
+    }
+
+    /// Applies the current screen-sharing policy to existing windows. Called when the user
+    /// toggles `hideFromScreenSharing` so the change takes effect without re-opening windows.
+    func applyScreenSharingPolicy() {
+        let type: NSWindow.SharingType = hideFromScreenSharing ? .none : .readOnly
+        popover.contentViewController?.view.window?.sharingType = type
+        floatingPanel?.sharingType = type
+        historyWindow?.sharingType = type
     }
 }

@@ -1,15 +1,21 @@
+import AppKit
 import SwiftUI
 
 struct FloatingPanelModifier: ViewModifier {
+    let hideFromScreenSharing: Bool
+
     func body(content: Content) -> some View {
         content
-            .background(FloatingPanelHelper())
+            .background(FloatingPanelHelper(hideFromScreenSharing: hideFromScreenSharing))
     }
 }
 
 private struct FloatingPanelHelper: NSViewRepresentable {
+    let hideFromScreenSharing: Bool
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
+        let hide = hideFromScreenSharing
         DispatchQueue.main.async {
             if let window = view.window {
                 window.level = .floating
@@ -21,16 +27,22 @@ private struct FloatingPanelHelper: NSViewRepresentable {
                 window.backgroundColor = .clear
                 window.isOpaque = false
                 window.hasShadow = true
+                window.sharingType = hide ? .none : .readOnly
             }
         }
         return view
     }
 
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        let hide = hideFromScreenSharing
+        DispatchQueue.main.async {
+            nsView.window?.sharingType = hide ? .none : .readOnly
+        }
+    }
 }
 
 extension View {
-    func floatingPanel() -> some View {
-        modifier(FloatingPanelModifier())
+    func floatingPanel(hideFromScreenSharing: Bool = true) -> some View {
+        modifier(FloatingPanelModifier(hideFromScreenSharing: hideFromScreenSharing))
     }
 }

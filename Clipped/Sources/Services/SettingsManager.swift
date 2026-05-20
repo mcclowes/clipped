@@ -13,6 +13,7 @@ protocol SettingsManaging: AnyObject {
     var playSoundOnCopy: Bool { get }
     var captureScreenshots: Bool { get }
     var fetchLinkPreviews: Bool { get set }
+    var hideFromScreenSharing: Bool { get set }
     var launchAtLogin: Bool { get set }
     var hotkeyKeyCode: UInt32 { get set }
     var hotkeyModifiers: UInt32 { get set }
@@ -55,6 +56,13 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
 
     var fetchLinkPreviews: Bool {
         didSet { UserDefaults.standard.set(fetchLinkPreviews, forKey: "fetchLinkPreviews") }
+    }
+
+    /// When `true`, app-owned windows that surface clipboard contents (panel, history window,
+    /// sticky notes) set `NSWindow.sharingType = .none` so they don't appear in screen
+    /// captures, recordings, or screen-sharing sessions.
+    var hideFromScreenSharing: Bool {
+        didSet { UserDefaults.standard.set(hideFromScreenSharing, forKey: "hideFromScreenSharing") }
     }
 
     var hotkeyKeyCode: UInt32 {
@@ -170,6 +178,9 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         fetchLinkPreviews = UserDefaults.standard.object(forKey: "fetchLinkPreviews") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "fetchLinkPreviews")
+        hideFromScreenSharing = UserDefaults.standard.object(forKey: "hideFromScreenSharing") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "hideFromScreenSharing")
 
         if let rulesData = UserDefaults.standard.data(forKey: "mutationRules"),
            let decoded = try? JSONDecoder().decode([String: Bool].self, from: rulesData)

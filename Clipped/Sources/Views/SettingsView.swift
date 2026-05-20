@@ -140,13 +140,18 @@ private struct GeneralSettingsTab: View {
 
             Section {
                 Toggle("Fetch link previews", isOn: $settings.fetchLinkPreviews)
+                Toggle("Hide contents from screen sharing", isOn: $settings.hideFromScreenSharing)
             } header: {
                 Text("Privacy")
             } footer: {
-                Text("When enabled, Clipped fetches the title and favicon of copied URLs " +
-                    "from their origin server. Disable to keep copied URLs fully local.")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("When enabled, Clipped fetches the title and favicon of copied URLs " +
+                        "from their origin server. Disable to keep copied URLs fully local.")
+                    Text("Hiding from screen sharing keeps the clipboard panel, history window, " +
+                        "and sticky notes out of screen captures, recordings, and screen-share sessions.")
+                }
+                .font(.caption)
+                .foregroundStyle(.tertiary)
             }
 
             Section {
