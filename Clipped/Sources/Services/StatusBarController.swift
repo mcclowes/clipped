@@ -2,9 +2,12 @@ import AppKit
 import os
 import SwiftUI
 
+/// Thin facade that preserves the public API surface consumed by `AppDelegate` and
+/// `ClipboardPanelView`. Presentation responsibilities are delegated to the five
+/// focused presenters in `Sources/Services/Presenters/`.
 @MainActor
 final class StatusBarController {
-    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "StatusBarController")
+    // MARK: - Public constants (referenced by ClipboardPanelView)
 
     static let panelWidth: CGFloat = 380
     static let panelHeight: CGFloat = 420
@@ -16,86 +19,60 @@ final class StatusBarController {
     /// write to `openedWithOption` without reaching through a global.
     weak var clipboardManager: ClipboardManager?
 
-    /// When `true`, app-owned windows set `NSWindow.sharingType = .none` so clipboard contents
-    /// stay out of screen captures, recordings, and screen-sharing sessions. AppDelegate keeps
-    /// this in sync with the user's `SettingsManager.hideFromScreenSharing` preference.
+    /// When `true`, app-owned windows that surface clipboard contents set
+    /// `NSWindow.sharingType = .none` so they stay out of screen captures, recordings,
+    /// and screen-sharing sessions. AppDelegate keeps this in sync with the user's
+    /// `SettingsManager.hideFromScreenSharing` preference; the setter fans the policy
+    /// out to the presenters that own clipboard-content windows.
     var hideFromScreenSharing: Bool = true {
-        didSet { applyScreenSharingPolicy() }
+        didSet {
+            panel.hideFromScreenSharing = hideFromScreenSharing
+            history.hideFromScreenSharing = hideFromScreenSharing
+        }
     }
 
-    private var statusItem: NSStatusItem?
-    private let popover = NSPopover()
-    private var floatingPanel: NSPanel?
-    private var eventMonitor: Any?
+    // MARK: - Presenters
 
-    /// Builds a fresh `NSHostingController` over the configured SwiftUI panel content. We keep
-    /// a builder rather than a single hosting controller because `NSPopover` and the floating
-    /// `NSPanel` cannot share one — `NSViewController.parent` is exclusive, so handing the same
-    /// controller to the panel detaches it from the popover and produces an empty popover on the
-    /// next status-bar-screen click. (See issue #71.)
-    private var hostingControllerBuilder: (() -> NSHostingController<AnyView>)?
-    private var popoverHosting: NSHostingController<AnyView>?
-    private var panelHosting: NSHostingController<AnyView>?
+    private let statusBarItem = StatusBarItemController()
+    private let panel: ClipboardPanelPresenter
+    private let onboarding = OnboardingWindowPresenter()
+    private let settings = SettingsWindowPresenter()
+    private let history = HistoryWindowPresenter()
 
-    init() {}
+    // MARK: - Init
+
+    init() {
+        panel = ClipboardPanelPresenter(panelSize: Self.panelSize)
+
+        statusBarItem.onClick = { [weak self] optionHeld in
+            guard let self else { return }
+            clipboardManager?.openedWithOption = optionHeld
+            toggle()
+        }
+    }
+
+    // MARK: - Setup
 
     func setup(contentView: some View) {
-        let erased = AnyView(contentView)
-        hostingControllerBuilder = {
-            let controller = NSHostingController(rootView: erased)
-            controller.view.frame = NSRect(origin: .zero, size: Self.panelSize)
-            return controller
-        }
-
-        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        self.statusItem = statusItem
-
-        if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "clipboard", accessibilityDescription: "Clipped")
-            button.action = #selector(statusBarButtonClicked(_:))
-            button.target = self
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        }
-
-        popover.contentSize = Self.panelSize
-        popover.behavior = .transient
-        popover.animates = true
-        popover.contentViewController = makePopoverHosting()
+        statusBarItem.setup()
+        panel.setup(contentView: contentView)
     }
 
-    private func makePopoverHosting() -> NSHostingController<AnyView> {
-        if let existing = popoverHosting { return existing }
-        guard let builder = hostingControllerBuilder else {
-            fatalError("StatusBarController.setup must be called before showing")
-        }
-        let controller = builder()
-        popoverHosting = controller
-        return controller
-    }
-
-    private func makePanelHosting() -> NSHostingController<AnyView> {
-        if let existing = panelHosting { return existing }
-        guard let builder = hostingControllerBuilder else {
-            fatalError("StatusBarController.setup must be called before showing")
-        }
-        let controller = builder()
-        panelHosting = controller
-        return controller
-    }
+    // MARK: - Icon
 
     func updateIcon(hasItems: Bool) {
-        statusItem?.button?.image = NSImage(
-            systemSymbolName: hasItems ? "clipboard.fill" : "clipboard",
-            accessibilityDescription: "Clipped"
-        )
+        statusBarItem.updateIcon(hasItems: hasItems)
     }
 
-    @objc private func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        // Capture modifier state at click time. Reading `NSEvent.modifierFlags` later
-        // (from a popover notification) races with the user releasing the key.
-        let optionHeld = NSApp.currentEvent?.modifierFlags.contains(.option) ?? false
-        clipboardManager?.openedWithOption = optionHeld
-        toggle()
+    // MARK: - Panel presentation
+
+    func show() {
+        guard let button = statusBarItem.button else { return }
+        panel.show(button: button, statusBarScreen: statusBarItem.buttonScreen)
+    }
+
+    func close() {
+        panel.close()
     }
 
     func toggle() {
@@ -106,160 +83,31 @@ final class StatusBarController {
         }
     }
 
-    func show() {
-        let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
-        let statusBarScreen = statusItem?.button?.window?.screen
-
-        if let mouseScreen, mouseScreen != statusBarScreen {
-            showAsPanel(on: mouseScreen)
-        } else {
-            showAsPopover()
-        }
-    }
-
-    private func showAsPopover() {
-        guard let button = statusItem?.button else { return }
-        closePanel()
-        let hosting = makePopoverHosting()
-        if popover.contentViewController !== hosting {
-            popover.contentViewController = hosting
-        }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        NSApp.activate(ignoringOtherApps: true)
-        // The popover's backing window only exists once shown, so apply the screen-sharing
-        // policy here rather than at popover construction.
-        if let window = popover.contentViewController?.view.window {
-            window.sharingType = hideFromScreenSharing ? .none : .readOnly
-            window.makeKey()
-        }
-    }
-
-    private func showAsPanel(on screen: NSScreen) {
-        popover.performClose(nil)
-
-        if floatingPanel == nil {
-            let panel = NSPanel(
-                contentRect: NSRect(origin: .zero, size: Self.panelSize),
-                styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
-                backing: .buffered,
-                defer: false
-            )
-            panel.isFloatingPanel = true
-            panel.level = .floating
-            panel.titleVisibility = .hidden
-            panel.titlebarAppearsTransparent = true
-            panel.isMovableByWindowBackground = true
-            panel.hidesOnDeactivate = true
-            panel.sharingType = hideFromScreenSharing ? .none : .readOnly
-            panel.contentViewController = makePanelHosting()
-            floatingPanel = panel
-        }
-
-        let size = Self.panelSize
-        let screenFrame = screen.visibleFrame
-        let x = screenFrame.midX - size.width / 2
-        let y = screenFrame.midY - size.height / 2
-        floatingPanel?.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
-        floatingPanel?.orderFrontRegardless()
-        NSApp.activate(ignoringOtherApps: true)
-        floatingPanel?.makeKey()
-    }
-
-    private func closePanel() {
-        floatingPanel?.orderOut(nil)
-    }
-
-    func close() {
-        popover.performClose(nil)
-        closePanel()
-    }
-
     var isShown: Bool {
-        popover.isShown || (floatingPanel?.isVisible ?? false)
+        panel.isShown
     }
 
-    private var onboardingWindow: NSWindow?
+    // MARK: - Onboarding window
 
     func openOnboarding(contentView: some View) {
-        if let existing = onboardingWindow, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
-        let hostingController = NSHostingController(rootView: contentView)
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = "Welcome to Clipped"
-        window.styleMask = [.titled, .closable, .fullSizeContentView]
-        window.titlebarAppearsTransparent = true
-        window.titleVisibility = .hidden
-        window.isMovableByWindowBackground = true
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        onboardingWindow = window
+        onboarding.open(contentView: contentView)
     }
 
     func closeOnboarding() {
-        onboardingWindow?.close()
-        onboardingWindow = nil
+        onboarding.close()
     }
 
-    private var settingsWindow: NSWindow?
+    // MARK: - Settings window
 
     func openSettings(contentView: some View) {
-        if let existing = settingsWindow, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
-        close()
-
-        let hostingController = NSHostingController(rootView: contentView)
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = "Clipped Settings"
-        window.styleMask = [.titled, .closable]
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        settingsWindow = window
+        panel.close()
+        settings.open(contentView: contentView)
     }
 
-    private var historyWindow: NSWindow?
+    // MARK: - History window
 
     func openHistoryWindow(contentView: some View) {
-        if let existing = historyWindow, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-
-        close()
-
-        let hostingController = NSHostingController(rootView: contentView)
-        let window = NSWindow(contentViewController: hostingController)
-        window.title = "Clipboard History"
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        window.titlebarAppearsTransparent = true
-        window.setContentSize(NSSize(width: 920, height: 600))
-        window.minSize = NSSize(width: 780, height: 460)
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.sharingType = hideFromScreenSharing ? .none : .readOnly
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        historyWindow = window
-    }
-
-    /// Applies the current screen-sharing policy to existing windows. Called when the user
-    /// toggles `hideFromScreenSharing` so the change takes effect without re-opening windows.
-    func applyScreenSharingPolicy() {
-        let type: NSWindow.SharingType = hideFromScreenSharing ? .none : .readOnly
-        popover.contentViewController?.view.window?.sharingType = type
-        floatingPanel?.sharingType = type
-        historyWindow?.sharingType = type
+        panel.close()
+        history.open(contentView: contentView)
     }
 }
