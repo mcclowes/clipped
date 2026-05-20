@@ -135,6 +135,15 @@ final class ClipboardHistory {
         saveHistory()
     }
 
+    /// Remove unpinned items older than the configured `historyRetention`.
+    /// Pinned items, by design, are exempt — and `.never` retention disables expiry
+    /// entirely so existing users see no behavior change until they opt in.
+    func trimExpiredItems(now: Date = Date()) {
+        guard let interval = settingsManager?.historyRetention.interval else { return }
+        let cutoff = now.addingTimeInterval(-interval)
+        items.removeAll { !$0.isPinned && $0.timestamp < cutoff }
+    }
+
     /// Remove oldest unpinned items beyond the configured max history size.
     /// Pinned and developer-content items are exempt from the cap.
     func trimToMaxSize() {
@@ -166,6 +175,9 @@ final class ClipboardHistory {
         }
         if items.isEmpty { items = loaded }
         if pinnedItems.isEmpty { pinnedItems = pinned }
+        // Drop anything already past its retention window from a previous session,
+        // before the UI gets a chance to show stale items.
+        trimExpiredItems()
     }
 
     /// Snapshot current state and schedule a debounced async save. Safe to call rapidly.

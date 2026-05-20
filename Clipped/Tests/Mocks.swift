@@ -158,6 +158,7 @@ final class MockHistoryStore: HistoryStoring, @unchecked Sendable {
 final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     var persistAcrossReboots = false
     var maxHistorySize = 10
+    var historyRetention: HistoryRetention = .never
     var secureMode = true
     var secureTimeout = 0
     var playSoundOnCopy = false

@@ -156,6 +156,10 @@ final class ClipboardManager {
         history.trimToMaxSize()
     }
 
+    func trimExpiredItems() {
+        history.trimExpiredItems()
+    }
+
     func togglePin(_ item: ClipboardItem) {
         history.togglePin(item)
     }
@@ -218,6 +222,10 @@ final class ClipboardManager {
         }
 
         history.insert(item)
+
+        // Each ingest is a natural moment to evict already-expired items — no need
+        // for a separate timer, since an idle clipboard has nothing to show anyway.
+        history.trimExpiredItems()
 
         if policy.pendingRemoval {
             scheduleSecureAutoRemoval(itemID: item.id, timeout: policy.secureTimeout)

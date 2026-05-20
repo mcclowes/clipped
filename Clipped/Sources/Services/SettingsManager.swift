@@ -4,10 +4,44 @@ import os
 import ServiceManagement
 import SwiftUI
 
+/// How long an unpinned clipboard item lives before time-based expiry removes it.
+/// Pinned items, by design, are exempt from expiry.
+enum HistoryRetention: Int, CaseIterable, Identifiable, Codable {
+    /// Disables time-based expiry — items live until the size cap evicts them.
+    case never = 0
+    case oneDay = 1
+    case sevenDays = 7
+    case thirtyDays = 30
+    case ninetyDays = 90
+
+    var id: Int {
+        rawValue
+    }
+
+    var label: String {
+        switch self {
+        case .never: "Never expire"
+        case .oneDay: "After 1 day"
+        case .sevenDays: "After 7 days"
+        case .thirtyDays: "After 30 days"
+        case .ninetyDays: "After 90 days"
+        }
+    }
+
+    /// Retention duration in seconds, or `nil` when expiry is disabled.
+    var interval: TimeInterval? {
+        switch self {
+        case .never: nil
+        default: TimeInterval(rawValue) * 24 * 60 * 60
+        }
+    }
+}
+
 @MainActor
 protocol SettingsManaging: AnyObject {
     var persistAcrossReboots: Bool { get }
     var maxHistorySize: Int { get }
+    var historyRetention: HistoryRetention { get set }
     var secureMode: Bool { get }
     var secureTimeout: Int { get }
     var playSoundOnCopy: Bool { get }
@@ -34,6 +68,10 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
 
     var maxHistorySize: Int {
         didSet { UserDefaults.standard.set(maxHistorySize, forKey: "maxHistorySize") }
+    }
+
+    var historyRetention: HistoryRetention {
+        didSet { UserDefaults.standard.set(historyRetention.rawValue, forKey: "historyRetention") }
     }
 
     var secureMode: Bool {
@@ -157,6 +195,9 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
         let storedSize = UserDefaults.standard.integer(forKey: "maxHistorySize")
         maxHistorySize = storedSize > 0 ? storedSize : 100
+        let storedRetention = UserDefaults.standard.integer(forKey: "historyRetention")
+        // Default to .never so existing users see no behavior change after upgrade.
+        historyRetention = HistoryRetention(rawValue: storedRetention) ?? .never
         secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "secureMode")
