@@ -70,6 +70,9 @@ actor HistoryStore: HistoryStoring {
     }
 
     func save(entries: [StoredEntry]) async {
+        let signpost = Signposts.store.beginInterval("Save")
+        defer { Signposts.store.endInterval("Save", signpost) }
+
         guard let crypto = try? resolveCrypto() else {
             Self.logger.error("Refusing to save: encryption key unavailable")
             loadError = .keyUnavailable
@@ -109,6 +112,9 @@ actor HistoryStore: HistoryStoring {
     }
 
     func load() async -> [StoredEntry] {
+        let signpost = Signposts.store.beginInterval("Load")
+        defer { Signposts.store.endInterval("Load", signpost) }
+
         let crypto: HistoryCrypto
         do {
             crypto = try resolveCrypto()
@@ -165,6 +171,7 @@ actor HistoryStore: HistoryStoring {
         } catch {
             Self.logger
                 .error("History plaintext corrupted, backing up and starting fresh: \(error.localizedDescription)")
+            Signposts.store.emitEvent("CorruptedHistoryBackup")
             let backupURL = encryptedFileURL.deletingLastPathComponent()
                 .appendingPathComponent("history.corrupted.enc")
             try? FileManager.default.moveItem(at: encryptedFileURL, to: backupURL)

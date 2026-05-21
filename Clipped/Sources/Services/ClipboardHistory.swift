@@ -176,7 +176,14 @@ final class ClipboardHistory {
             .map { StoredEntry(item: $0) }
         saveDebounceTask?.cancel()
         let store = historyStore
+
+        // Span the whole save — debounce wait included — so the Instruments timeline
+        // shows how rapid edits coalesce. A cancelled debounce still closes its
+        // interval via the `defer`, so begin/end stay balanced.
+        let signposter = Signposts.history
+        let signpost = signposter.beginInterval("SaveHistory")
         saveDebounceTask = Task { [entries] in
+            defer { signposter.endInterval("SaveHistory", signpost) }
             try? await Task.sleep(for: Self.saveDebounceDelay)
             guard !Task.isCancelled else { return }
             await store.save(entries: entries)
