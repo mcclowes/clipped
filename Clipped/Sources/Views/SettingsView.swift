@@ -78,6 +78,16 @@ private struct GeneralSettingsTab: View {
                     // Apply new cap immediately so the UI doesn't lie about its size.
                     clipboardManager.trimToMaxSize()
                 }
+                Picker("Expire items", selection: $settings.historyRetention) {
+                    ForEach(HistoryRetention.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .onChange(of: settings.historyRetention) { _, _ in
+                    // Apply the new retention immediately so old items disappear
+                    // from the panel without waiting for the next ingest.
+                    clipboardManager.trimExpiredItems()
+                }
             }
 
             Section("Screenshots") {
