@@ -15,6 +15,12 @@ struct SettingsManagerTests {
         #expect(settings.secureMode == true)
     }
 
+    @Test("Defaults hide-from-screen-sharing to true")
+    func defaultHideFromScreenSharing() {
+        let settings = SettingsManager()
+        #expect(settings.hideFromScreenSharing == true)
+    }
+
     @Test("Conforms to SettingsManaging protocol")
     func protocolConformance() {
         let settings: any SettingsManaging = SettingsManager()

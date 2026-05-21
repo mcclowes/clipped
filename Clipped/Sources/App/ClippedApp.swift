@@ -27,6 +27,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             screenshotWatcher.startWatching(folder: folder)
         }
 
+        statusBarController.hideFromScreenSharing = settingsManager.hideFromScreenSharing
+        observeScreenSharingPolicy()
+
         // Bootstrap the clipboard manager: load persisted history, then start monitoring.
         // This must happen *before* the first poll so persisted items aren't clobbered.
         Task { @MainActor in
@@ -91,6 +94,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusBarController.openHistoryWindow(contentView: historyContent)
         }
     }
+
+    /// Re-registers itself on every change so the policy stays mirrored to existing windows
+    /// without coupling SettingsView to StatusBarController.
+    private func observeScreenSharingPolicy() {
+        withObservationTracking {
+            _ = settingsManager.hideFromScreenSharing
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.statusBarController.hideFromScreenSharing = self.settingsManager.hideFromScreenSharing
+                self.observeScreenSharingPolicy()
+            }
+        }
+    }
 }
 
 @main
@@ -102,6 +119,7 @@ struct ClippedApp: App {
             if let itemID {
                 StickyNoteView(itemID: itemID)
                     .environment(appDelegate.clipboardManager)
+                    .environment(appDelegate.settingsManager)
             }
         }
         .windowStyle(.hiddenTitleBar)

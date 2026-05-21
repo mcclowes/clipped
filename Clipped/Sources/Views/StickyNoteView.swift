@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StickyNoteView: View {
     @Environment(ClipboardManager.self) private var manager
+    @Environment(SettingsManager.self) private var settings
     @Environment(\.dismissWindow) private var dismissWindow
     let itemID: UUID
 
@@ -32,7 +33,7 @@ struct StickyNoteView: View {
         }
         .background(.ultraThinMaterial)
         .clipShape(.rect(cornerRadius: 12))
-        .floatingPanel()
+        .floatingPanel(hideFromScreenSharing: settings.hideFromScreenSharing)
         .onChange(of: item == nil) { _, isGone in
             if isGone {
                 dismissWindow(value: itemID)
