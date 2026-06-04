@@ -2,6 +2,20 @@ import AppKit
 import os
 import SwiftUI
 
+extension Notification.Name {
+    /// Posted by `ClipboardPanelPresenter` immediately *before* the panel content is shown,
+    /// for both the popover and the floating-panel presentation paths. The SwiftUI panel
+    /// listens for this to decide quick-menu vs. main view. We post our own notification
+    /// rather than relying on `NSPopover.willShowNotification` because the floating `NSPanel`
+    /// never emits the `NSPopover` notifications.
+    static let clippedPanelWillShow = Notification.Name("com.mcclowes.clipped.panelWillShow")
+
+    /// Posted by `ClipboardPanelPresenter` immediately *after* the panel content is shown and
+    /// its window is key, for both presentation paths. The SwiftUI panel listens for this to
+    /// move first responder into the search field and scroll to the selected row.
+    static let clippedPanelDidShow = Notification.Name("com.mcclowes.clipped.panelDidShow")
+}
+
 @MainActor
 final class ClipboardPanelPresenter {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ClipboardPanelPresenter")
@@ -50,6 +64,8 @@ final class ClipboardPanelPresenter {
     func show(button: NSStatusBarButton, statusBarScreen: NSScreen?) {
         let mouseScreen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
 
+        NotificationCenter.default.post(name: .clippedPanelWillShow, object: nil)
+
         if let mouseScreen, mouseScreen != statusBarScreen {
             showAsPanel(on: mouseScreen)
         } else {
@@ -94,23 +110,30 @@ final class ClipboardPanelPresenter {
         if popover.contentViewController !== hosting {
             popover.contentViewController = hosting
         }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        // Activate *before* showing: when triggered by the global hotkey another app is still
+        // frontmost, and a popover shown while we're inactive never becomes the key window, so
+        // the search field can't take first responder and keyboard navigation is dead.
         NSApp.activate(ignoringOtherApps: true)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         // The popover's backing window only exists once shown, so apply the screen-sharing
         // policy here rather than at popover construction.
         if let window = popover.contentViewController?.view.window {
             window.sharingType = hideFromScreenSharing ? .none : .readOnly
             window.makeKey()
         }
+        NotificationCenter.default.post(name: .clippedPanelDidShow, object: nil)
     }
 
     private func showAsPanel(on screen: NSScreen) {
         popover.performClose(nil)
 
         if floatingPanel == nil {
+            // No `.nonactivatingPanel`: that style is designed to never become the key window,
+            // which would leave the search field unable to take first responder. We want this
+            // panel to accept keyboard input, so it must be allowed to become key.
             let panel = NSPanel(
                 contentRect: NSRect(origin: .zero, size: panelSize),
-                styleMask: [.nonactivatingPanel, .titled, .closable, .fullSizeContentView],
+                styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
@@ -130,9 +153,9 @@ final class ClipboardPanelPresenter {
         let x = screenFrame.midX - size.width / 2
         let y = screenFrame.midY - size.height / 2
         floatingPanel?.setFrame(NSRect(x: x, y: y, width: size.width, height: size.height), display: true)
-        floatingPanel?.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
-        floatingPanel?.makeKey()
+        floatingPanel?.makeKeyAndOrderFront(nil)
+        NotificationCenter.default.post(name: .clippedPanelDidShow, object: nil)
     }
 
     private func closePanel() {

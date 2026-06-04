@@ -49,7 +49,7 @@ struct ClipboardPanelView: View {
                 mainPanelView
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSPopover.willShowNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .clippedPanelWillShow)) { _ in
             if manager.openedViaHotkey {
                 manager.openedViaHotkey = false
                 manager.openedWithOption = false
@@ -219,7 +219,7 @@ struct ClipboardPanelView: View {
                     .onChange(of: selectedIndex) { _, newIndex in
                         scrollToSelected(proxy: proxy, index: newIndex)
                     }
-                    .onReceive(NotificationCenter.default.publisher(for: NSPopover.didShowNotification)) { _ in
+                    .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
                         scrollToSelected(proxy: proxy, index: selectedIndex)
                     }
                 }
@@ -264,7 +264,7 @@ struct ClipboardPanelView: View {
                 manager.selectedFilter = nil
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSPopover.didShowNotification)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
             isSearchFocused = true
         }
         .overlay {
