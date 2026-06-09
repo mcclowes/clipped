@@ -1,7 +1,9 @@
 import AppKit
 @testable import Clipped
 import Foundation
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 
 @MainActor
 struct ClipboardManagerTests {
@@ -390,25 +392,125 @@ struct ClipboardManagerTests {
         #expect(item.sourceAppCategory == .browser)
     }
 
-    @Test("Trim to max size preserves developer content items")
-    func trimPreservesDevContent() {
+    @Test("Trim to max size counts developer content against the cap")
+    func trimCapsDevContent() {
         let (manager, _, settings, _) = makeManager()
         settings.maxHistorySize = 5
 
+        // 8 developer-content items, none pinned: the cap must apply to them too,
+        // otherwise auto-detected code grows the history without bound.
         for i in 0..<8 {
             manager.items.append(
-                ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
+                ClipboardItem(
+                    content: .text("dev item \(i)"),
+                    contentType: .plainText,
+                    isDeveloperContent: true
+                )
             )
         }
-        let devItem = ClipboardItem(
-            content: .text("dev item"),
-            contentType: .plainText,
-            isDeveloperContent: true
-        )
-        manager.items.append(devItem)
 
         manager.trimToMaxSize()
 
-        #expect(manager.items.contains(where: { $0.id == devItem.id }))
+        #expect(manager.items.count == 5)
+        let allDev = manager.items.allSatisfy(\.isDeveloperContent)
+        #expect(allDev)
+    }
+
+    @Test("Trim to max size keeps newest and evicts oldest regardless of content type")
+    func trimEvictsOldestMixed() {
+        let (manager, _, settings, _) = makeManager()
+        settings.maxHistorySize = 3
+
+        // items[0] is newest (insert order matches `items` front-to-back).
+        let newest = ClipboardItem(content: .text("newest"), contentType: .plainText)
+        manager.items.append(newest)
+        for i in 0..<5 {
+            manager.items.append(
+                ClipboardItem(
+                    content: .text("dev \(i)"),
+                    contentType: .plainText,
+                    isDeveloperContent: true
+                )
+            )
+        }
+
+        manager.trimToMaxSize()
+
+        #expect(manager.items.count == 3)
+        #expect(manager.items.first?.id == newest.id)
+    }
+
+    // MARK: - Image utilities
+
+    private static func pngImageItem(width: Int = 40, height: Int = 30) -> ClipboardItem {
+        TestImageFactory.imageItem(width: width, height: height)
+    }
+
+    private static func imageData(of item: ClipboardItem) -> Data? {
+        guard case let .image(data, _) = item.content else { return nil }
+        return data
+    }
+
+    @Test("Compressing an image inserts a JPEG result as a new history item")
+    func compressImageInsertsResult() throws {
+        let (manager, _, _, _) = makeManager()
+        let original = Self.pngImageItem()
+        manager.items = [original]
+
+        manager.compressImage(original)
+
+        #expect(manager.items.count == 2)
+        let result = try #require(manager.items.first)
+        let data = try #require(Self.imageData(of: result))
+        #expect(ImageProcessor.format(of: data) == .jpeg)
+        #expect(result.mutationsApplied == ["Compressed"])
+    }
+
+    @Test("Converting an image emits a decodable result in the requested format")
+    func convertImageFormat() throws {
+        let (manager, _, _, _) = makeManager()
+        let original = Self.pngImageItem()
+        manager.items = [original]
+
+        manager.convertImage(original, to: .heic)
+
+        let result = try #require(manager.items.first)
+        let data = try #require(Self.imageData(of: result))
+        #expect(ImageProcessor.pixelSize(of: data) != nil)
+        #expect(result.mutationsApplied == ["Converted to HEIC"])
+    }
+
+    @Test("Resizing an image halves its dimensions")
+    func resizeImageHalves() throws {
+        let (manager, _, _, _) = makeManager()
+        let original = Self.pngImageItem(width: 80, height: 60)
+        manager.items = [original]
+
+        manager.resizeImage(original, scale: 0.5)
+
+        let result = try #require(manager.items.first)
+        let data = try #require(Self.imageData(of: result))
+        let size = try #require(ImageProcessor.pixelSize(of: data))
+        #expect(Int(size.width) == 40)
+        #expect(result.mutationsApplied == ["Resized 50%"])
+    }
+
+    @Test("Image transforms are ignored for non-image items")
+    func transformIgnoresNonImage() {
+        let (manager, _, _, _) = makeManager()
+        let textItem = ClipboardItem(content: .text("not an image"), contentType: .plainText)
+        manager.items = [textItem]
+
+        manager.compressImage(textItem)
+
+        #expect(manager.items.count == 1)
+    }
+
+    @Test("exportData returns markdown bytes for a text item")
+    func exportDataMarkdown() throws {
+        let (manager, _, _, _) = makeManager()
+        let item = ClipboardItem(content: .text("body text"), contentType: .plainText)
+        let data = try #require(manager.exportData(for: item, format: .markdown))
+        #expect(String(data: data, encoding: .utf8) == "body text")
     }
 }

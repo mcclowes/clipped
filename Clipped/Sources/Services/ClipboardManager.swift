@@ -302,9 +302,7 @@ final class ClipboardManager {
             case let .url(url):
                 pasteboard.setString(url.absoluteString, forType: .string)
             case let .image(data, _):
-                // Sniff magic bytes so we advertise the real format.
-                let pasteboardType: NSPasteboard.PasteboardType = Self.isPNGData(data) ? .png : .tiff
-                pasteboard.setData(data, forType: pasteboardType)
+                Self.writeImageData(data, to: pasteboard)
             case let .svg(data, _):
                 // Write three representations so paste works everywhere:
                 // 1. The SVG markup as a string — code editors, text fields, terminals.
@@ -375,6 +373,29 @@ final class ClipboardManager {
         return data.prefix(magic.count).elementsEqual(magic)
     }
 
+    private static func isTIFFData(_ data: Data) -> Bool {
+        // TIFF magic: "II*\0" (little-endian) or "MM\0*" (big-endian).
+        let little: [UInt8] = [0x49, 0x49, 0x2A, 0x00]
+        let big: [UInt8] = [0x4D, 0x4D, 0x00, 0x2A]
+        guard data.count >= 4 else { return false }
+        let head = data.prefix(4)
+        return head.elementsEqual(little) || head.elementsEqual(big)
+    }
+
+    /// Write image bytes to the pasteboard under a type apps can actually paste.
+    /// PNG and TIFF advertise their native type directly; other formats (JPEG/HEIC
+    /// produced by the image utilities) are handed over as a TIFF rendition so paste
+    /// works everywhere — the compact original still lives in history.
+    private static func writeImageData(_ data: Data, to pasteboard: PasteboardProtocol) {
+        if isPNGData(data) {
+            pasteboard.setData(data, forType: .png)
+        } else if isTIFFData(data) {
+            pasteboard.setData(data, forType: .tiff)
+        } else if let tiff = NSImage(data: data)?.tiffRepresentation {
+            pasteboard.setData(tiff, forType: .tiff)
+        }
+    }
+
     func pasteMatchingStyle(_ item: ClipboardItem) {
         // Copy as plain text, then simulate Cmd+V
         let targetApp = NSWorkspace.shared.frontmostApplication
@@ -427,6 +448,66 @@ final class ClipboardManager {
         monitor.write { pasteboard in
             pasteboard.clearContents()
             pasteboard.setString(merged, forType: .string)
+        }
+    }
+
+    // MARK: - Image utilities
+
+    /// Lossily re-encode an image to shrink it, placing the result on the clipboard
+    /// as a fresh history item.
+    func compressImage(_ item: ClipboardItem) {
+        applyImageTransform(item, mutation: "Compressed") { ImageProcessor.reencode($0, to: .jpeg, quality: 0.7) }
+    }
+
+    /// Convert an image to a different raster format (PNG/JPEG/HEIC).
+    func convertImage(_ item: ClipboardItem, to format: RasterImageFormat) {
+        applyImageTransform(item, mutation: "Converted to \(format.displayName)") {
+            ImageProcessor.reencode($0, to: format)
+        }
+    }
+
+    /// Downscale an image by `scale` (e.g. 0.5 = half size).
+    func resizeImage(_ item: ClipboardItem, scale: Double) {
+        let percent = Int((scale * 100).rounded())
+        applyImageTransform(item, mutation: "Resized \(percent)%") { ImageProcessor.resize($0, scale: scale) }
+    }
+
+    /// Bytes for "Save as…", produced by `FileExporter`. Returns `nil` when the
+    /// item can't be represented in `format`.
+    func exportData(for item: ClipboardItem, format: ExportFormat) -> Data? {
+        try? FileExporter.data(for: item, format: format)
+    }
+
+    private func applyImageTransform(
+        _ item: ClipboardItem,
+        mutation: String,
+        _ transform: (Data) -> Data?
+    ) {
+        guard case let .image(data, _) = item.content else { return }
+        guard let newData = transform(data), let size = ImageProcessor.pixelSize(of: newData) else {
+            Self.logger.error("Image transform '\(mutation, privacy: .public)' failed")
+            return
+        }
+
+        let result = ClipboardItem(
+            content: .image(newData, size),
+            contentType: .image,
+            sourceAppName: item.sourceAppName,
+            sourceAppBundleID: item.sourceAppBundleID
+        )
+        result.mutationsApplied = [mutation]
+
+        monitor.write { pasteboard in
+            pasteboard.clearContents()
+            Self.writeImageData(newData, to: pasteboard)
+        }
+
+        history.insert(result)
+        history.trimToMaxSize()
+        history.saveHistory()
+
+        if settingsManager?.playSoundOnCopy ?? true {
+            NSSound(named: "Pop")?.play()
         }
     }
 

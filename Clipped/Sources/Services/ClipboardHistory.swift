@@ -145,11 +145,11 @@ final class ClipboardHistory {
     }
 
     /// Remove oldest unpinned items beyond the configured max history size.
-    /// Pinned and developer-content items are exempt from the cap.
+    /// Only pinned items are exempt — they were explicitly kept by the user.
     func trimToMaxSize() {
         let limit = settingsManager?.maxHistorySize ?? Self.defaultMaxHistorySize
-        while items.count(where: { !$0.isPinned && !$0.isDeveloperContent }) > limit {
-            if let lastTrimmable = items.lastIndex(where: { !$0.isPinned && !$0.isDeveloperContent }) {
+        while items.count(where: { !$0.isPinned }) > limit {
+            if let lastTrimmable = items.lastIndex(where: { !$0.isPinned }) {
                 items.remove(at: lastTrimmable)
             }
         }

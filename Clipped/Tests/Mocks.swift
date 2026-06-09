@@ -2,6 +2,50 @@ import AppKit
 import Carbon
 @testable import Clipped
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+/// Encodes a solid-colour test image of the given pixel size to `format`. Centralised
+/// here so the force-unwraps (all on compile-time-safe ImageIO calls) live in one place.
+@MainActor
+enum TestImageFactory {
+    // swiftlint:disable force_unwrapping
+    static func data(width: Int, height: Int, format: RasterImageFormat = .png) -> Data {
+        let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        )!
+        context.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.9, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let image = context.makeImage()!
+
+        let buffer = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(
+            buffer as CFMutableData,
+            format.utType.identifier as CFString,
+            1,
+            nil
+        )!
+        CGImageDestinationAddImage(destination, image, nil)
+        _ = CGImageDestinationFinalize(destination)
+        return buffer as Data
+    }
+
+    /// A solid-colour image wrapped in a `ClipboardItem` for export/transform tests.
+    static func imageItem(width: Int = 40, height: Int = 30) -> ClipboardItem {
+        ClipboardItem(
+            content: .image(data(width: width, height: height), CGSize(width: width, height: height)),
+            contentType: .image
+        )
+    }
+
+    // swiftlint:enable force_unwrapping
+}
 
 /// In-memory pasteboard that records writes and can simulate external writes from other apps.
 /// Matches `NSPasteboard`'s surface via `PasteboardProtocol` so both `PasteboardMonitor`

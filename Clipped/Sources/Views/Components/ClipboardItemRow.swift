@@ -83,6 +83,32 @@ struct ClipboardItemRow: View {
             }
         }
 
+        Divider()
+
+        Menu("Save as…") {
+            ForEach(FileExporter.availableFormats(for: item), id: \.self) { format in
+                Button(format.title) { presentSavePanel(format: format) }
+            }
+        }
+
+        if case .image = item.content {
+            Button("Compress") {
+                manager.compressImage(item)
+            }
+            Menu("Convert to") {
+                ForEach(RasterImageFormat.allCases, id: \.self) { format in
+                    Button(format.displayName) { manager.convertImage(item, to: format) }
+                }
+            }
+            Menu("Resize") {
+                Button("75%") { manager.resizeImage(item, scale: 0.75) }
+                Button("50%") { manager.resizeImage(item, scale: 0.5) }
+                Button("25%") { manager.resizeImage(item, scale: 0.25) }
+            }
+        }
+
+        Divider()
+
         Button("Open as sticky note") {
             openWindow(value: item.id)
         }
@@ -122,6 +148,29 @@ struct ClipboardItemRow: View {
         Task {
             try? await Task.sleep(for: .milliseconds(100))
             manager.simulatePaste()
+        }
+    }
+
+    /// Present the native macOS save panel for a chosen export format, then write the
+    /// derived bytes to the picked location. Encoding happens after the user confirms so
+    /// cancelling costs nothing.
+    private func presentSavePanel(format: ExportFormat) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [format.utType]
+        panel.canCreateDirectories = true
+        panel.isExtensionHidden = false
+        panel.nameFieldStringValue = "\(FileExporter.suggestedBaseName(for: item)).\(format.fileExtension)"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            guard let data = manager.exportData(for: item, format: format) else {
+                NSSound.beep()
+                return
+            }
+            do {
+                try data.write(to: url)
+            } catch {
+                NSSound.beep()
+            }
         }
     }
 
