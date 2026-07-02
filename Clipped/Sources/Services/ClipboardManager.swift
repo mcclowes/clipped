@@ -236,6 +236,9 @@ final class ClipboardManager {
         if case let .url(url) = item.content {
             scheduleLinkMetadataFetch(for: url, itemID: item.id)
         }
+        if case .image = item.content {
+            scheduleImageTextExtraction(for: item.id, content: item.content)
+        }
 
         history.trimToMaxSize()
 
@@ -273,6 +276,20 @@ final class ClipboardManager {
             {
                 found.linkTitle = metadata.title
                 found.linkFavicon = metadata.favicon
+                history.saveHistory()
+            }
+        }
+    }
+
+    private func scheduleImageTextExtraction(for itemID: UUID, content: ClipboardContent) {
+        guard case let .image(data, _) = content else { return }
+        Task { [weak self] in
+            let text = await ImageTextExtractor.extractText(from: data)
+            guard let self, let text else { return }
+            if let found = history.items.first(where: { $0.id == itemID })
+                ?? history.pinnedItems.first(where: { $0.id == itemID })
+            {
+                found.extractedText = text
                 history.saveHistory()
             }
         }

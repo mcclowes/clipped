@@ -364,6 +364,9 @@ struct StoredEntry: Codable {
     /// so paste into the source app still works after history reload. Nullable for
     /// backward compat with history files written before this existed.
     let customPasteboardTypes: [String: Data]?
+    /// Text recognised from image content by on-device OCR. Populated asynchronously
+    /// after ingest; nullable for backward compat with older history files.
+    let extractedText: String?
 
     /// Copy of this entry with `imageData` cleared, used when writing the JSON envelope
     /// so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
@@ -388,7 +391,8 @@ struct StoredEntry: Codable {
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
             detectedCategories: detectedCategories,
-            customPasteboardTypes: nil
+            customPasteboardTypes: nil,
+            extractedText: extractedText
         )
     }
 
@@ -414,7 +418,8 @@ struct StoredEntry: Codable {
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
             detectedCategories: detectedCategories,
-            customPasteboardTypes: customPasteboardTypes
+            customPasteboardTypes: customPasteboardTypes,
+            extractedText: extractedText
         )
     }
 }
@@ -495,7 +500,8 @@ extension StoredEntry {
             detectedCategories: item.detectedCategories.isEmpty
                 ? nil
                 : item.detectedCategories.map(\.rawValue).sorted(),
-            customPasteboardTypes: item.customPasteboardTypes
+            customPasteboardTypes: item.customPasteboardTypes,
+            extractedText: item.extractedText
         )
     }
 
@@ -523,6 +529,7 @@ extension StoredEntry {
         item.linkFavicon = linkFavicon
         item.mutationsApplied = mutationsApplied ?? []
         item.customPasteboardTypes = customPasteboardTypes
+        item.extractedText = extractedText
         return item
     }
 

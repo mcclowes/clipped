@@ -69,6 +69,7 @@ final class ClipboardHistory {
         if !searchQuery.isEmpty {
             result = result.filter { item in
                 item.preview.localizedCaseInsensitiveContains(searchQuery)
+                    || (item.extractedText?.localizedCaseInsensitiveContains(searchQuery) ?? false)
             }
         }
         return result
