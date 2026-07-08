@@ -507,6 +507,9 @@ final class ClipboardItem: Identifiable {
     var detectedCategories: Set<ContentCategory>
     var linkTitle: String?
     var linkFavicon: Data?
+    /// Text extracted from image content via on-device OCR. Populated asynchronously
+    /// after ingest; `nil` until recognition completes or if the image contains no text.
+    var extractedText: String?
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
     /// Raw pasteboard type → data snapshot captured for items that come from apps with

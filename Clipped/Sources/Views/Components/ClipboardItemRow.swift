@@ -92,6 +92,14 @@ struct ClipboardItemRow: View {
         }
 
         if case .image = item.content {
+            if let text = item.extractedText {
+                Button("Copy extracted text") {
+                    manager.copyText(text)
+                }
+            }
+        }
+
+        if case .image = item.content {
             Button("Compress") {
                 manager.compressImage(item)
             }
@@ -227,11 +235,19 @@ struct ClipboardItemRow: View {
             switch item.content {
             case let .image(data, _):
                 if let nsImage = NSImage(data: data) {
-                    Image(nsImage: nsImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(maxHeight: 48)
-                        .clipShape(.rect(cornerRadius: 4))
+                    HStack(spacing: 8) {
+                        Image(nsImage: nsImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxHeight: 48)
+                            .clipShape(.rect(cornerRadius: 4))
+                        if let text = item.extractedText {
+                            Text(text)
+                                .font(.caption)
+                                .lineLimit(2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             case let .svg(data, _):
                 if let nsImage = NSImage(data: data) {
