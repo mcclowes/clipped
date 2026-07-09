@@ -158,6 +158,10 @@ final class MockHistoryStore: HistoryStoring, @unchecked Sendable {
         await state.startFresh()
     }
 
+    func retryLoad() async -> [StoredEntry] {
+        await state.load()
+    }
+
     func setLastLoadError(_ error: HistoryLoadError?) async {
         await state.setLastLoadError(error)
     }

@@ -6,10 +6,19 @@ import Testing
 @MainActor
 @Suite(.serialized)
 struct HistoryStoreTests {
+    /// Per-suite temp directory so tests never read or delete the real app's
+    /// `~/Library/Application Support/Clipped/` history.
+    private let baseDir: URL
+
+    init() {
+        baseDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClippedHistoryStoreTests-\(UUID().uuidString)", isDirectory: true)
+    }
+
     private func makeStore(
         keyStore: any KeychainKeyStoring = InMemoryKeyStore()
     ) -> HistoryStore {
-        HistoryStore(keyStore: keyStore)
+        HistoryStore(keyStore: keyStore, baseDirectory: baseDir)
     }
 
     private func makeEntry(
@@ -111,7 +120,7 @@ struct HistoryStoreTests {
         let secret = "definitely-secret-plaintext-token-abc123"
         await store.save(entries: [makeEntry(text: secret)])
 
-        let data = try? Data(contentsOf: Self.historyEncURL())
+        let data = try? Data(contentsOf: historyEncURL())
         #expect(data != nil)
         if let data {
             let needle = Data(secret.utf8)
@@ -128,8 +137,8 @@ struct HistoryStoreTests {
 
         await store.save(entries: [makeEntry(text: "hi")])
 
-        #expect(!FileManager.default.fileExists(atPath: Self.historyJSONURL().path))
-        #expect(FileManager.default.fileExists(atPath: Self.historyEncURL().path))
+        #expect(!FileManager.default.fileExists(atPath: historyJSONURL().path))
+        #expect(FileManager.default.fileExists(atPath: historyEncURL().path))
 
         await store.clear()
     }
@@ -166,7 +175,7 @@ struct HistoryStoreTests {
 
         await store2.startFresh()
         #expect(await store2.lastLoadError() == nil)
-        #expect(!FileManager.default.fileExists(atPath: Self.historyEncURL().path))
+        #expect(!FileManager.default.fileExists(atPath: historyEncURL().path))
 
         // New saves should work afterwards.
         await store2.save(entries: [makeEntry(text: "fresh")])
@@ -185,11 +194,60 @@ struct HistoryStoreTests {
         // Overwrite history.enc with nonsense that's still longer than the crypto overhead
         // so we exercise the `.decryptionFailed` path specifically.
         let junk = Data(repeating: 0x41, count: 128)
-        try? junk.write(to: Self.historyEncURL())
+        try? junk.write(to: historyEncURL())
 
         let loaded = await store.load()
         #expect(loaded.isEmpty)
         #expect(await store.lastLoadError() == .decryptionFailed)
+
+        await store.clear()
+    }
+
+    @Test("Save is refused after a failed decrypt so recoverable ciphertext isn't overwritten")
+    func saveRefusedAfterDecryptionFailure() async {
+        let keyStore1 = InMemoryKeyStore()
+        let store1 = makeStore(keyStore: keyStore1)
+        await store1.clear()
+        await store1.save(entries: [makeEntry(text: "original secret")])
+        let originalCiphertext = try? Data(contentsOf: historyEncURL())
+
+        // A new instance with a different key can't decrypt the file.
+        let keyStore2 = InMemoryKeyStore()
+        let store2 = makeStore(keyStore: keyStore2)
+        _ = await store2.load()
+        #expect(await store2.lastLoadError() == .decryptionFailed)
+
+        // A save now (e.g. the user copies something) must NOT clobber the original ciphertext.
+        await store2.save(entries: [makeEntry(text: "new item")])
+        let afterCiphertext = try? Data(contentsOf: historyEncURL())
+        #expect(afterCiphertext == originalCiphertext)
+
+        // The original is still recoverable with the correct key.
+        let recovered = makeStore(keyStore: keyStore1)
+        let loaded = await recovered.load()
+        #expect(loaded.first?.toClipboardItem()?.plainText == "original secret")
+
+        await recovered.clear()
+    }
+
+    @Test("originalContent and customPasteboardTypes survive a save/load round-trip")
+    func preservesOriginalContentAndCustomTypes() async {
+        let store = makeStore()
+        await store.clear()
+
+        let item = ClipboardItem(content: .text("cleaned"), contentType: .plainText)
+        item.originalContent = .text("original with tracking")
+        item.mutationsApplied = ["Stripped tracking parameters"]
+        item.customPasteboardTypes = ["com.example.custom": Data([1, 2, 3, 4])]
+        await store.save(entries: [StoredEntry(item: item)])
+
+        let restored = await store.load().first?.toClipboardItem()
+        #expect(restored?.customPasteboardTypes?["com.example.custom"] == Data([1, 2, 3, 4]))
+        if case let .text(str) = restored?.originalContent {
+            #expect(str == "original with tracking")
+        } else {
+            Issue.record("originalContent did not round-trip")
+        }
 
         await store.clear()
     }
@@ -205,16 +263,16 @@ struct HistoryStoreTests {
         // Hand-craft a plaintext history.json like a previous app version would have written.
         let legacy = makeEntry(text: "from before the upgrade")
         let plaintext = try JSONEncoder().encode([legacy])
-        try? plaintext.write(to: Self.historyJSONURL())
-        #expect(FileManager.default.fileExists(atPath: Self.historyJSONURL().path))
+        try? plaintext.write(to: historyJSONURL())
+        #expect(FileManager.default.fileExists(atPath: historyJSONURL().path))
 
         let loaded = await store.load()
         #expect(loaded.count == 1)
         #expect(loaded.first?.toClipboardItem()?.plainText == "from before the upgrade")
 
         // Plaintext file must be gone, encrypted file must be present.
-        #expect(!FileManager.default.fileExists(atPath: Self.historyJSONURL().path))
-        #expect(FileManager.default.fileExists(atPath: Self.historyEncURL().path))
+        #expect(!FileManager.default.fileExists(atPath: historyJSONURL().path))
+        #expect(FileManager.default.fileExists(atPath: historyEncURL().path))
 
         await store.clear()
     }
@@ -236,7 +294,7 @@ struct HistoryStoreTests {
         await store.save(entries: [entry])
 
         // The encrypted image file should exist next to history.enc.
-        let imageURL = Self.encryptedImageURL(id: entry.id)
+        let imageURL = encryptedImageURL(id: entry.id)
         #expect(FileManager.default.fileExists(atPath: imageURL.path))
 
         // And it should actually be encrypted — the PNG magic bytes should not be present.
@@ -263,7 +321,7 @@ struct HistoryStoreTests {
         )
         await store.save(entries: [StoredEntry(item: item)])
 
-        let imageURL = Self.encryptedImageURL(id: item.id)
+        let imageURL = encryptedImageURL(id: item.id)
         #expect(FileManager.default.fileExists(atPath: imageURL.path))
 
         await store.clear()
@@ -286,8 +344,8 @@ struct HistoryStoreTests {
 
         await store.save(entries: [StoredEntry(item: itemA), StoredEntry(item: itemB)])
 
-        let aURL = Self.encryptedImageURL(id: itemA.id)
-        let bURL = Self.encryptedImageURL(id: itemB.id)
+        let aURL = encryptedImageURL(id: itemA.id)
+        let bURL = encryptedImageURL(id: itemB.id)
         #expect(FileManager.default.fileExists(atPath: aURL.path))
         #expect(FileManager.default.fileExists(atPath: bURL.path))
 
@@ -313,9 +371,9 @@ struct HistoryStoreTests {
         )
         let strippedEntry = StoredEntry(item: item).strippingImageData()
         let legacyJSON = try JSONEncoder().encode([strippedEntry])
-        try? legacyJSON.write(to: Self.historyJSONURL())
+        try? legacyJSON.write(to: historyJSONURL())
 
-        let legacyImageURL = Self.legacyPlaintextImageURL(id: item.id, ext: "png")
+        let legacyImageURL = legacyPlaintextImageURL(id: item.id, ext: "png")
         try? pngData.write(to: legacyImageURL)
         #expect(FileManager.default.fileExists(atPath: legacyImageURL.path))
 
@@ -325,7 +383,7 @@ struct HistoryStoreTests {
 
         // Plaintext image file is gone, encrypted version is present.
         #expect(!FileManager.default.fileExists(atPath: legacyImageURL.path))
-        #expect(FileManager.default.fileExists(atPath: Self.encryptedImageURL(id: item.id).path))
+        #expect(FileManager.default.fileExists(atPath: encryptedImageURL(id: item.id).path))
 
         await store.clear()
     }
@@ -346,28 +404,22 @@ struct HistoryStoreTests {
         ])
     }
 
-    private static func appSupportDir() -> URL {
-        // swiftlint:disable:next force_unwrapping
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("Clipped", isDirectory: true)
+    private func historyJSONURL() -> URL {
+        baseDir.appendingPathComponent("history.json")
     }
 
-    private static func historyJSONURL() -> URL {
-        appSupportDir().appendingPathComponent("history.json")
+    private func historyEncURL() -> URL {
+        baseDir.appendingPathComponent("history.enc")
     }
 
-    private static func historyEncURL() -> URL {
-        appSupportDir().appendingPathComponent("history.enc")
-    }
-
-    private static func encryptedImageURL(id: UUID) -> URL {
-        appSupportDir()
+    private func encryptedImageURL(id: UUID) -> URL {
+        baseDir
             .appendingPathComponent("images", isDirectory: true)
             .appendingPathComponent("\(id.uuidString).enc")
     }
 
-    private static func legacyPlaintextImageURL(id: UUID, ext: String) -> URL {
-        appSupportDir()
+    private func legacyPlaintextImageURL(id: UUID, ext: String) -> URL {
+        baseDir
             .appendingPathComponent("images", isDirectory: true)
             .appendingPathComponent("\(id.uuidString).\(ext)")
     }

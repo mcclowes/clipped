@@ -322,7 +322,11 @@ struct HistoryWindowView: View {
     private var displayedItems: [ClipboardItem] {
         let base = items(for: selectedCategory)
         guard !searchQuery.isEmpty else { return base }
-        return base.filter { $0.preview.localizedCaseInsensitiveContains(searchQuery) }
+        return base.filter { item in
+            item.searchableText.localizedCaseInsensitiveContains(searchQuery)
+                || (!item.isSensitive && !item.containsSecret
+                    && (item.extractedText?.localizedCaseInsensitiveContains(searchQuery) ?? false))
+        }
     }
 
     private var selectedItem: ClipboardItem? {
@@ -514,7 +518,8 @@ private struct HistoryItemRow: View {
     private var icon: some View {
         switch item.content {
         case let .image(data, _):
-            if let nsImage = NSImage(data: data) {
+            // Downsampled + cached so scrolling the history list doesn't re-decode full images.
+            if let nsImage = ThumbnailCache.shared.thumbnail(for: item.id, data: data, maxPixel: 56) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
@@ -749,12 +754,16 @@ private struct HistoryDetailView: View {
 
 // MARK: - Shared formatter helper
 
-/// RelativeDateTimeFormatter is not `Sendable`, so we avoid caching it in a static
-/// under Swift 6 strict concurrency. Creating one per call is cheap compared to the
-/// cost of rendering the detail pane.
-@MainActor
-private func relativeTimeString(for date: Date) -> String {
+/// A single `@MainActor`-isolated formatter reused across rows. `RelativeDateTimeFormatter`
+/// isn't `Sendable`, but MainActor isolation makes a shared instance safe — and it avoids
+/// re-allocating a formatter in every row body on every list re-render.
+@MainActor private let sharedRelativeFormatter: RelativeDateTimeFormatter = {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .abbreviated
-    return formatter.localizedString(for: date, relativeTo: Date())
+    return formatter
+}()
+
+@MainActor
+private func relativeTimeString(for date: Date) -> String {
+    sharedRelativeFormatter.localizedString(for: date, relativeTo: Date())
 }

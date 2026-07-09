@@ -5,6 +5,8 @@ struct ContentTypeFilterBar: View {
     /// Ordered list of filter categories to expose as tabs. "All" is always prepended.
     let visibleCategories: [ClipboardFilter]
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 4) {
@@ -20,7 +22,7 @@ struct ContentTypeFilterBar: View {
 
     private func filterButton(label: String, filter: ClipboardFilter?) -> some View {
         Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.15)) {
                 selection = filter
             }
         } label: {
@@ -35,5 +37,3 @@ struct ContentTypeFilterBar: View {
         .buttonStyle(.plain)
     }
 }
-
-extension ContentType: Equatable {}

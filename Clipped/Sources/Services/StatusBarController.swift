@@ -68,6 +68,9 @@ final class StatusBarController {
 
     func show() {
         guard let button = statusBarItem.button else { return }
+        // Capture the target app *before* the panel activates Clipped, so paste-back can
+        // return focus to it.
+        clipboardManager?.captureFrontmostApp()
         panel.show(button: button, statusBarScreen: statusBarItem.buttonScreen)
     }
 

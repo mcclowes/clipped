@@ -1,7 +1,43 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import ImageIO
 import UniformTypeIdentifiers
+
+/// Caches downsampled thumbnails so list rows don't decode a full-resolution image on every
+/// render/scroll. Keyed by item id + target pixel size; the decode happens once per item.
+@MainActor
+final class ThumbnailCache {
+    static let shared = ThumbnailCache()
+
+    private let cache = NSCache<NSString, NSImage>()
+
+    private init() {
+        cache.countLimit = 256
+    }
+
+    func thumbnail(for id: UUID, data: Data, maxPixel: Int) -> NSImage? {
+        let key = "\(id.uuidString)-\(maxPixel)" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        guard let image = Self.downsample(data: data, maxPixel: maxPixel) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    private static func downsample(data: Data, maxPixel: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixel,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+    }
+}
 
 /// Raster image formats Clipped can encode to. Used by both the image-utility
 /// menu actions (`ClipboardManager`) and "Save as…" (`FileExporter`).

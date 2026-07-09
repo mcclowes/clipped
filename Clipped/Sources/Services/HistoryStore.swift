@@ -9,6 +9,8 @@ protocol HistoryStoring: Sendable {
     func clear() async
     func lastLoadError() async -> HistoryLoadError?
     func startFresh() async
+    /// Re-attempt a load after a transient key failure (e.g. the user unlocked the Keychain).
+    func retryLoad() async -> [StoredEntry]
 }
 
 enum HistoryLoadError: Error, Equatable {
@@ -49,20 +51,45 @@ actor HistoryStore: HistoryStoring {
 
     private var cryptoCache: HistoryCrypto?
     private var loadError: HistoryLoadError?
+    /// Set when the on-disk history exists but couldn't be read (wrong key, locked Keychain,
+    /// truncated file). While true, `save()` refuses to write so a transient read failure
+    /// can't clobber recoverable ciphertext. Cleared by a successful load or `startFresh()`.
+    private var saveBlocked = false
 
-    init(keyStore: any KeychainKeyStoring = KeychainKeyStore()) {
+    init(
+        keyStore: any KeychainKeyStoring = KeychainKeyStore(),
+        baseDirectory: URL? = nil
+    ) {
         self.keyStore = keyStore
 
-        guard let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        else {
-            fatalError("Application Support directory not found")
+        let appDir: URL
+        if let baseDirectory {
+            appDir = baseDirectory
+        } else {
+            guard let appSupport = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            else {
+                fatalError("Application Support directory not found")
+            }
+            appDir = appSupport.appendingPathComponent("Clipped", isDirectory: true)
         }
-        let appDir = appSupport.appendingPathComponent("Clipped", isDirectory: true)
-        try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
+        Self.createOwnerOnlyDirectory(at: appDir)
         encryptedFileURL = appDir.appendingPathComponent("history.enc")
         legacyPlaintextFileURL = appDir.appendingPathComponent("history.json")
         imagesDir = appDir.appendingPathComponent("images", isDirectory: true)
-        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        Self.createOwnerOnlyDirectory(at: imagesDir)
+    }
+
+    /// Creates a directory as `0700` so other local users can't even enumerate the
+    /// encrypted history's filenames or timestamps. Repairs permissions on directories
+    /// left `0755` by older installs.
+    private static func createOwnerOnlyDirectory(at url: URL) {
+        try? FileManager.default.createDirectory(
+            at: url,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
     }
 
     func lastLoadError() -> HistoryLoadError? {
@@ -73,9 +100,18 @@ actor HistoryStore: HistoryStoring {
         let signpost = Signposts.store.beginInterval("Save")
         defer { Signposts.store.endInterval("Save", signpost) }
 
+        guard !saveBlocked else {
+            // The existing history couldn't be decrypted at load time. Overwriting it now
+            // would permanently destroy data that's still recoverable with the right key,
+            // so refuse until the user explicitly retries or chooses "start fresh".
+            Self.logger.error("Refusing to save: prior history is unreadable and would be overwritten")
+            return
+        }
+
         guard let crypto = try? resolveCrypto() else {
             Self.logger.error("Refusing to save: encryption key unavailable")
             loadError = .keyUnavailable
+            saveBlocked = true
             return
         }
 
@@ -125,6 +161,8 @@ actor HistoryStore: HistoryStoring {
             // is called. Only flag keyUnavailable when encrypted data genuinely exists.
             if FileManager.default.fileExists(atPath: encryptedFileURL.path) {
                 loadError = .keyUnavailable
+                saveBlocked = true
+                backUpUnreadableFile()
             }
             return []
         }
@@ -149,6 +187,7 @@ actor HistoryStore: HistoryStoring {
         } catch {
             Self.logger.error("Failed to read encrypted history file: \(error.localizedDescription)")
             loadError = .corrupted
+            saveBlocked = true
             return []
         }
 
@@ -158,10 +197,14 @@ actor HistoryStore: HistoryStoring {
         } catch HistoryCryptoError.corrupted {
             Self.logger.error("Encrypted history file is shorter than crypto overhead")
             loadError = .corrupted
+            saveBlocked = true
+            backUpUnreadableFile()
             return []
         } catch {
             Self.logger.error("Failed to decrypt history: \(error.localizedDescription)")
             loadError = .decryptionFailed
+            saveBlocked = true
+            backUpUnreadableFile()
             return []
         }
 
@@ -169,17 +212,22 @@ actor HistoryStore: HistoryStoring {
         do {
             decoded = try JSONDecoder().decode([StoredEntry].self, from: plaintext)
         } catch {
+            // Decryption succeeded but the JSON is garbage — genuinely unrecoverable, so it's
+            // safe to move it aside and start fresh. Use a unique name so a second corruption
+            // event can't fail the move (which would otherwise leave the store wedged).
             Self.logger
                 .error("History plaintext corrupted, backing up and starting fresh: \(error.localizedDescription)")
             Signposts.store.emitEvent("CorruptedHistoryBackup")
             let backupURL = encryptedFileURL.deletingLastPathComponent()
-                .appendingPathComponent("history.corrupted.enc")
+                .appendingPathComponent("history.corrupted-\(UUID().uuidString).enc")
             try? FileManager.default.moveItem(at: encryptedFileURL, to: backupURL)
             loadError = nil
+            saveBlocked = false
             return []
         }
 
         loadError = nil
+        saveBlocked = false
 
         // Hydrate image payloads from the side files. If a legacy entry still has
         // imageData embedded, pass it through untouched — the next save() will migrate
@@ -197,20 +245,32 @@ actor HistoryStore: HistoryStoring {
     func clear() async {
         try? FileManager.default.removeItem(at: encryptedFileURL)
         try? FileManager.default.removeItem(at: legacyPlaintextFileURL)
+        try? FileManager.default.removeItem(at: unreadableBackupURL)
         try? FileManager.default.removeItem(at: imagesDir)
-        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        Self.createOwnerOnlyDirectory(at: imagesDir)
         loadError = nil
+        saveBlocked = false
     }
 
     /// Recovery path for a missing or unreadable Keychain key. Drops the old encrypted
     /// data (which is unreadable anyway) and provisions a brand new key for future writes.
     func startFresh() async {
         try? FileManager.default.removeItem(at: encryptedFileURL)
+        try? FileManager.default.removeItem(at: unreadableBackupURL)
         try? FileManager.default.removeItem(at: imagesDir)
-        try? FileManager.default.createDirectory(at: imagesDir, withIntermediateDirectories: true)
+        Self.createOwnerOnlyDirectory(at: imagesDir)
         try? keyStore.deleteKey()
         cryptoCache = nil
         loadError = nil
+        saveBlocked = false
+    }
+
+    /// Retry a load after the user has (e.g.) unlocked the Keychain. Clears the cached
+    /// crypto so a freshly-available key is picked up, then reloads. On success the
+    /// save block is lifted; on continued failure it stays in place.
+    func retryLoad() async -> [StoredEntry] {
+        cryptoCache = nil
+        return await load()
     }
 
     // MARK: - Key / crypto resolution
@@ -223,6 +283,22 @@ actor HistoryStore: HistoryStoring {
         let crypto = HistoryCrypto(key: key)
         cryptoCache = crypto
         return crypto
+    }
+
+    // MARK: - Unreadable-file backup
+
+    private var unreadableBackupURL: URL {
+        encryptedFileURL.deletingLastPathComponent().appendingPathComponent("history.unreadable.enc")
+    }
+
+    /// Preserve exactly one copy of ciphertext we failed to read, so a user who later restores
+    /// the correct Keychain key can recover it. Never overwrites an existing backup — the first
+    /// one captured is the most trustworthy.
+    private func backUpUnreadableFile() {
+        guard FileManager.default.fileExists(atPath: encryptedFileURL.path),
+              !FileManager.default.fileExists(atPath: unreadableBackupURL.path)
+        else { return }
+        try? FileManager.default.copyItem(at: encryptedFileURL, to: unreadableBackupURL)
     }
 
     // MARK: - Atomic writes
@@ -333,6 +409,37 @@ actor HistoryStore: HistoryStoring {
 
 // MARK: - Codable storage model
 
+/// Codable projection of `ClipboardContent`, used to persist `originalContent` (the pre-mutation
+/// value that powers "Restore original") through the storage layer. All associated values are
+/// value types, so this stays `Sendable`.
+enum StoredContent: Codable {
+    case text(String)
+    case richText(Data, String)
+    case url(String)
+    case image(Data, Double, Double)
+    case svg(Data, Double, Double)
+
+    init(_ content: ClipboardContent) {
+        switch content {
+        case let .text(string): self = .text(string)
+        case let .richText(data, plain): self = .richText(data, plain)
+        case let .url(url): self = .url(url.absoluteString)
+        case let .image(data, size): self = .image(data, size.width, size.height)
+        case let .svg(data, size): self = .svg(data, size.width, size.height)
+        }
+    }
+
+    func toClipboardContent() -> ClipboardContent? {
+        switch self {
+        case let .text(string): .text(string)
+        case let .richText(data, plain): .richText(data, plain)
+        case let .url(string): URL(string: string).map(ClipboardContent.url)
+        case let .image(data, width, height): .image(data, CGSize(width: width, height: height))
+        case let .svg(data, width, height): .svg(data, CGSize(width: width, height: height))
+        }
+    }
+}
+
 /// Serialization-friendly snapshot of a ClipboardItem. Conversions that touch
 /// ClipboardItem live in a @MainActor extension so this struct itself is Sendable
 /// by default (all stored properties are value types).
@@ -367,9 +474,14 @@ struct StoredEntry: Codable {
     /// Text recognised from image content by on-device OCR. Populated asynchronously
     /// after ingest; nullable for backward compat with older history files.
     let extractedText: String?
+    /// Pre-mutation content, so "Restore original" survives a relaunch. Nullable for
+    /// backward compat and for items that were never mutated.
+    let originalContent: StoredContent?
 
-    /// Copy of this entry with `imageData` cleared, used when writing the JSON envelope
-    /// so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
+    /// Copy of this entry with the raster `imageData` cleared, used when writing the JSON
+    /// envelope so a 4 MB screenshot doesn't round-trip as base64 inside the history file.
+    /// Everything else — including `customPasteboardTypes` (2 MB-capped) and `originalContent`
+    /// — is preserved so paste-back and restore keep working across relaunches.
     func strippingImageData() -> StoredEntry {
         StoredEntry(
             id: id,
@@ -391,8 +503,9 @@ struct StoredEntry: Codable {
             linkFavicon: linkFavicon,
             mutationsApplied: mutationsApplied,
             detectedCategories: detectedCategories,
-            customPasteboardTypes: nil,
-            extractedText: extractedText
+            customPasteboardTypes: customPasteboardTypes,
+            extractedText: extractedText,
+            originalContent: originalContent
         )
     }
 
@@ -419,7 +532,8 @@ struct StoredEntry: Codable {
             mutationsApplied: mutationsApplied,
             detectedCategories: detectedCategories,
             customPasteboardTypes: customPasteboardTypes,
-            extractedText: extractedText
+            extractedText: extractedText,
+            originalContent: originalContent
         )
     }
 }
@@ -501,7 +615,8 @@ extension StoredEntry {
                 ? nil
                 : item.detectedCategories.map(\.rawValue).sorted(),
             customPasteboardTypes: item.customPasteboardTypes,
-            extractedText: item.extractedText
+            extractedText: item.extractedText,
+            originalContent: item.originalContent.map(StoredContent.init)
         )
     }
 
@@ -530,6 +645,7 @@ extension StoredEntry {
         item.mutationsApplied = mutationsApplied ?? []
         item.customPasteboardTypes = customPasteboardTypes
         item.extractedText = extractedText
+        item.originalContent = originalContent?.toClipboardContent()
         return item
     }
 

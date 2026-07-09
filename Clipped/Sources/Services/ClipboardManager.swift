@@ -4,12 +4,22 @@ import Observation
 import os
 import SwiftUI
 
+/// The primary defence is the `org.nspasteboard.ConcealedType` convention plus the entropy-based
+/// `SecretDetector`; this bundle-ID fallback catches managers that don't set the concealed type.
+/// Review periodically — it ages as new managers appear.
 private let passwordManagerBundleIDs: Set<String> = [
     "com.agilebits.onepassword7",
     "com.agilebits.onepassword-osx",
+    "com.1password.1password", // 1Password 8
     "com.lastpass.LastPass",
     "com.bitwarden.desktop",
     "org.keepassxc.keepassxc",
+    "com.apple.Passwords", // Apple Passwords (macOS 15+)
+    "com.dashlane.Dashlane",
+    "in.sinew.Enpass-Desktop",
+    "com.callpod.KeeperDesktop",
+    "com.siber.roboform",
+    "me.proton.pass.electron", // Proton Pass
 ]
 
 /// Clipboard pipeline coordinator. Glues `PasteboardMonitor` (which produces raw items),
@@ -39,6 +49,11 @@ final class ClipboardManager {
     /// Captured by `StatusBarController` when the user option-clicks the status bar icon,
     /// so the panel can read it synchronously instead of racing `NSEvent.modifierFlags`.
     var openedWithOption = false
+
+    /// The app that was frontmost when the panel opened. Paste actions reactivate it before
+    /// synthesising Cmd+V, so the keystroke lands in the user's app rather than in Clipped
+    /// (which had to activate itself to take keyboard focus for the search field).
+    private(set) var previousActiveApp: NSRunningApplication?
 
     // MARK: - Forwarded history API (keeps existing view/test call sites working)
 
@@ -152,6 +167,19 @@ final class ClipboardManager {
         await history.flushPendingSaves()
     }
 
+    /// Non-nil when persisted history couldn't be read at launch, so the UI can offer recovery.
+    var historyLoadError: HistoryLoadError? {
+        history.loadError
+    }
+
+    func retryHistoryLoad() async {
+        await history.retryHistoryLoad()
+    }
+
+    func discardUnreadableHistory() async {
+        await history.discardUnreadableHistory()
+    }
+
     func trimToMaxSize() {
         history.trimToMaxSize()
     }
@@ -214,13 +242,17 @@ final class ClipboardManager {
 
         let item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
 
+        // A mutation (e.g. trim-whitespace) can reduce content to nothing — don't store a blank row.
+        if case let .text(str) = item.content, str.isEmpty { return }
+
         // Always flag password manager items as sensitive so they're never persisted to disk,
         // regardless of whether secure mode UI behavior is enabled.
         if policy.isFromPasswordManager {
             item.isSensitive = true
         }
 
-        if let text = item.plainText, SecretDetector.containsSecret(text) {
+        // Bound the secret scan — a multi-megabyte copy shouldn't run regexes over its full length.
+        if let text = item.plainText, SecretDetector.containsSecret(String(text.prefix(100_000))) {
             item.containsSecret = true
         }
 
@@ -281,15 +313,26 @@ final class ClipboardManager {
         }
     }
 
+    /// Caps concurrent Vision OCR jobs so a burst of image copies can't saturate the CPU.
+    private static let ocrLimiter = TaskLimiter(limit: 2)
+
     private func scheduleImageTextExtraction(for itemID: UUID, content: ClipboardContent) {
         guard case let .image(data, _) = content else { return }
         Task { [weak self] in
+            await Self.ocrLimiter.acquire()
             let text = await ImageTextExtractor.extractText(from: data)
+            await Self.ocrLimiter.release()
             guard let self, let text else { return }
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
             {
                 found.extractedText = text
+                // OCR can surface secrets from screenshots of password managers, 2FA screens,
+                // terminals, etc. Run the same detector the plain-text path uses so the item is
+                // masked in the UI and kept out of typeahead search.
+                if SecretDetector.containsSecret(text) {
+                    found.containsSecret = true
+                }
                 history.saveHistory()
             }
         }
@@ -413,15 +456,34 @@ final class ClipboardManager {
         }
     }
 
-    func pasteMatchingStyle(_ item: ClipboardItem) {
-        // Copy as plain text, then simulate Cmd+V
-        let targetApp = NSWorkspace.shared.frontmostApplication
-        copyToClipboard(item, asPlainText: true)
+    /// Snapshot the frontmost app just before the panel activates Clipped, so paste-back has a
+    /// target to return focus to. Ignores Clipped itself.
+    func captureFrontmostApp() {
+        guard let frontmost = NSWorkspace.shared.frontmostApplication,
+              frontmost.bundleIdentifier != Bundle.main.bundleIdentifier
+        else { return }
+        previousActiveApp = frontmost
+    }
 
+    func pasteMatchingStyle(_ item: ClipboardItem) {
+        pasteToActiveApp(item, asPlainText: true)
+    }
+
+    /// Copy `item`, return focus to the app that was active before the panel opened, then
+    /// synthesise Cmd+V there. Without the reactivation the keystroke pastes into Clipped itself.
+    func pasteToActiveApp(_ item: ClipboardItem, asPlainText: Bool = false) {
+        let target = previousActiveApp
+        copyToClipboard(item, asPlainText: asPlainText)
         Task {
-            try? await Task.sleep(for: .milliseconds(100))
-            // Abort if focus changed during the delay to avoid pasting into the wrong app
-            guard NSWorkspace.shared.frontmostApplication == targetApp else { return }
+            target?.activate()
+            try? await Task.sleep(for: .milliseconds(120))
+            // Only paste if the intended app actually regained focus (and secure input is off).
+            guard !IsSecureEventInputEnabled() else { return }
+            if let target,
+               NSWorkspace.shared.frontmostApplication?.processIdentifier != target.processIdentifier
+            {
+                return
+            }
             simulatePaste()
         }
     }
@@ -471,22 +533,22 @@ final class ClipboardManager {
     // MARK: - Image utilities
 
     /// Lossily re-encode an image to shrink it, placing the result on the clipboard
-    /// as a fresh history item.
-    func compressImage(_ item: ClipboardItem) {
-        applyImageTransform(item, mutation: "Compressed") { ImageProcessor.reencode($0, to: .jpeg, quality: 0.7) }
+    /// as a fresh history item. Async because the encode runs off the main actor.
+    func compressImage(_ item: ClipboardItem) async {
+        await applyImageTransform(item, mutation: "Compressed") { ImageProcessor.reencode($0, to: .jpeg, quality: 0.7) }
     }
 
     /// Convert an image to a different raster format (PNG/JPEG/HEIC).
-    func convertImage(_ item: ClipboardItem, to format: RasterImageFormat) {
-        applyImageTransform(item, mutation: "Converted to \(format.displayName)") {
+    func convertImage(_ item: ClipboardItem, to format: RasterImageFormat) async {
+        await applyImageTransform(item, mutation: "Converted to \(format.displayName)") {
             ImageProcessor.reencode($0, to: format)
         }
     }
 
     /// Downscale an image by `scale` (e.g. 0.5 = half size).
-    func resizeImage(_ item: ClipboardItem, scale: Double) {
+    func resizeImage(_ item: ClipboardItem, scale: Double) async {
         let percent = Int((scale * 100).rounded())
-        applyImageTransform(item, mutation: "Resized \(percent)%") { ImageProcessor.resize($0, scale: scale) }
+        await applyImageTransform(item, mutation: "Resized \(percent)%") { ImageProcessor.resize($0, scale: scale) }
     }
 
     /// Bytes for "Save as…", produced by `FileExporter`. Returns `nil` when the
@@ -498,10 +560,19 @@ final class ClipboardManager {
     private func applyImageTransform(
         _ item: ClipboardItem,
         mutation: String,
-        _ transform: (Data) -> Data?
-    ) {
+        _ transform: @escaping @Sendable (Data) -> Data?
+    ) async {
         guard case let .image(data, _) = item.content else { return }
-        guard let newData = transform(data), let size = ImageProcessor.pixelSize(of: newData) else {
+
+        // Decode + re-encode is CPU-bound; run it off the main actor so the UI stays live.
+        let produced = await Task.detached(priority: .userInitiated) { () -> (Data, CGSize)? in
+            guard let newData = transform(data), let size = ImageProcessor.pixelSize(of: newData) else {
+                return nil
+            }
+            return (newData, size)
+        }.value
+
+        guard let (newData, size) = produced else {
             Self.logger.error("Image transform '\(mutation, privacy: .public)' failed")
             return
         }
@@ -534,5 +605,34 @@ final class ClipboardManager {
         item.originalContent = nil
         item.mutationsApplied = []
         history.saveHistory()
+    }
+}
+
+/// A tiny counting semaphore for structured tasks — bounds how many unstructured enrichment
+/// jobs (e.g. Vision OCR) run at once so a paste-storm can't saturate the CPU.
+actor TaskLimiter {
+    private let limit: Int
+    private var running = 0
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(limit: Int) {
+        self.limit = max(1, limit)
+    }
+
+    func acquire() async {
+        if running < limit {
+            running += 1
+            return
+        }
+        await withCheckedContinuation { waiters.append($0) }
+        // Resumed by `release()`, which hands its slot straight to us.
+    }
+
+    func release() {
+        if waiters.isEmpty {
+            running = max(0, running - 1)
+        } else {
+            waiters.removeFirst().resume()
+        }
     }
 }

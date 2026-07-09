@@ -20,11 +20,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mutationService.rulesProvider = settingsManager
         }
         screenshotWatcher.clipboardManager = clipboardManager
-        screenshotWatcher.requestNotificationPermission()
-        if settingsManager.captureScreenshots,
-           let folder = screenshotWatcher.resolveBookmark()
-        {
-            screenshotWatcher.startWatching(folder: folder)
+        // Only ask for notification permission when the screenshot feature is actually enabled,
+        // rather than prompting every user on first launch.
+        if settingsManager.captureScreenshots {
+            screenshotWatcher.requestNotificationPermission()
+            if let folder = screenshotWatcher.resolveBookmark() {
+                screenshotWatcher.startWatching(folder: folder)
+            }
         }
 
         statusBarController.hideFromScreenSharing = settingsManager.hideFromScreenSharing
@@ -93,6 +95,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environment(settingsManager)
             statusBarController.openHistoryWindow(contentView: historyContent)
         }
+    }
+
+    /// Drain the debounced history save before the process exits, so the last thing the user
+    /// copied (and any just-fetched link title / OCR text) actually reaches disk.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await clipboardManager.flushPendingSaves()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     /// Re-registers itself on every change so the policy stays mirrored to existing windows
