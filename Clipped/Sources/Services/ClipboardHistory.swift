@@ -11,7 +11,7 @@ import os
 final class ClipboardHistory {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "ClipboardHistory")
 
-    static let defaultMaxHistorySize = 50
+    static let defaultMaxHistorySize = 100
     private static let saveDebounceDelay: Duration = .milliseconds(250)
 
     var items: [ClipboardItem] = []
@@ -23,6 +23,11 @@ final class ClipboardHistory {
     var settingsManager: (any SettingsManaging)?
     /// Disk-backed store. Overridable for tests.
     var historyStore: any HistoryStoring = HistoryStore.shared
+
+    /// Surfaced to the UI so it can offer a recovery choice when persisted history couldn't
+    /// be read (wrong or locked Keychain key). `nil` means history loaded cleanly. While this
+    /// is non-nil the store refuses to overwrite the unreadable file, so no data is lost.
+    var loadError: HistoryLoadError?
 
     private var saveDebounceTask: Task<Void, Never>?
 
@@ -68,8 +73,16 @@ final class ClipboardHistory {
         }
         if !searchQuery.isEmpty {
             result = result.filter { item in
-                item.preview.localizedCaseInsensitiveContains(searchQuery)
-                    || (item.extractedText?.localizedCaseInsensitiveContains(searchQuery) ?? false)
+                if item.searchableText.localizedCaseInsensitiveContains(searchQuery) { return true }
+                // Don't leak OCR'd secret text through typeahead — only match `extractedText`
+                // on items that aren't masked as sensitive.
+                if !item.isSensitive, !item.containsSecret,
+                   let extracted = item.extractedText,
+                   extracted.localizedCaseInsensitiveContains(searchQuery)
+                {
+                    return true
+                }
+                return false
             }
         }
         return result
@@ -77,10 +90,19 @@ final class ClipboardHistory {
 
     // MARK: - Mutation
 
-    /// Insert a new item at the top, removing any existing item with identical content.
-    /// Pinned items are never displaced by dedup.
+    /// Insert a new item at the top, replacing any existing unpinned item with identical content.
     func insert(_ item: ClipboardItem) {
-        items.removeAll { $0.content == item.content && !$0.isPinned }
+        // Re-copying content that's already pinned shouldn't spawn a duplicate unpinned row.
+        if pinnedItems.contains(where: { $0.content == item.content }) { return }
+
+        // Carry the previous copy's enriched metadata (link preview, OCR text) onto the new item
+        // so a re-copy doesn't discard work already done for identical content.
+        if let existing = items.first(where: { $0.content == item.content }) {
+            item.linkTitle = item.linkTitle ?? existing.linkTitle
+            item.linkFavicon = item.linkFavicon ?? existing.linkFavicon
+            item.extractedText = item.extractedText ?? existing.extractedText
+        }
+        items.removeAll { $0.content == item.content }
         items.insert(item, at: 0)
     }
 
@@ -105,10 +127,11 @@ final class ClipboardHistory {
     }
 
     func moveToTop(_ item: ClipboardItem) {
-        if let index = items.firstIndex(where: { $0.id == item.id }) {
-            let moved = items.remove(at: index)
-            items.insert(moved, at: 0)
-        }
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        let moved = items.remove(at: index)
+        items.insert(moved, at: 0)
+        // Persist the reorder — otherwise a relaunch resurrects the old order.
+        saveHistory()
     }
 
     // MARK: - Clear / restore
@@ -164,6 +187,27 @@ final class ClipboardHistory {
     func loadPersistedHistory() async {
         guard settingsManager?.persistAcrossReboots == true else { return }
         let entries = await historyStore.load()
+        loadError = await historyStore.lastLoadError()
+        applyLoaded(entries)
+    }
+
+    /// Retry a load after a transient key failure (e.g. the user unlocked the Keychain).
+    /// On success the recovery banner clears and the save block is lifted.
+    func retryHistoryLoad() async {
+        let entries = await historyStore.retryLoad()
+        loadError = await historyStore.lastLoadError()
+        guard loadError == nil else { return }
+        applyLoaded(entries)
+    }
+
+    /// Discard the unreadable on-disk history and provision a fresh key. Only call this once
+    /// the user has explicitly chosen to abandon the old (unrecoverable) data.
+    func discardUnreadableHistory() async {
+        await historyStore.startFresh()
+        loadError = nil
+    }
+
+    private func applyLoaded(_ entries: [StoredEntry]) {
         var loaded: [ClipboardItem] = []
         var pinned: [ClipboardItem] = []
         for entry in entries {

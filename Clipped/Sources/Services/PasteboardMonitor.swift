@@ -41,14 +41,33 @@ final class PasteboardMonitor {
     var onNewItem: ((NewItemEvent) -> Void)?
 
     let pasteboard: PasteboardProtocol
-    private var pollTimer: Timer?
+    /// Not observable (an implementation detail); `nonisolated(unsafe)` lets the nonisolated
+    /// `deinit` invalidate it. Only ever mutated on the main actor, and by deinit no other
+    /// reference to this monitor survives, so the access is race-free.
+    @ObservationIgnored nonisolated(unsafe) var pollTimer: Timer?
     private var lastChangeCount: Int
 
     private static let pollInterval: TimeInterval = 0.5
+    /// Skip ingesting raster payloads larger than this so a giant copy can't stall the UI or
+    /// exhaust memory. The compact original still round-trips for reasonably sized images.
+    private static let maxImageBytes = 64 * 1024 * 1024
+    /// Content classifiers (dev/category/secret detection) only see this many characters — a
+    /// multi-megabyte blob would otherwise run several regex passes on the poll loop.
+    private static let maxDetectorChars = 100_000
+    /// HTML above this size isn't converted to rich text on the (main-actor) poll path.
+    private static let maxHTMLBytes = 256 * 1024
+
+    private static let htmlType = NSPasteboard.PasteboardType("public.html")
 
     init(pasteboard: PasteboardProtocol = NSPasteboard.general) {
         self.pasteboard = pasteboard
         lastChangeCount = pasteboard.changeCount
+    }
+
+    deinit {
+        // The run loop retains a repeating Timer, so without this the timer outlives the monitor
+        // and keeps firing (against a nil `self`) for the rest of the process.
+        pollTimer?.invalidate()
     }
 
     // MARK: - Lifecycle
@@ -57,11 +76,17 @@ final class PasteboardMonitor {
         guard !isMonitoring else { return }
         Self.logger.debug("Starting clipboard monitoring")
         isMonitoring = true
-        pollTimer = Timer.scheduledTimer(withTimeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
+        // Install on `.common` modes so polling keeps running during menu tracking / window
+        // resizes (a plain `scheduledTimer` uses `.default` and stalls in those loops). A 50%
+        // tolerance lets the scheduler coalesce the 2 Hz wakeups to cut energy impact.
+        let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.check()
             }
         }
+        timer.tolerance = Self.pollInterval * 0.5
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
     }
 
     func stopMonitoring() {
@@ -128,8 +153,7 @@ final class PasteboardMonitor {
     ) -> ClipboardItem? {
         let types = pasteboard.types ?? []
 
-        // Check for SVG before raster images — some apps advertise both SVG and a
-        // rendered PNG/TIFF fallback, and we want to preserve the vector source.
+        // 1. SVG (vector) before raster — some apps advertise both SVG and a rendered fallback.
         if types.contains(svgPasteboardType),
            let svgData = pasteboard.data(forType: svgPasteboardType),
            let item = makeSVGItem(data: svgData, appName: appName, bundleID: bundleID)
@@ -137,33 +161,9 @@ final class PasteboardMonitor {
             return item
         }
 
-        // Check for image first
-        if types.contains(.tiff) || types.contains(.png) {
-            if let imageData = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) {
-                if let image = NSImage(data: imageData) {
-                    return ClipboardItem(
-                        content: .image(imageData, image.size),
-                        contentType: .image,
-                        sourceAppName: appName,
-                        sourceAppBundleID: bundleID
-                    )
-                }
-            }
-        }
-
-        // Check for URL
-        if types.contains(.URL), let url = URL(string: pasteboard.string(forType: .string) ?? "") {
-            if url.scheme == "http" || url.scheme == "https" {
-                return ClipboardItem(
-                    content: .url(url),
-                    contentType: .url,
-                    sourceAppName: appName,
-                    sourceAppBundleID: bundleID
-                )
-            }
-        }
-
-        // Check for rich text
+        // 2. Rich text (RTF) BEFORE any raster image. Numbers/Excel/Notes/web pages put a `.tiff`
+        //    rendering *and* the real `.rtf`/`.string` on the pasteboard; preserving the text lets
+        //    the user paste it back, search it, and mutate it instead of getting a picture of it.
         if types.contains(.rtf), let rtfData = pasteboard.data(forType: .rtf) {
             let plainText = pasteboard.string(forType: .string) ?? ""
             return ClipboardItem(
@@ -174,49 +174,140 @@ final class PasteboardMonitor {
             )
         }
 
-        // Plain text / code
-        if let string = pasteboard.string(forType: .string), !string.isEmpty {
-            // Detect URLs pasted as plain text (no .URL pasteboard type)
-            let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !trimmed.contains(" "), !trimmed.contains("\n"),
-               let url = URL(string: trimmed),
-               url.scheme == "http" || url.scheme == "https"
-            {
-                return ClipboardItem(
-                    content: .url(url),
-                    contentType: .url,
-                    sourceAppName: appName,
-                    sourceAppBundleID: bundleID
-                )
+        // 3. Raster image. Skip oversized payloads, and read the pixel size via ImageIO instead
+        //    of a full `NSImage` decode (cheaper, and gives pixels not DPI-scaled points).
+        if types.contains(.tiff) || types.contains(.png),
+           let imageData = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
+        {
+            guard imageData.count <= Self.maxImageBytes else {
+                Self.logger.debug("Skipping oversized image copy (\(imageData.count) bytes)")
+                return nil
             }
-
-            // Detect SVG markup copied as plain text (very common — copying from browser
-            // dev tools, Figma's "Copy as SVG", GitHub raw view, icon libraries).
-            if SVGDetector.looksLikeSVG(string),
-               let svgData = string.data(using: .utf8),
-               let item = makeSVGItem(data: svgData, appName: appName, bundleID: bundleID)
-            {
-                return item
+            guard let size = ImageProcessor.pixelSize(of: imageData) ?? NSImage(data: imageData)?.size else {
+                return nil
             }
-
-            let sourceCategory = bundleID.flatMap(SourceAppCategory.category(for:))
-            let isFromDevApp = sourceCategory == .codeEditor || sourceCategory == .terminal
-            let isDevContent = isFromDevApp
-                || DeveloperContentDetector.isDeveloperContent(string)
-            let detectedCategories = ContentCategoryDetector.detect(in: string)
-            let item = ClipboardItem(
-                content: .text(string),
-                contentType: .plainText,
+            return ClipboardItem(
+                content: .image(imageData, size),
+                contentType: .image,
                 sourceAppName: appName,
-                sourceAppBundleID: bundleID,
-                isDeveloperContent: isDevContent,
-                detectedCategories: detectedCategories
+                sourceAppBundleID: bundleID
             )
-            attachCustomPasteboardTypesIfNeeded(to: item, bundleID: bundleID, types: types)
+        }
+
+        // 4. HTML-only rich content (browsers may provide `public.html` + `.string`, no RTF).
+        if let item = makeHTMLItem(appName: appName, bundleID: bundleID, types: types) {
             return item
         }
 
+        // 5. URL — read the value from the `.URL` type itself, not a co-present `.string` (whose
+        //    value may be the visible anchor text rather than the href).
+        if types.contains(.URL),
+           let urlString = pasteboard.string(forType: .URL) ?? pasteboard.string(forType: .string),
+           let url = URL(string: urlString),
+           url.scheme == "http" || url.scheme == "https"
+        {
+            return ClipboardItem(
+                content: .url(url),
+                contentType: .url,
+                sourceAppName: appName,
+                sourceAppBundleID: bundleID
+            )
+        }
+
+        // 6. Plain text / code.
+        if let string = pasteboard.string(forType: .string), !string.isEmpty {
+            return makeTextItem(string: string, appName: appName, bundleID: bundleID, types: types)
+        }
+
         return nil
+    }
+
+    /// Build a text/URL/SVG item from a plain string, bounding classifier input so a huge blob
+    /// can't run several regex passes on the poll loop.
+    private func makeTextItem(
+        string: String,
+        appName: String?,
+        bundleID: String?,
+        types: [NSPasteboard.PasteboardType]
+    ) -> ClipboardItem {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.contains(" "), !trimmed.contains("\n"),
+           let url = URL(string: trimmed),
+           url.scheme == "http" || url.scheme == "https"
+        {
+            return ClipboardItem(
+                content: .url(url),
+                contentType: .url,
+                sourceAppName: appName,
+                sourceAppBundleID: bundleID
+            )
+        }
+
+        if SVGDetector.looksLikeSVG(string),
+           let svgData = string.data(using: .utf8),
+           let item = makeSVGItem(data: svgData, appName: appName, bundleID: bundleID)
+        {
+            return item
+        }
+
+        let sample = String(string.prefix(Self.maxDetectorChars))
+        let sourceCategory = bundleID.flatMap(SourceAppCategory.category(for:))
+        let isFromDevApp = sourceCategory == .codeEditor || sourceCategory == .terminal
+        let isDevContent = isFromDevApp || DeveloperContentDetector.isDeveloperContent(sample)
+        let detectedCategories = ContentCategoryDetector.detect(in: sample)
+        let item = ClipboardItem(
+            content: .text(string),
+            contentType: .plainText,
+            sourceAppName: appName,
+            sourceAppBundleID: bundleID,
+            isDeveloperContent: isDevContent,
+            detectedCategories: detectedCategories
+        )
+        attachCustomPasteboardTypesIfNeeded(to: item, bundleID: bundleID, types: types)
+        return item
+    }
+
+    /// Convert `public.html` into rich text so browser formatting survives (and text mutations
+    /// still apply). Bounded in size — HTML parsing is main-actor WebKit work.
+    private func makeHTMLItem(
+        appName: String?,
+        bundleID: String?,
+        types: [NSPasteboard.PasteboardType]
+    ) -> ClipboardItem? {
+        guard types.contains(Self.htmlType),
+              let htmlData = pasteboard.data(forType: Self.htmlType),
+              htmlData.count <= Self.maxHTMLBytes,
+              let attributed = try? NSAttributedString(
+                  data: htmlData,
+                  options: [
+                      .documentType: NSAttributedString.DocumentType.html,
+                      .characterEncoding: String.Encoding.utf8.rawValue,
+                  ],
+                  documentAttributes: nil
+              )
+        else { return nil }
+
+        let plain = attributed.string
+        guard !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+
+        let fullRange = NSRange(location: 0, length: attributed.length)
+        if let rtfData = try? attributed.data(
+            from: fullRange,
+            documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
+        ) {
+            return ClipboardItem(
+                content: .richText(rtfData, plain),
+                contentType: .richText,
+                sourceAppName: appName,
+                sourceAppBundleID: bundleID
+            )
+        }
+        return ClipboardItem(
+            content: .text(plain),
+            contentType: .plainText,
+            sourceAppName: appName,
+            sourceAppBundleID: bundleID
+        )
     }
 
     private func attachCustomPasteboardTypesIfNeeded(

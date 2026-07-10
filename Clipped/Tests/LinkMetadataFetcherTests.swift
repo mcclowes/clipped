@@ -47,6 +47,12 @@ struct LinkMetadataFetcherTests {
             "http://[::1]/",
             "http://[fe80::1]/",
             "http://[fc00::1]/",
+            // Byte-canonical parsing closes these representation-level bypasses:
+            "http://[::ffff:127.0.0.1]/", // IPv4-mapped loopback
+            "http://[::ffff:169.254.169.254]/", // IPv4-mapped cloud metadata
+            "http://[0:0:0:0:0:0:0:1]/", // uncompressed ::1
+            "http://[64:ff9b::7f00:1]/", // NAT64 embedding 127.0.0.1
+            "http://255.255.255.255/", // broadcast
             "ftp://example.com/",
             "file:///etc/passwd",
         ]
@@ -57,12 +63,26 @@ struct LinkMetadataFetcherTests {
     }
 
     @Test(
-        "Accepts public HTTP(S) URLs",
-        arguments: ["https://example.com/", "http://example.com:8080/path", "https://api.github.com/"]
+        "Accepts public HTTP(S) URLs and public IP literals",
+        arguments: [
+            "https://example.com/",
+            "http://example.com:8080/path",
+            "https://api.github.com/",
+            "http://8.8.8.8/",
+            "https://[2606:4700:4700::1111]/", // public Cloudflare IPv6
+        ]
     )
     func acceptsPublicHosts(_ raw: String) throws {
         let url = try #require(URL(string: raw))
         #expect(LinkMetadataFetcher.isFetchableURL(url))
+    }
+
+    @Test("Parses IPv4-mapped IPv6 down to the embedded address")
+    func ipv4MappedParsing() {
+        #expect(IPLiteral("::ffff:169.254.169.254")?.isPrivateOrReserved == true)
+        #expect(IPLiteral("::ffff:8.8.8.8")?.isPrivateOrReserved == false)
+        #expect(IPLiteral("127.0.0.1")?.isPrivateOrReserved == true)
+        #expect(IPLiteral("8.8.8.8")?.isPrivateOrReserved == false)
     }
 
     @Test("Fetches favicon data")

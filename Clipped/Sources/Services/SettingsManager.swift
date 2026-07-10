@@ -202,7 +202,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     init() {
         persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
         let storedSize = UserDefaults.standard.integer(forKey: "maxHistorySize")
-        maxHistorySize = storedSize > 0 ? storedSize : 100
+        maxHistorySize = storedSize > 0 ? storedSize : ClipboardHistory.defaultMaxHistorySize
         let storedRetention = UserDefaults.standard.integer(forKey: "historyRetention")
         // Default to .never so existing users see no behavior change after upgrade.
         historyRetention = HistoryRetention(rawValue: storedRetention) ?? .never

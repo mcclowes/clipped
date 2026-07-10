@@ -92,3 +92,54 @@ struct HistoryExpiryTests {
         #expect(history.items.isEmpty)
     }
 }
+
+@MainActor
+struct ClipboardHistoryInsertTests {
+    private func makeHistory() -> ClipboardHistory {
+        let history = ClipboardHistory()
+        // persistAcrossReboots defaults false, so nothing touches disk.
+        history.settingsManager = MockSettingsManager()
+        return history
+    }
+
+    private func textItem(_ string: String) -> ClipboardItem {
+        ClipboardItem(content: .text(string), contentType: .plainText)
+    }
+
+    @Test("Re-inserting identical content replaces the old entry and moves it to the top")
+    func dedupesIdenticalContent() {
+        let history = makeHistory()
+        history.insert(textItem("a"))
+        history.insert(textItem("b"))
+        history.insert(textItem("a"))
+        #expect(history.items.map(\.preview) == ["a", "b"])
+    }
+
+    @Test("Re-copying content that is already pinned does not create a duplicate unpinned row")
+    func skipsDuplicateOfPinned() {
+        let history = makeHistory()
+        let pinned = textItem("shared")
+        pinned.isPinned = true
+        history.pinnedItems = [pinned]
+
+        history.insert(textItem("shared"))
+
+        #expect(history.items.isEmpty)
+        #expect(history.pinnedItems.count == 1)
+    }
+
+    @Test("Re-copying a URL preserves the previously-fetched link metadata")
+    func preservesEnrichedMetadataOnRecopy() throws {
+        let history = makeHistory()
+        let url = try #require(URL(string: "https://example.com"))
+        let first = ClipboardItem(content: .url(url), contentType: .url)
+        first.linkTitle = "Example Domain"
+        history.insert(first)
+
+        // A fresh copy of the same URL arrives with no metadata yet.
+        history.insert(ClipboardItem(content: .url(url), contentType: .url))
+
+        #expect(history.items.count == 1)
+        #expect(history.items.first?.linkTitle == "Example Domain")
+    }
+}

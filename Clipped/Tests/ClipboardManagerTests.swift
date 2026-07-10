@@ -452,12 +452,12 @@ struct ClipboardManagerTests {
     }
 
     @Test("Compressing an image inserts a JPEG result as a new history item")
-    func compressImageInsertsResult() throws {
+    func compressImageInsertsResult() async throws {
         let (manager, _, _, _) = makeManager()
         let original = Self.pngImageItem()
         manager.items = [original]
 
-        manager.compressImage(original)
+        await manager.compressImage(original)
 
         #expect(manager.items.count == 2)
         let result = try #require(manager.items.first)
@@ -467,12 +467,12 @@ struct ClipboardManagerTests {
     }
 
     @Test("Converting an image emits a decodable result in the requested format")
-    func convertImageFormat() throws {
+    func convertImageFormat() async throws {
         let (manager, _, _, _) = makeManager()
         let original = Self.pngImageItem()
         manager.items = [original]
 
-        manager.convertImage(original, to: .heic)
+        await manager.convertImage(original, to: .heic)
 
         let result = try #require(manager.items.first)
         let data = try #require(Self.imageData(of: result))
@@ -481,12 +481,12 @@ struct ClipboardManagerTests {
     }
 
     @Test("Resizing an image halves its dimensions")
-    func resizeImageHalves() throws {
+    func resizeImageHalves() async throws {
         let (manager, _, _, _) = makeManager()
         let original = Self.pngImageItem(width: 80, height: 60)
         manager.items = [original]
 
-        manager.resizeImage(original, scale: 0.5)
+        await manager.resizeImage(original, scale: 0.5)
 
         let result = try #require(manager.items.first)
         let data = try #require(Self.imageData(of: result))
@@ -496,12 +496,12 @@ struct ClipboardManagerTests {
     }
 
     @Test("Image transforms are ignored for non-image items")
-    func transformIgnoresNonImage() {
+    func transformIgnoresNonImage() async {
         let (manager, _, _, _) = makeManager()
         let textItem = ClipboardItem(content: .text("not an image"), contentType: .plainText)
         manager.items = [textItem]
 
-        manager.compressImage(textItem)
+        await manager.compressImage(textItem)
 
         #expect(manager.items.count == 1)
     }

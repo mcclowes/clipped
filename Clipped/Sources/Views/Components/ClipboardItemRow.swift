@@ -1,3 +1,4 @@
+import LocalAuthentication
 import SwiftUI
 
 struct ClipboardItemRow: View {
@@ -48,6 +49,14 @@ struct ClipboardItemRow: View {
         }
         .contextMenu {
             actionMenuContent
+        }
+        // The row's primary action is a tap gesture, which is invisible to VoiceOver and
+        // keyboard focus — expose it as an activatable button. The ellipsis Menu stays a
+        // separate accessible element.
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            manager.copyToClipboard(item)
+            onCopy?()
         }
     }
 
@@ -101,17 +110,17 @@ struct ClipboardItemRow: View {
 
         if case .image = item.content {
             Button("Compress") {
-                manager.compressImage(item)
+                Task { await manager.compressImage(item) }
             }
             Menu("Convert to") {
                 ForEach(RasterImageFormat.allCases, id: \.self) { format in
-                    Button(format.displayName) { manager.convertImage(item, to: format) }
+                    Button(format.displayName) { Task { await manager.convertImage(item, to: format) } }
                 }
             }
             Menu("Resize") {
-                Button("75%") { manager.resizeImage(item, scale: 0.75) }
-                Button("50%") { manager.resizeImage(item, scale: 0.5) }
-                Button("25%") { manager.resizeImage(item, scale: 0.25) }
+                Button("75%") { Task { await manager.resizeImage(item, scale: 0.75) } }
+                Button("50%") { Task { await manager.resizeImage(item, scale: 0.5) } }
+                Button("25%") { Task { await manager.resizeImage(item, scale: 0.25) } }
             }
         }
 
@@ -148,15 +157,11 @@ struct ClipboardItemRow: View {
         }
     }
 
-    /// Copy the item to the pasteboard, then simulate Cmd+V after a short delay so the
-    /// target app has time to regain focus. Matches the old NSMenu's "Paste directly"
-    /// action.
+    /// Dismiss the panel so focus can return to the previously-active app, then copy and
+    /// paste into it. The manager reactivates that app before synthesising Cmd+V.
     private func pasteDirectly() {
-        manager.copyToClipboard(item)
-        Task {
-            try? await Task.sleep(for: .milliseconds(100))
-            manager.simulatePaste()
-        }
+        onCopy?()
+        manager.pasteToActiveApp(item)
     }
 
     /// Present the native macOS save panel for a chosen export format, then write the
@@ -211,6 +216,24 @@ struct ClipboardItemRow: View {
         (item.isSensitive || item.containsSecret) && !isRevealed
     }
 
+    /// Require device authentication before unmasking a sensitive item. Falls back to revealing
+    /// only when no authentication is configured (otherwise the mask would be un-dismissable).
+    private func authenticateAndReveal() {
+        let context = LAContext()
+        var authError: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
+            isRevealed = true
+            return
+        }
+        context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: "Reveal hidden clipboard content"
+        ) { success, _ in
+            guard success else { return }
+            Task { @MainActor in isRevealed = true }
+        }
+    }
+
     @ViewBuilder
     private var contentPreview: some View {
         if shouldMask {
@@ -220,7 +243,7 @@ struct ClipboardItemRow: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Hidden sensitive content")
                 Button {
-                    isRevealed = true
+                    authenticateAndReveal()
                 } label: {
                     Label("Reveal", systemImage: "eye")
                         .labelStyle(.iconOnly)
@@ -234,7 +257,8 @@ struct ClipboardItemRow: View {
         } else {
             switch item.content {
             case let .image(data, _):
-                if let nsImage = NSImage(data: data) {
+                // Downsampled + cached by item id so scrolling doesn't re-decode the full image.
+                if let nsImage = ThumbnailCache.shared.thumbnail(for: item.id, data: data, maxPixel: 96) {
                     HStack(spacing: 8) {
                         Image(nsImage: nsImage)
                             .resizable()

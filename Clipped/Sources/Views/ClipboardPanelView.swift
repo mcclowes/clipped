@@ -16,12 +16,15 @@ struct ClipboardPanelView: View {
     @State private var showClearConfirmation = false
     @State private var clearedSnapshot: ClipboardManager.ClearedSnapshot?
     @State private var clearedCleanupTask: Task<Void, Never>?
-    @State private var selectedIndex: Int?
+    /// Selection is tracked by stable identity, not array position, so ingesting or deleting an
+    /// item while the panel is open can't silently point the highlight at a different row.
+    @State private var selectedItemID: ClipboardItem.ID?
     @State private var showQuickMenu = false
     @State private var showCopiedToast = false
     @State private var copiedToastToken = 0
     @FocusState private var isSearchFocused: Bool
     @ScaledMetric private var emptyStateIconSize: CGFloat = 32
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Recent items trimmed to the quick-access cap. Pinned items are always shown in full.
     private var visibleRecentItems: [ClipboardItem] {
@@ -50,6 +53,8 @@ struct ClipboardPanelView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .clippedPanelWillShow)) { _ in
+            // Evict expired items whenever the panel opens, so an idle session doesn't show stale rows.
+            manager.trimExpiredItems()
             if manager.openedViaHotkey {
                 manager.openedViaHotkey = false
                 manager.openedWithOption = false
@@ -146,6 +151,9 @@ struct ClipboardPanelView: View {
 
     private var mainPanelView: some View {
         @Bindable var manager = manager
+        // Compute the filtered lists once per render instead of re-filtering on every access.
+        let pinnedItems = manager.filteredPinnedItems
+        let recentItems = visibleRecentItems
 
         return VStack(spacing: 0) {
             SearchBar(
@@ -171,18 +179,18 @@ struct ClipboardPanelView: View {
 
             Divider()
 
-            if manager.filteredPinnedItems.isEmpty, manager.filteredItems.isEmpty {
+            if pinnedItems.isEmpty, recentItems.isEmpty {
                 emptyState
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            if !manager.filteredPinnedItems.isEmpty {
+                            if !pinnedItems.isEmpty {
                                 Section {
-                                    ForEach(manager.filteredPinnedItems) { item in
+                                    ForEach(pinnedItems) { item in
                                         ClipboardItemRow(
                                             item: item,
-                                            isSelected: indexOf(item) == selectedIndex,
+                                            isSelected: item.id == selectedItemID,
                                             onCopy: { dismissAfterCopy() }
                                         )
                                         .id(item.id)
@@ -192,18 +200,18 @@ struct ClipboardPanelView: View {
                                 }
                             }
 
-                            if !visibleRecentItems.isEmpty {
+                            if !recentItems.isEmpty {
                                 Section {
-                                    ForEach(visibleRecentItems) { item in
+                                    ForEach(recentItems) { item in
                                         ClipboardItemRow(
                                             item: item,
-                                            isSelected: indexOf(item) == selectedIndex,
+                                            isSelected: item.id == selectedItemID,
                                             onCopy: { dismissAfterCopy() }
                                         )
                                         .id(item.id)
                                     }
                                 } header: {
-                                    if !manager.filteredPinnedItems.isEmpty {
+                                    if !pinnedItems.isEmpty {
                                         sectionHeader("Recent")
                                     }
                                 }
@@ -216,11 +224,11 @@ struct ClipboardPanelView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                     }
-                    .onChange(of: selectedIndex) { _, newIndex in
-                        scrollToSelected(proxy: proxy, index: newIndex)
+                    .onChange(of: selectedItemID) { _, newID in
+                        scrollToSelected(proxy: proxy, id: newID)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
-                        scrollToSelected(proxy: proxy, index: selectedIndex)
+                        scrollToSelected(proxy: proxy, id: selectedItemID)
                     }
                 }
             }
@@ -240,7 +248,7 @@ struct ClipboardPanelView: View {
         }
         .onKeyPress(.return) {
             copySelectedItem()
-            return selectedIndex != nil ? .handled : .ignored
+            return selectedItemID != nil ? .handled : .ignored
         }
         .onKeyPress(.escape) {
             handleEscape()
@@ -255,8 +263,9 @@ struct ClipboardPanelView: View {
             return .handled
         }
         .onChange(of: manager.searchQuery) {
-            selectedIndex = nil
+            selectedItemID = nil
         }
+        .background(quickPasteShortcuts)
         .onChange(of: settings.disabledFilterIDs) {
             // If the active filter was just hidden, fall back to "All" so the user isn't
             // left with an invisible filter applied.
@@ -267,11 +276,37 @@ struct ClipboardPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
             isSearchFocused = true
         }
+        .alert(
+            "Clipboard history couldn't be opened",
+            isPresented: Binding(get: { manager.historyLoadError != nil }, set: { _ in })
+        ) {
+            Button("Retry") { Task { await manager.retryHistoryLoad() } }
+            Button("Start fresh", role: .destructive) {
+                Task { await manager.discardUnreadableHistory() }
+            }
+        } message: {
+            Text(
+                "Your saved history is encrypted with a key that isn't available right now "
+                    + "(e.g. the keychain is locked or was restored from another Mac). Retry after "
+                    + "unlocking your keychain, or start fresh to discard it. Nothing is overwritten "
+                    + "until you choose Start fresh."
+            )
+        }
         .overlay {
             if showCopiedToast {
                 copiedToastView
-                    .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.8)))
             }
+        }
+    }
+
+    /// ⌘1–⌘9 quick-paste the Nth visible item. Uses the Command modifier so plain digits still
+    /// type into the search field. Hidden buttons carry the shortcuts without taking layout space.
+    private var quickPasteShortcuts: some View {
+        ForEach(1...9, id: \.self) { n in
+            Button("") { quickPaste(index: n - 1) }
+                .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
+                .hidden()
         }
     }
 
@@ -299,16 +334,22 @@ struct ClipboardPanelView: View {
         .help("Open the full clipboard history in a window")
     }
 
+    /// True when a search or filter is narrowing the list — used to distinguish "history is
+    /// empty" from "your query matched nothing" in the empty state.
+    private var isFiltering: Bool {
+        !manager.searchQuery.isEmpty || manager.selectedFilter != nil
+    }
+
     private var emptyState: some View {
         VStack(spacing: 8) {
             Spacer()
-            Image(systemName: "clipboard")
+            Image(systemName: isFiltering ? "magnifyingglass" : "clipboard")
                 .font(.system(size: emptyStateIconSize))
                 .foregroundStyle(.tertiary)
-            Text("No clipboard items")
+            Text(isFiltering ? "No matches" : "No clipboard items")
                 .font(.headline)
                 .foregroundStyle(.secondary)
-            Text("Copy something to get started")
+            Text(isFiltering ? "Try a different search or filter" : "Copy something to get started")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Spacer()
@@ -409,15 +450,21 @@ struct ClipboardPanelView: View {
     }
 
     private func copySelectedItem() {
-        if let index = selectedIndex, index < allVisibleItems.count {
-            manager.copyToClipboard(allVisibleItems[index])
-            dismissAfterCopy()
-        }
+        guard let id = selectedItemID, let item = allVisibleItems.first(where: { $0.id == id }) else { return }
+        manager.copyToClipboard(item)
+        dismissAfterCopy()
+    }
+
+    private func quickPaste(index: Int) {
+        let items = allVisibleItems
+        guard index >= 0, index < items.count else { return }
+        manager.copyToClipboard(items[index])
+        dismissAfterCopy()
     }
 
     private func handleEscape() {
-        if selectedIndex != nil {
-            selectedIndex = nil
+        if selectedItemID != nil {
+            selectedItemID = nil
         } else if !manager.searchQuery.isEmpty {
             manager.searchQuery = ""
         } else {
@@ -426,28 +473,28 @@ struct ClipboardPanelView: View {
     }
 
     private func moveSelection(by delta: Int) {
-        let count = allVisibleItems.count
-        guard count > 0 else { return }
+        let items = allVisibleItems
+        guard !items.isEmpty else { return }
 
-        if let current = selectedIndex {
-            let next = current + delta
-            if next >= 0, next < count {
-                selectedIndex = next
-            }
+        guard let id = selectedItemID, let current = items.firstIndex(where: { $0.id == id }) else {
+            selectedItemID = delta > 0 ? items.first?.id : items.last?.id
+            return
+        }
+        let next = current + delta
+        if next >= 0, next < items.count {
+            selectedItemID = items[next].id
+        }
+    }
+
+    private func scrollToSelected(proxy: ScrollViewProxy, id: ClipboardItem.ID?) {
+        guard let id else { return }
+        if reduceMotion {
+            proxy.scrollTo(id, anchor: .center)
         } else {
-            selectedIndex = delta > 0 ? 0 : count - 1
+            withAnimation(.easeInOut(duration: 0.15)) {
+                proxy.scrollTo(id, anchor: .center)
+            }
         }
-    }
-
-    private func scrollToSelected(proxy: ScrollViewProxy, index: Int?) {
-        guard let index, index >= 0, index < allVisibleItems.count else { return }
-        withAnimation(.easeInOut(duration: 0.15)) {
-            proxy.scrollTo(allVisibleItems[index].id, anchor: .center)
-        }
-    }
-
-    private func indexOf(_ item: ClipboardItem) -> Int? {
-        allVisibleItems.firstIndex(where: { $0.id == item.id })
     }
 
     private var copiedToastView: some View {

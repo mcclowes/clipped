@@ -94,6 +94,30 @@ struct SecretDetectorTests {
         #expect(!SecretDetector.containsSecret("DEBUG=true"))
     }
 
+    @Test("Detects credentials embedded in a URL")
+    func detectsURLCredentials() {
+        #expect(SecretDetector.containsSecret("https://svc:hunter2Password@internal.example.com/db"))
+        #expect(SecretDetector.containsSecret("postgres://admin:s3cretValue@db.host:5432/app"))
+    }
+
+    @Test("Detects one-time / verification codes")
+    func detectsOTPCodes() {
+        // Isolated 6–8 digit code.
+        #expect(SecretDetector.containsSecret("123456"))
+        #expect(SecretDetector.containsSecret("  8675309 "))
+        // Code alongside an OTP keyword.
+        #expect(SecretDetector.containsSecret("Your verification code is 4821"))
+        #expect(SecretDetector.containsSecret("2FA: 019283"))
+    }
+
+    @Test("Does not flag years, short numbers, or long IDs as OTP codes")
+    func ignoresNonOTPNumbers() {
+        #expect(!SecretDetector.containsSecret("2024"))
+        #expect(!SecretDetector.containsSecret("42"))
+        #expect(!SecretDetector.containsSecret("1234567890123")) // 13 digits, not a 6–8 code
+        #expect(!SecretDetector.containsSecret("The year 2024 was great"))
+    }
+
     @Test("Detects when a secret is embedded in larger text")
     func detectsEmbeddedSecret() {
         let secret = Self.token("sk_", "test_EXAMPLEabcdefghij0123456789")

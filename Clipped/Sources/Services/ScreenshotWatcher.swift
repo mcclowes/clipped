@@ -4,6 +4,10 @@ import Observation
 import os
 import UserNotifications
 
+/// Image file extensions treated as screenshots. File-scoped so the nonisolated static
+/// `imageFiles(in:)` scanner can read it without actor-isolation gymnastics.
+private let screenshotImageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic"]
+
 /// Abstraction over the screenshot directory watcher so tests and alternative
 /// implementations can stand in. Mirrors `SettingsManaging` and
 /// `LinkMetadataFetching`: views keep using the concrete `ScreenshotWatcher`
@@ -32,10 +36,18 @@ final class ScreenshotWatcher: ScreenshotWatching {
     private(set) var isWatching = false
     private(set) var watchedFolder: URL?
     private var knownFiles: Set<String> = []
-    private var dispatchSource: DispatchSourceFileSystemObject?
-    private var watchedFD: Int32 = -1
+    /// Not observable (an implementation detail); `nonisolated(unsafe)` lets the nonisolated
+    /// `deinit` cancel it. Only ever mutated on the main actor, and by deinit no other reference
+    /// to this watcher survives, so the access is race-free.
+    @ObservationIgnored nonisolated(unsafe) var dispatchSource: DispatchSourceFileSystemObject?
 
     var clipboardManager: ClipboardManager?
+
+    deinit {
+        // Cancelling triggers the source's cancel handler, which closes the file descriptor.
+        // Without this a watcher deallocated while active would leak both.
+        dispatchSource?.cancel()
+    }
 
     private static let bookmarkKey = "screenshotFolderBookmark"
 
@@ -113,8 +125,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
         }
 
         watchedFolder = folder
-        watchedFD = fd
-        knownFiles = Set(imageFiles(in: folder))
+        knownFiles = Set(Self.imageFiles(in: folder))
 
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: fd,
@@ -138,7 +149,6 @@ final class ScreenshotWatcher: ScreenshotWatching {
     func stopWatching() {
         dispatchSource?.cancel()
         dispatchSource = nil
-        watchedFD = -1
         isWatching = false
         watchedFolder?.stopAccessingSecurityScopedResource()
         watchedFolder = nil
@@ -152,37 +162,49 @@ final class ScreenshotWatcher: ScreenshotWatching {
     private func handleDirectoryChange() {
         guard let folder = watchedFolder else { return }
 
-        let currentFiles = Set(imageFiles(in: folder))
-        let newlyAppeared = currentFiles.subtracting(knownFiles)
-        knownFiles = currentFiles
+        Task { [weak self] in
+            guard let self else { return }
+            // Enumerate the directory off the main actor — it scales with folder size.
+            let currentFiles = await Self.imageFilesAsync(in: folder)
+            let newlyAppeared = currentFiles.subtracting(knownFiles)
+            knownFiles = currentFiles
+            guard !newlyAppeared.isEmpty else { return }
 
-        guard !newlyAppeared.isEmpty else { return }
-
-        Task { @MainActor [weak self] in
+            // Give `screencapture` time to flush the file's bytes before we read it.
             try? await Task.sleep(for: Self.settleDelay)
-            guard let self, let folder = watchedFolder else { return }
+            guard watchedFolder == folder else { return }
             for fileName in newlyAppeared {
-                ingestScreenshot(fileName: fileName, in: folder)
+                await ingestScreenshot(fileName: fileName, in: folder)
             }
         }
     }
 
-    private func ingestScreenshot(fileName: String, in folder: URL) {
+    private func ingestScreenshot(fileName: String, in folder: URL) async {
         let fileURL = folder.appendingPathComponent(fileName)
-        guard let imageData = try? Data(contentsOf: fileURL),
-              let image = NSImage(data: imageData)
-        else { return }
+        // Read + decode off the main actor so a multi-MB screenshot doesn't stall the UI.
+        let decoded = await Task.detached(priority: .utility) { () -> (Data, CGSize)? in
+            guard let data = try? Data(contentsOf: fileURL) else { return nil }
+            guard let size = ImageProcessor.pixelSize(of: data) ?? NSImage(data: data)?.size else { return nil }
+            return (data, size)
+        }.value
+
+        guard let (imageData, size) = decoded else {
+            // The bytes weren't ready yet (still flushing). Forget the name so a later write
+            // event re-attempts ingestion instead of dropping the screenshot permanently.
+            knownFiles.remove(fileName)
+            return
+        }
 
         Self.logger.info("New screenshot detected: \(fileName)")
         let item = ClipboardItem(
-            content: .image(imageData, image.size),
+            content: .image(imageData, size),
             contentType: .image,
             sourceAppName: "Screenshot",
             sourceAppBundleID: "com.apple.screencaptureui"
         )
-        clipboardManager?.items.insert(item, at: 0)
+        clipboardManager?.history.insert(item)
 
-        // Copy screenshot to system clipboard so user can paste immediately
+        // Copy screenshot to system clipboard so user can paste immediately.
         clipboardManager?.copyToClipboard(item)
 
         clipboardManager?.trimToMaxSize()
@@ -204,13 +226,15 @@ final class ScreenshotWatcher: ScreenshotWatching {
         UNUserNotificationCenter.current().add(request)
     }
 
-    private static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic"]
-
-    private func imageFiles(in folder: URL) -> [String] {
+    nonisolated static func imageFiles(in folder: URL) -> [String] {
         let contents = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
         return contents.filter { filename in
             let ext = (filename as NSString).pathExtension.lowercased()
-            return Self.imageExtensions.contains(ext)
+            return screenshotImageExtensions.contains(ext)
         }
+    }
+
+    private static func imageFilesAsync(in folder: URL) async -> Set<String> {
+        await Task.detached(priority: .utility) { Set(imageFiles(in: folder)) }.value
     }
 }

@@ -165,8 +165,10 @@ final class ClipboardMutationService: ClipboardMutating {
             TrimWhitespaceMutation(),
             SmartQuotesToStraightMutation(),
             CollapseMultipleSpacesMutation(),
-            StripToPlainTextMutation(),
+            // Markdown before strip-to-plain: both consume rich text, and if a user enables both
+            // we want the richer conversion to win rather than being pre-empted into plain text.
             ConvertToMarkdownMutation(),
+            StripToPlainTextMutation(),
             StripANSICodesMutation(),
             DetectCodeSnippetMutation(),
         ]
@@ -192,6 +194,7 @@ private func copyItem(
         timestamp: item.timestamp,
         isPinned: item.isPinned,
         isSensitive: item.isSensitive,
+        containsSecret: item.containsSecret,
         isDeveloperContent: item.isDeveloperContent,
         detectedCategories: item.detectedCategories
     )
@@ -200,6 +203,7 @@ private func copyItem(
     copy.originalContent = item.originalContent
     copy.mutationsApplied = item.mutationsApplied
     copy.customPasteboardTypes = item.customPasteboardTypes
+    copy.extractedText = item.extractedText
     return copy
 }
 
