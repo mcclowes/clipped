@@ -5,7 +5,9 @@
 
 # Rules
 --enable isEmpty
---disable blankLinesBetweenChainedFunctions
+# wrapIfStatementBodies (default-on since SwiftFormat 0.62) conflicts with the codebase's
+# single-line `if condition { return value }` idiom.
+--disable blankLinesBetweenChainedFunctions,wrapIfStatementBodies
 
 # Formatting options
 --indent 4
