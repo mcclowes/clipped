@@ -12,7 +12,7 @@ extension Notification.Name {
 
     /// Posted by `ClipboardPanelPresenter` immediately *after* the panel content is shown and
     /// its window is key, for both presentation paths. The SwiftUI panel listens for this to
-    /// move first responder into the search field and scroll to the selected row.
+    /// move first responder into the search field and reset the list scroll to the top.
     static let clippedPanelDidShow = Notification.Name("com.mcclowes.clipped.panelDidShow")
 }
 

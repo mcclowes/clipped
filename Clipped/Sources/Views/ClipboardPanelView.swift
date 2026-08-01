@@ -5,6 +5,9 @@ struct ClipboardPanelView: View {
     /// The full history is reachable via the "See more" button which opens `HistoryWindowView`.
     static let quickAccessLimit = 50
 
+    /// Sentinel row ID used to reset the list to the top when the panel is shown.
+    private static let topAnchorID = "clipped.panel.top"
+
     @Environment(ClipboardManager.self) private var manager
     @Environment(SettingsManager.self) private var settings
 
@@ -55,6 +58,10 @@ struct ClipboardPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: .clippedPanelWillShow)) { _ in
             // Evict expired items whenever the panel opens, so an idle session doesn't show stale rows.
             manager.trimExpiredItems()
+            // The hosting controller (and this view's @State) outlives each presentation, so a
+            // keyboard selection made in an earlier open would otherwise stay highlighted and be
+            // re-scrolled into view on every subsequent open (#104).
+            selectedItemID = nil
             if manager.openedViaHotkey {
                 manager.openedViaHotkey = false
                 manager.openedWithOption = false
@@ -185,6 +192,10 @@ struct ClipboardPanelView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
+                            Color.clear
+                                .frame(height: 0)
+                                .id(Self.topAnchorID)
+
                             if !pinnedItems.isEmpty {
                                 Section {
                                     ForEach(pinnedItems) { item in
@@ -228,7 +239,9 @@ struct ClipboardPanelView: View {
                         scrollToSelected(proxy: proxy, id: newID)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
-                        scrollToSelected(proxy: proxy, id: selectedItemID)
+                        // The ScrollView's offset also outlives each presentation — snap (no
+                        // animation) back to the top so the panel always opens on the newest items.
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
                     }
                 }
             }
