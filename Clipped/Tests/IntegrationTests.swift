@@ -126,6 +126,28 @@ struct IntegrationTests {
         #expect(saved.isEmpty)
     }
 
+    @Test("Secure timeout still evicts an item that was pinned before the timer fired")
+    func secureRemovalCoversPinnedItems() async throws {
+        let (manager, pasteboard, _, settings) = makeRig()
+        settings.secureMode = true
+        settings.secureTimeout = 30
+        manager.secureRemovalDelay = { _ in .zero }
+
+        let concealed = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+        pasteboard.stageExternalWrite(types: [concealed, .string], strings: [.string: "hunter2"])
+        manager.monitor.check()
+
+        // The user pins the item before the timeout elapses.
+        let item = try #require(manager.items.first)
+        manager.togglePin(item)
+        #expect(manager.pinnedItems.count == 1)
+
+        await manager.awaitPendingSecureRemovals()
+
+        #expect(manager.items.isEmpty)
+        #expect(manager.pinnedItems.isEmpty, "pinning must not let a password outlive its timeout")
+    }
+
     // MARK: - Cap enforcement
 
     @Test("Size cap evicts the oldest non-pinned items on ingest")

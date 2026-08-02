@@ -46,6 +46,7 @@
 		8038004411FDBA7F164CBC58 /* HistoryCryptoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 807B7AD718ECA3AE9DF073BB /* HistoryCryptoTests.swift */; };
 		804A350A63BF3245EEC1DAAF /* FileExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A248B2E8BA01A9A011F9F302 /* FileExporterTests.swift */; };
 		85DF0716F3965419FC78AFE0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1559047A8273D742321C001 /* SettingsView.swift */; };
+		88589AC9B763AED95420A317 /* HistoryPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE6AD764875F82C2099F4952 /* HistoryPersistenceTests.swift */; };
 		88B7E33A0479777998B1D912 /* AppPasteboardProfilesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DF90652E16A9B539BAE6EB1 /* AppPasteboardProfilesTests.swift */; };
 		8E9BF64A3129EFB0BD7CFD94 /* HistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1879C700D0DE87BA372C77DF /* HistoryStoreTests.swift */; };
 		93429B34DF81D80A2DA3BC65 /* ImageTextExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33599B97B037A881F058CB48 /* ImageTextExtractor.swift */; };
@@ -146,6 +147,7 @@
 		F06FA0E1C7D969AF5030315A /* OnboardingWindowPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingWindowPresenter.swift; sourceTree = "<group>"; };
 		F85565B0532E6988544BB5BB /* FloatingPanelModifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FloatingPanelModifier.swift; sourceTree = "<group>"; };
 		F8E8B82FA72A2277D99882FE /* HistoryWindowPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryWindowPresenter.swift; sourceTree = "<group>"; };
+		FE6AD764875F82C2099F4952 /* HistoryPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPersistenceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -209,6 +211,7 @@
 				5E54980733220E71B60FC4E3 /* HexColorParserTests.swift */,
 				807B7AD718ECA3AE9DF073BB /* HistoryCryptoTests.swift */,
 				48394DD66546EC3E19FEE9FB /* HistoryExpiryTests.swift */,
+				FE6AD764875F82C2099F4952 /* HistoryPersistenceTests.swift */,
 				CBC3F4745EC98B5A0BF6B723 /* HistorySidebarTests.swift */,
 				1879C700D0DE87BA372C77DF /* HistoryStoreTests.swift */,
 				3C90CF6B185E119A0D8AE520 /* ImageProcessorTests.swift */,
@@ -394,6 +397,7 @@
 				B9A2AC0DF8ABA01B6EB1F817 /* HexColorParserTests.swift in Sources */,
 				8038004411FDBA7F164CBC58 /* HistoryCryptoTests.swift in Sources */,
 				C81B411C13952636CF50240D /* HistoryExpiryTests.swift in Sources */,
+				88589AC9B763AED95420A317 /* HistoryPersistenceTests.swift in Sources */,
 				979ABBC126048F9250A17668 /* HistorySidebarTests.swift in Sources */,
 				8E9BF64A3129EFB0BD7CFD94 /* HistoryStoreTests.swift in Sources */,
 				93885B5DAB6FFA442C74CF3C /* ImageProcessorTests.swift in Sources */,
@@ -481,7 +485,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mcclowes.clipped;
 				SDKROOT = macosx;
 			};
@@ -656,7 +660,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.6.0;
+				MARKETING_VERSION = 1.7.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mcclowes.clipped;
 				SDKROOT = macosx;
 			};

@@ -143,6 +143,28 @@ struct HistoryStoreTests {
         await store.clear()
     }
 
+    @Test("A legacy history.json that fails to migrate survives a later save")
+    func failedMigrationPreservesPlaintext() async throws {
+        let store = makeStore()
+        await store.clear()
+
+        // Legacy plaintext that isn't decodable as [StoredEntry], so migration bails out and
+        // deliberately leaves the file alone for manual recovery.
+        let legacyURL = historyJSONURL()
+        try Data(#"{"unexpected":"shape"}"#.utf8).write(to: legacyURL)
+
+        _ = await store.load()
+        #expect(FileManager.default.fileExists(atPath: legacyURL.path))
+
+        // The user copies something; the save that follows must not tidy away a file that
+        // was never migrated — it's their only readable copy.
+        await store.save(entries: [makeEntry(text: "new")])
+
+        #expect(FileManager.default.fileExists(atPath: legacyURL.path))
+
+        await store.clear()
+    }
+
     @Test("Re-saving with a different key fails to decrypt old data")
     func differentKeyCannotDecrypt() async {
         let keyStore1 = InMemoryKeyStore()
