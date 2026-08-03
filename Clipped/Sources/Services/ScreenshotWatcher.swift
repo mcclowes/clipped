@@ -43,6 +43,26 @@ final class ScreenshotWatcher: ScreenshotWatching {
 
     var clipboardManager: ClipboardManager?
 
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let floatingThumbnailEnabled: @MainActor () -> Bool
+    @ObservationIgnored private let presentFloatingThumbnailTip: @MainActor () -> Void
+
+    init() {
+        defaults = .standard
+        floatingThumbnailEnabled = { ScreenshotWatcher.isFloatingThumbnailEnabled() }
+        presentFloatingThumbnailTip = { ScreenshotWatcher.presentFloatingThumbnailTip() }
+    }
+
+    init(
+        defaults: UserDefaults,
+        floatingThumbnailEnabled: @escaping @MainActor () -> Bool,
+        presentFloatingThumbnailTip: @escaping @MainActor () -> Void
+    ) {
+        self.defaults = defaults
+        self.floatingThumbnailEnabled = floatingThumbnailEnabled
+        self.presentFloatingThumbnailTip = presentFloatingThumbnailTip
+    }
+
     deinit {
         // Cancelling triggers the source's cancel handler, which closes the file descriptor.
         // Without this a watcher deallocated while active would leak both.
@@ -50,6 +70,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
     }
 
     private static let bookmarkKey = "screenshotFolderBookmark"
+    private static let floatingThumbnailTipKey = "hasShownFloatingThumbnailTip"
 
     /// Short settle delay after a directory change before reading new files, so `screencapture`
     /// has time to flush its write when it creates the file entry before writing the image bytes.
@@ -211,6 +232,39 @@ final class ScreenshotWatcher: ScreenshotWatching {
         clipboardManager?.saveHistory()
 
         sendScreenshotNotification(fileName: fileName)
+        offerFloatingThumbnailTipIfNeeded()
+    }
+
+    func offerFloatingThumbnailTipIfNeeded() {
+        guard !defaults.bool(forKey: Self.floatingThumbnailTipKey), floatingThumbnailEnabled() else { return }
+
+        // Mark this before presenting so simultaneous directory events cannot queue duplicate alerts.
+        defaults.set(true, forKey: Self.floatingThumbnailTipKey)
+        presentFloatingThumbnailTip()
+    }
+
+    private static func isFloatingThumbnailEnabled() -> Bool {
+        let value = CFPreferencesCopyAppValue(
+            "show-thumbnail" as CFString,
+            "com.apple.screencapture" as CFString
+        )
+        // macOS enables the floating thumbnail by default, so a missing preference means enabled.
+        return (value as? NSNumber)?.boolValue ?? true
+    }
+
+    private static func presentFloatingThumbnailTip() {
+        let alert = NSAlert()
+        alert.messageText = "Get screenshots into Clipped faster"
+        alert.informativeText = "macOS waits a few seconds before saving screenshots while the floating thumbnail "
+            + "is visible. Turn off Show Floating Thumbnail in Screenshot options to capture them sooner."
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Open Screenshot options")
+        alert.addButton(withTitle: "Don't show again")
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let screenshotApp = URL(fileURLWithPath: "/System/Applications/Utilities/Screenshot.app")
+        NSWorkspace.shared.openApplication(at: screenshotApp, configuration: .init())
     }
 
     private func sendScreenshotNotification(fileName: String) {
