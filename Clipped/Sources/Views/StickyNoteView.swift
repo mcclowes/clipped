@@ -119,7 +119,12 @@ struct StickyNoteView: View {
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.tertiary)
             Button {
-                isRevealed = true
+                guard let item else { return }
+                Task {
+                    if await manager.authorizeAccess(to: item, reason: "Reveal hidden clipboard content") {
+                        isRevealed = true
+                    }
+                }
             } label: {
                 Label("Reveal", systemImage: "eye")
                     .font(.subheadline)

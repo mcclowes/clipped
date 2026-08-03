@@ -1,4 +1,3 @@
-import LocalAuthentication
 import SwiftUI
 
 struct ClipboardItemRow: View {
@@ -6,7 +5,7 @@ struct ClipboardItemRow: View {
     @Environment(\.openWindow) private var openWindow
     let item: ClipboardItem
     var isSelected: Bool = false
-    var onCopy: (() -> Void)?
+    var onCopy: (@MainActor @Sendable () -> Void)?
 
     @State private var isHovered = false
     @State private var isRevealed = false
@@ -43,8 +42,7 @@ struct ClipboardItemRow: View {
             if NSEvent.modifierFlags.contains(.option) {
                 pasteDirectly()
             } else {
-                manager.copyToClipboard(item)
-                onCopy?()
+                manager.copyToClipboard(item, completion: onCopy)
             }
         }
         .contextMenu {
@@ -55,8 +53,7 @@ struct ClipboardItemRow: View {
         // separate accessible element.
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
-            manager.copyToClipboard(item)
-            onCopy?()
+            manager.copyToClipboard(item, completion: onCopy)
         }
     }
 
@@ -160,8 +157,7 @@ struct ClipboardItemRow: View {
     /// Dismiss the panel so focus can return to the previously-active app, then copy and
     /// paste into it. The manager reactivates that app before synthesising Cmd+V.
     private func pasteDirectly() {
-        onCopy?()
-        manager.pasteToActiveApp(item)
+        manager.pasteToActiveApp(item, onAuthorized: onCopy)
     }
 
     /// Present the native macOS save panel for a chosen export format, then write the
@@ -219,18 +215,10 @@ struct ClipboardItemRow: View {
     /// Require device authentication before unmasking a sensitive item. Falls back to revealing
     /// only when no authentication is configured (otherwise the mask would be un-dismissable).
     private func authenticateAndReveal() {
-        let context = LAContext()
-        var authError: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
-            isRevealed = true
-            return
-        }
-        context.evaluatePolicy(
-            .deviceOwnerAuthentication,
-            localizedReason: "Reveal hidden clipboard content"
-        ) { success, _ in
-            guard success else { return }
-            Task { @MainActor in isRevealed = true }
+        Task {
+            if await manager.authorizeAccess(to: item, reason: "Reveal hidden clipboard content") {
+                isRevealed = true
+            }
         }
     }
 

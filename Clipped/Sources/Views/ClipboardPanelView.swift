@@ -464,15 +464,13 @@ struct ClipboardPanelView: View {
 
     private func copySelectedItem() {
         guard let id = selectedItemID, let item = allVisibleItems.first(where: { $0.id == id }) else { return }
-        manager.copyToClipboard(item)
-        dismissAfterCopy()
+        manager.copyToClipboard(item) { dismissAfterCopy() }
     }
 
     private func quickPaste(index: Int) {
         let items = allVisibleItems
         guard index >= 0, index < items.count else { return }
-        manager.copyToClipboard(items[index])
-        dismissAfterCopy()
+        manager.copyToClipboard(items[index]) { dismissAfterCopy() }
     }
 
     private func handleEscape() {
