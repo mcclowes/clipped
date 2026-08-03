@@ -193,6 +193,9 @@ final class MockHistoryStore: HistoryStoring, @unchecked Sendable {
 
         func clear() {
             clearCallCount += 1
+            // Mirror the real store: clearing erases what a later load would return.
+            loadResult = []
+            savedEntries = []
         }
 
         func startFresh() {

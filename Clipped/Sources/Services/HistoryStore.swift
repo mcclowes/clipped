@@ -136,12 +136,10 @@ actor HistoryStore: HistoryStoring {
             let ciphertext = try crypto.encrypt(plaintext)
             try writeAtomically(data: ciphertext, to: encryptedFileURL)
 
-            // Upgrade path: a legacy plaintext file may still be sitting next to us from
-            // a previous install. Once we've confirmed the encrypted write succeeded, the
-            // plaintext is redundant — remove it.
-            if FileManager.default.fileExists(atPath: legacyPlaintextFileURL.path) {
-                try? FileManager.default.removeItem(at: legacyPlaintextFileURL)
-            }
+            // Deliberately no legacy-plaintext cleanup here. `migrateLegacyPlaintext` deletes
+            // `history.json` itself once it has safely re-encrypted it, so the only time this
+            // path would find one is when migration *failed* and chose to preserve it for
+            // manual recovery. Deleting it here destroyed the user's only readable copy.
         } catch {
             Self.logger.error("Failed to save encrypted history: \(error.localizedDescription)")
         }

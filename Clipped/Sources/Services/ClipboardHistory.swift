@@ -31,6 +31,13 @@ final class ClipboardHistory {
 
     private var saveDebounceTask: Task<Void, Never>?
 
+    /// True once `historyStore` has been read this session. Until it has been, `saveHistory()`
+    /// refuses to write — history we have never read must not be overwritten by whatever
+    /// happens to be in memory. Without this, enabling "persist across reboots" mid-session
+    /// silently replaced the stored history with the current session's few items.
+    private var hasLoadedFromStore = false
+    private var loadTask: Task<Void, Never>?
+
     init() {}
 
     // MARK: - Filtering
@@ -121,8 +128,16 @@ final class ClipboardHistory {
     }
 
     func removeItem(_ item: ClipboardItem) {
-        items.removeAll { $0.id == item.id }
-        pinnedItems.removeAll { $0.id == item.id }
+        remove(id: item.id)
+    }
+
+    /// Remove an item by identity from wherever it currently lives. Pinning moves items
+    /// between the two arrays, so anything removing by id has to check both — the secure-mode
+    /// timeout only cleared `items`, which let a password that had been pinned in the meantime
+    /// survive its own expiry.
+    func remove(id: UUID) {
+        items.removeAll { $0.id == id }
+        pinnedItems.removeAll { $0.id == id }
         saveHistory()
     }
 
@@ -149,8 +164,32 @@ final class ClipboardHistory {
         if includePinned {
             pinnedItems.removeAll()
         }
-        saveHistory()
+        eraseStoredHistory()
         return snapshot
+    }
+
+    /// Erase the durable copy, then write back whatever survived the clear (pinned items).
+    ///
+    /// Deliberately not routed through `saveHistory()`: that no-ops when `persistAcrossReboots`
+    /// is off, which left a stored history sitting on disk after the user asked for it to go,
+    /// ready to reappear the next time they enabled persistence. Clearing is destructive by
+    /// intent, so it reaches the store regardless of the setting.
+    private func eraseStoredHistory() {
+        saveDebounceTask?.cancel()
+        let store = historyStore
+        let shouldPersist = settingsManager?.persistAcrossReboots == true
+        let survivors = (items + pinnedItems)
+            .filter { !$0.isSensitive }
+            .map { StoredEntry(item: $0) }
+
+        saveDebounceTask = Task { [survivors] in
+            await store.clear()
+            if shouldPersist, !survivors.isEmpty {
+                await store.save(entries: survivors)
+            }
+        }
+        // The store is now a known quantity, so later saves have nothing to clobber.
+        hasLoadedFromStore = true
     }
 
     func restore(_ snapshot: ClearedSnapshot) {
@@ -188,6 +227,7 @@ final class ClipboardHistory {
         guard settingsManager?.persistAcrossReboots == true else { return }
         let entries = await historyStore.load()
         loadError = await historyStore.lastLoadError()
+        hasLoadedFromStore = true
         applyLoaded(entries)
     }
 
@@ -197,6 +237,7 @@ final class ClipboardHistory {
         let entries = await historyStore.retryLoad()
         loadError = await historyStore.lastLoadError()
         guard loadError == nil else { return }
+        hasLoadedFromStore = true
         applyLoaded(entries)
     }
 
@@ -205,6 +246,9 @@ final class ClipboardHistory {
     func discardUnreadableHistory() async {
         await historyStore.startFresh()
         loadError = nil
+        // The old data is gone by the user's explicit choice, so the store is now a known
+        // (empty) quantity and saving is safe again.
+        hasLoadedFromStore = true
     }
 
     private func applyLoaded(_ entries: [StoredEntry]) {
@@ -218,16 +262,42 @@ final class ClipboardHistory {
                 loaded.append(item)
             }
         }
-        if items.isEmpty { items = loaded }
-        if pinnedItems.isEmpty { pinnedItems = pinned }
+        items = merging(loaded, into: items)
+        pinnedItems = merging(pinned, into: pinnedItems)
         // Drop anything already past its retention window from a previous session,
         // before the UI gets a chance to show stale items.
         trimExpiredItems()
     }
 
+    /// Combine items read from disk with whatever is already in memory. Anything copied
+    /// this session is newer than the stored copy, so it stays at the front and wins on an
+    /// id or content collision; the rest is appended in stored order.
+    ///
+    /// This used to be `if items.isEmpty { items = loaded }`, which silently dropped the
+    /// entire stored history whenever anything had been copied first — during the launch
+    /// race, and (worse) on every "Retry" from the recovery alert.
+    private func merging(_ loaded: [ClipboardItem], into existing: [ClipboardItem]) -> [ClipboardItem] {
+        guard !existing.isEmpty else { return loaded }
+        var seenIDs = Set(existing.map(\.id))
+        var result = existing
+        for item in loaded where !seenIDs.contains(item.id) {
+            guard !existing.contains(where: { $0.content == item.content }) else { continue }
+            seenIDs.insert(item.id)
+            result.append(item)
+        }
+        return result
+    }
+
     /// Snapshot current state and schedule a debounced async save. Safe to call rapidly.
     func saveHistory() {
         guard settingsManager?.persistAcrossReboots == true else { return }
+        guard hasLoadedFromStore else {
+            // Persistence was switched on after launch, so we have never read the stored
+            // history and writing now would destroy it. Read it first; the load schedules
+            // the save it displaced.
+            loadThenSave()
+            return
+        }
         let entries = (items + pinnedItems)
             .filter { !$0.isSensitive }
             .map { StoredEntry(item: $0) }
@@ -247,8 +317,23 @@ final class ClipboardHistory {
         }
     }
 
-    /// Await any in-flight debounced save. Intended for tests and app shutdown.
+    /// Read the store, then run the save that `saveHistory()` deferred. Coalesced, so a
+    /// burst of saves right after the setting flips only reads once.
+    private func loadThenSave() {
+        guard loadTask == nil else { return }
+        loadTask = Task { [weak self] in
+            await self?.loadPersistedHistory()
+            self?.loadTask = nil
+            self?.saveHistory()
+        }
+    }
+
+    /// Await any in-flight load and debounced save. Intended for tests and app shutdown.
     func flushPendingSaves() async {
+        // Order matters: a deferred load schedules the save, so it has to settle first.
+        if let task = loadTask {
+            _ = await task.value
+        }
         if let task = saveDebounceTask {
             _ = await task.value
         }

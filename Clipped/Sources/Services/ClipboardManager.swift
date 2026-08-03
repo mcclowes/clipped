@@ -279,18 +279,35 @@ final class ClipboardManager {
         }
     }
 
+    /// How long a secure-mode item survives before eviction. Injected so tests can drive the
+    /// timeout without waiting real seconds.
+    var secureRemovalDelay: @Sendable (Int) -> Duration = { .seconds($0) }
+
+    /// Retained per item so removals can be awaited in tests and so a manual delete can
+    /// cancel the timer rather than leaving it to fire against nothing.
+    private var secureRemovalTasks: [UUID: Task<Void, Never>] = [:]
+
     private func scheduleSecureAutoRemoval(itemID: UUID, timeout: Int) {
-        Task { [weak self] in
+        let delay = secureRemovalDelay(timeout)
+        secureRemovalTasks[itemID] = Task { [weak self] in
             // Propagate cancellation: a cancelled sleep should NOT trigger removal (the opposite
             // of `try?`, which would fire the removal immediately on cancel).
             do {
-                try await Task.sleep(for: .seconds(timeout))
+                try await Task.sleep(for: delay)
             } catch {
                 return
             }
             guard let self else { return }
-            history.items.removeAll { $0.id == itemID }
-            history.saveHistory()
+            // Remove by id from both collections — pinning moves the item out of `history.items`.
+            history.remove(id: itemID)
+            secureRemovalTasks[itemID] = nil
+        }
+    }
+
+    /// Await every scheduled secure removal. Test seam.
+    func awaitPendingSecureRemovals() async {
+        for task in secureRemovalTasks.values {
+            _ = await task.value
         }
     }
 
