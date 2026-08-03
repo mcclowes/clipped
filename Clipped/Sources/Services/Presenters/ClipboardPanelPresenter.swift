@@ -85,7 +85,9 @@ final class ClipboardPanelPresenter {
     // MARK: - Private helpers
 
     private func makePopoverHosting() -> NSHostingController<AnyView> {
-        if let existing = popoverHosting { return existing }
+        if let existing = popoverHosting {
+            return existing
+        }
         guard let builder = hostingControllerBuilder else {
             fatalError("ClipboardPanelPresenter.setup must be called before showing")
         }
@@ -95,7 +97,9 @@ final class ClipboardPanelPresenter {
     }
 
     private func makePanelHosting() -> NSHostingController<AnyView> {
-        if let existing = panelHosting { return existing }
+        if let existing = panelHosting {
+            return existing
+        }
         guard let builder = hostingControllerBuilder else {
             fatalError("ClipboardPanelPresenter.setup must be called before showing")
         }

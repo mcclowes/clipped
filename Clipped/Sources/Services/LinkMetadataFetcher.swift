@@ -75,10 +75,16 @@ actor LinkMetadataFetcher: LinkMetadataFetching {
             return !literal.isPrivateOrReserved
         }
 
-        if host == "localhost" || host.hasSuffix(".localhost") { return false }
-        if host.hasSuffix(".local") { return false }
+        if host == "localhost" || host.hasSuffix(".localhost") {
+            return false
+        }
+        if host.hasSuffix(".local") {
+            return false
+        }
         // Reject unqualified single-label hosts (e.g. "router", "nas"): only public FQDNs allowed.
-        if !host.contains(".") { return false }
+        if !host.contains(".") {
+            return false
+        }
 
         return true
     }
@@ -111,7 +117,9 @@ actor LinkMetadataFetcher: LinkMetadataFetching {
             while let current = node {
                 if let literal = IPLiteral(sockaddr: current.pointee.ai_addr) {
                     sawAddress = true
-                    if literal.isPrivateOrReserved { return false }
+                    if literal.isPrivateOrReserved {
+                        return false
+                    }
                 }
                 node = current.pointee.ai_next
             }
@@ -279,16 +287,36 @@ struct IPLiteral {
     static func ipv4Reserved(_ b: [UInt8]) -> Bool {
         guard b.count == 4 else { return true }
         let (a, second, third) = (b[0], b[1], b[2])
-        if a == 0 { return true } // 0.0.0.0/8 "this network"
-        if a == 10 { return true } // 10.0.0.0/8 private
-        if a == 127 { return true } // loopback
-        if a == 169, second == 254 { return true } // 169.254/16 link-local
-        if a == 172, (16...31).contains(second) { return true } // 172.16/12 private
-        if a == 192, second == 168 { return true } // 192.168/16 private
-        if a == 100, (64...127).contains(second) { return true } // 100.64/10 CGNAT
-        if a == 198, (18...19).contains(second) { return true } // 198.18/15 benchmarking
-        if a == 192, second == 0, third == 0 { return true } // 192.0.0/24 IETF protocol
-        if a >= 224 { return true } // multicast, reserved, and 255.255.255.255 broadcast
+        if a == 0 {
+            return true
+        } // 0.0.0.0/8 "this network"
+        if a == 10 {
+            return true
+        } // 10.0.0.0/8 private
+        if a == 127 {
+            return true
+        } // loopback
+        if a == 169, second == 254 {
+            return true
+        } // 169.254/16 link-local
+        if a == 172, (16...31).contains(second) {
+            return true
+        } // 172.16/12 private
+        if a == 192, second == 168 {
+            return true
+        } // 192.168/16 private
+        if a == 100, (64...127).contains(second) {
+            return true
+        } // 100.64/10 CGNAT
+        if a == 198, (18...19).contains(second) {
+            return true
+        } // 198.18/15 benchmarking
+        if a == 192, second == 0, third == 0 {
+            return true
+        } // 192.0.0/24 IETF protocol
+        if a >= 224 {
+            return true
+        } // multicast, reserved, and 255.255.255.255 broadcast
         return false
     }
 
@@ -304,11 +332,21 @@ struct IPLiteral {
         if b[0] == 0x00, b[1] == 0x64, b[2] == 0xFF, b[3] == 0x9B, b[4...11].allSatisfy({ $0 == 0 }) {
             return ipv4Reserved(Array(b[12...]))
         }
-        if b.allSatisfy({ $0 == 0 }) { return true } // ::
-        if b.prefix(15).allSatisfy({ $0 == 0 }), b[15] == 1 { return true } // ::1 loopback
-        if b[0] == 0xFE, (b[1] & 0xC0) == 0x80 { return true } // fe80::/10 link-local
-        if (b[0] & 0xFE) == 0xFC { return true } // fc00::/7 unique-local
-        if b[0] == 0xFF { return true } // ff00::/8 multicast
+        if b.allSatisfy({ $0 == 0 }) {
+            return true
+        } // ::
+        if b.prefix(15).allSatisfy({ $0 == 0 }), b[15] == 1 {
+            return true
+        } // ::1 loopback
+        if b[0] == 0xFE, (b[1] & 0xC0) == 0x80 {
+            return true
+        } // fe80::/10 link-local
+        if (b[0] & 0xFE) == 0xFC {
+            return true
+        } // fc00::/7 unique-local
+        if b[0] == 0xFF {
+            return true
+        } // ff00::/8 multicast
         return false
     }
 }

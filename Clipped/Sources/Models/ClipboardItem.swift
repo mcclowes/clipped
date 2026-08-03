@@ -280,12 +280,24 @@ enum ClipboardFilter: Hashable, Identifiable {
 enum ContentCategoryDetector {
     static func detect(in text: String) -> Set<ContentCategory> {
         var results: Set<ContentCategory> = []
-        if EmailDetector.contains(text) { results.insert(.email) }
-        if PhoneNumberDetector.contains(text) { results.insert(.phoneNumber) }
-        if HexColorParser.firstColor(in: text) != nil { results.insert(.hexColor) }
-        if NumberDetector.contains(text) { results.insert(.number) }
-        if IPAddressDetector.contains(text) { results.insert(.ipAddress) }
-        if MACAddressDetector.contains(text) { results.insert(.macAddress) }
+        if EmailDetector.contains(text) {
+            results.insert(.email)
+        }
+        if PhoneNumberDetector.contains(text) {
+            results.insert(.phoneNumber)
+        }
+        if HexColorParser.firstColor(in: text) != nil {
+            results.insert(.hexColor)
+        }
+        if NumberDetector.contains(text) {
+            results.insert(.number)
+        }
+        if IPAddressDetector.contains(text) {
+            results.insert(.ipAddress)
+        }
+        if MACAddressDetector.contains(text) {
+            results.insert(.macAddress)
+        }
         return results
     }
 }
@@ -382,13 +394,21 @@ enum NumberDetector {
 
     static func contains(_ text: String) -> Bool {
         let range = NSRange(text.startIndex..., in: text)
-        if currencyPattern.firstMatch(in: text, range: range) != nil { return true }
-        if percentPattern.firstMatch(in: text, range: range) != nil { return true }
-        if thousandsPattern.firstMatch(in: text, range: range) != nil { return true }
+        if currencyPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if percentPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if thousandsPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
 
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedRange = NSRange(trimmed.startIndex..., in: trimmed)
-        if bareNumberPattern.firstMatch(in: trimmed, range: trimmedRange) != nil { return true }
+        if bareNumberPattern.firstMatch(in: trimmed, range: trimmedRange) != nil {
+            return true
+        }
 
         return false
     }
@@ -483,18 +503,30 @@ enum DeveloperContentDetector {
     static func isDeveloperContent(_ text: String) -> Bool {
         let range = NSRange(text.startIndex..., in: text)
 
-        if uuidPattern.firstMatch(in: text, range: range) != nil { return true }
-        if codeBlockPattern.firstMatch(in: text, range: range) != nil { return true }
-        if hexStringPattern.firstMatch(in: text, range: range) != nil { return true }
-        if jwtPattern.firstMatch(in: text, range: range) != nil { return true }
-        if filePathPattern.firstMatch(in: text, range: range) != nil { return true }
+        if uuidPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if codeBlockPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if hexStringPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if jwtPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if filePathPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
 
         // JSON object or array
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if (trimmed.hasPrefix("{") && trimmed.hasSuffix("}"))
             || (trimmed.hasPrefix("[") && trimmed.hasSuffix("]"))
         {
-            if trimmed.contains(":") || trimmed.contains(",") { return true }
+            if trimmed.contains(":") || trimmed.contains(",") {
+                return true
+            }
         }
 
         return false
@@ -570,7 +602,9 @@ final class ClipboardItem: Identifiable {
     }
 
     var preview: String {
-        if let pretty = appSpecificPreview { return pretty }
+        if let pretty = appSpecificPreview {
+            return pretty
+        }
         return switch content {
         case let .text(string):
             String(string.prefix(200))

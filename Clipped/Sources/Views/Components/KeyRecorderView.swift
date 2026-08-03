@@ -83,10 +83,18 @@ struct KeyRecorderView: View {
 
     private func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
         var result: UInt32 = 0
-        if flags.contains(.control) { result |= UInt32(controlKey) }
-        if flags.contains(.option) { result |= UInt32(optionKey) }
-        if flags.contains(.shift) { result |= UInt32(shiftKey) }
-        if flags.contains(.command) { result |= UInt32(cmdKey) }
+        if flags.contains(.control) {
+            result |= UInt32(controlKey)
+        }
+        if flags.contains(.option) {
+            result |= UInt32(optionKey)
+        }
+        if flags.contains(.shift) {
+            result |= UInt32(shiftKey)
+        }
+        if flags.contains(.command) {
+            result |= UInt32(cmdKey)
+        }
         return result
     }
 }

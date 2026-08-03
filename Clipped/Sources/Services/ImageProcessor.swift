@@ -18,7 +18,9 @@ final class ThumbnailCache {
 
     func thumbnail(for id: UUID, data: Data, maxPixel: Int) -> NSImage? {
         let key = "\(id.uuidString)-\(maxPixel)" as NSString
-        if let cached = cache.object(forKey: key) { return cached }
+        if let cached = cache.object(forKey: key) {
+            return cached
+        }
         guard let image = Self.downsample(data: data, maxPixel: maxPixel) else { return nil }
         cache.setObject(image, forKey: key)
         return image
@@ -94,9 +96,15 @@ enum ImageProcessor {
               let uti = CGImageSourceGetType(source) as String?,
               let type = UTType(uti)
         else { return nil }
-        if type.conforms(to: .png) { return .png }
-        if type.conforms(to: .jpeg) { return .jpeg }
-        if type.conforms(to: .heic) || type.conforms(to: .heif) { return .heic }
+        if type.conforms(to: .png) {
+            return .png
+        }
+        if type.conforms(to: .jpeg) {
+            return .jpeg
+        }
+        if type.conforms(to: .heic) || type.conforms(to: .heif) {
+            return .heic
+        }
         return nil
     }
 

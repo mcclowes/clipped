@@ -238,12 +238,16 @@ final class ClipboardManager {
         defer { Signposts.clipboard.endInterval("Ingest", signpost) }
 
         let policy = passwordPolicy(hasConcealed: event.hasConcealedType, bundleID: event.bundleID)
-        if policy.shouldSkip { return }
+        if policy.shouldSkip {
+            return
+        }
 
         let item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
 
         // A mutation (e.g. trim-whitespace) can reduce content to nothing — don't store a blank row.
-        if case let .text(str) = item.content, str.isEmpty { return }
+        if case let .text(str) = item.content, str.isEmpty {
+            return
+        }
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
         // regardless of whether secure mode UI behavior is enabled.

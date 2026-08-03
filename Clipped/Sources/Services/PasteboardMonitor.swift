@@ -330,7 +330,9 @@ final class PasteboardMonitor {
         for type in types {
             guard let data = pasteboard.data(forType: type) else { continue }
             totalBytes += data.count
-            if totalBytes > maxTotalBytes { return nil }
+            if totalBytes > maxTotalBytes {
+                return nil
+            }
             result[type.rawValue] = data
         }
         return result.isEmpty ? nil : result

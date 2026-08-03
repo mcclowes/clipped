@@ -170,7 +170,9 @@ struct ClipboardManagerTests {
 
         for i in 0...15 {
             let item = ClipboardItem(content: .text("item \(i)"), contentType: .plainText)
-            if i == 12 { item.isPinned = true }
+            if i == 12 {
+                item.isPinned = true
+            }
             manager.items.append(item)
         }
 

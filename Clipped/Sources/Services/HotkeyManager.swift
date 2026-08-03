@@ -159,10 +159,18 @@ final class HotkeyManager {
 
     static func formatShortcut(keyCode: UInt32, modifiers: UInt32) -> String {
         var parts: [String] = []
-        if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
-        if modifiers & UInt32(optionKey) != 0 { parts.append("⌥") }
-        if modifiers & UInt32(shiftKey) != 0 { parts.append("⇧") }
-        if modifiers & UInt32(cmdKey) != 0 { parts.append("⌘") }
+        if modifiers & UInt32(controlKey) != 0 {
+            parts.append("⌃")
+        }
+        if modifiers & UInt32(optionKey) != 0 {
+            parts.append("⌥")
+        }
+        if modifiers & UInt32(shiftKey) != 0 {
+            parts.append("⇧")
+        }
+        if modifiers & UInt32(cmdKey) != 0 {
+            parts.append("⌘")
+        }
         parts.append(keyName(for: keyCode))
         return parts.joined()
     }

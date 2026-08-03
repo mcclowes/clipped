@@ -222,7 +222,9 @@ struct HistoryWindowView: View {
         Binding(
             get: { summarizingItemID == item.id },
             set: { isPresented in
-                if !isPresented { dismissSummary() }
+                if !isPresented {
+                    dismissSummary()
+                }
             }
         )
     }
@@ -396,7 +398,9 @@ extension HistoryCategory {
 
         for item in items {
             guard let name = item.sourceAppName, !name.isEmpty else { continue }
-            if counts[name] == nil { order.append(name) }
+            if counts[name] == nil {
+                order.append(name)
+            }
             counts[name, default: 0] += 1
             // Keep the first non-nil bundle ID seen for the app.
             if bundleIDs[name] == nil, let bundleID = item.sourceAppBundleID {
@@ -424,7 +428,9 @@ enum AppIconResolver {
 
     static func icon(for bundleID: String?) -> NSImage? {
         guard let bundleID, !bundleID.isEmpty else { return nil }
-        if let cached = cache[bundleID] { return cached }
+        if let cached = cache[bundleID] {
+            return cached
+        }
         guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
             return nil
         }
@@ -507,7 +513,9 @@ private struct HistoryItemRow: View {
     }
 
     private var secondaryLabel: String? {
-        if item.isSensitive || item.containsSecret { return nil }
+        if item.isSensitive || item.containsSecret {
+            return nil
+        }
         if case .url = item.content, item.linkTitle != nil {
             return item.preview
         }

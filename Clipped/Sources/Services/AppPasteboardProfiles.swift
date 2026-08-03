@@ -54,7 +54,9 @@ enum AppPasteboardProfiles {
             let core = token.hasSuffix(".") ? token.dropLast() : token
             let isNumeric = !core.isEmpty && core.allSatisfy(\.isNumber)
             if isNumeric {
-                if started { break }
+                if started {
+                    break
+                }
             } else {
                 started = true
                 collected.append(token)

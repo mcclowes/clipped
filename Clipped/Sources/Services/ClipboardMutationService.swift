@@ -234,7 +234,9 @@ final class StripTrackingParamsMutation: ClipboardMutation {
             !Self.trackingParams.contains(queryItem.name.lowercased())
         }
 
-        if cleaned.count == queryItems.count { return item }
+        if cleaned.count == queryItems.count {
+            return item
+        }
 
         components.queryItems = cleaned.isEmpty ? nil : cleaned
 
@@ -499,17 +501,33 @@ final class DetectCodeSnippetMutation: ClipboardMutation {
         let range = NSRange(text.startIndex..., in: text)
 
         // Single-pattern matches (high confidence)
-        if Self.importPattern.firstMatch(in: text, range: range) != nil { return true }
-        if Self.declarationPattern.firstMatch(in: text, range: range) != nil { return true }
-        if Self.variablePattern.firstMatch(in: text, range: range) != nil { return true }
-        if Self.arrowPattern.firstMatch(in: text, range: range) != nil { return true }
-        if Self.classPattern.firstMatch(in: text, range: range) != nil { return true }
-        if Self.shellPattern.firstMatch(in: text, range: range) != nil { return true }
-        if Self.requireCallPattern.firstMatch(in: text, range: range) != nil { return true }
+        if Self.importPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if Self.declarationPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if Self.variablePattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if Self.arrowPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if Self.classPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if Self.shellPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
+        if Self.requireCallPattern.firstMatch(in: text, range: range) != nil {
+            return true
+        }
 
         // Code density: 2+ lines ending with braces/semicolons
         let braceMatches = Self.braceOrSemicolonLine.numberOfMatches(in: text, range: range)
-        if braceMatches >= 2 { return true }
+        if braceMatches >= 2 {
+            return true
+        }
 
         return false
     }
