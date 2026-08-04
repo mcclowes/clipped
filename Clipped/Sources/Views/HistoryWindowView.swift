@@ -665,7 +665,11 @@ private struct HistoryDetailView: View {
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: 360, alignment: .leading)
             Button {
-                isRevealed = true
+                Task {
+                    if await manager.authorizeAccess(to: item, reason: "Reveal hidden clipboard content") {
+                        isRevealed = true
+                    }
+                }
             } label: {
                 Label("Reveal", systemImage: "eye")
             }

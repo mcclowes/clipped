@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import LocalAuthentication
 import Observation
 import os
 import SwiftUI
@@ -22,6 +23,28 @@ private let passwordManagerBundleIDs: Set<String> = [
     "me.proton.pass.electron", // Proton Pass
 ]
 
+@MainActor
+protocol SensitiveContentAuthorizing: AnyObject {
+    func authorize(reason: String) async -> Bool
+}
+
+@MainActor
+final class DeviceOwnerAuthenticator: SensitiveContentAuthorizing {
+    func authorize(reason: String) async -> Bool {
+        let context = LAContext()
+        var error: NSError?
+        // Preserve the existing behaviour when the Mac has no authentication configured:
+        // sensitive content remains usable instead of becoming permanently inaccessible.
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &error) else {
+            return true
+        }
+        return await (try? context.evaluatePolicy(
+            .deviceOwnerAuthentication,
+            localizedReason: reason
+        )) == true
+    }
+}
+
 /// Clipboard pipeline coordinator. Glues `PasteboardMonitor` (which produces raw items),
 /// `ClipboardHistory` (which stores filtered/pinned state), and the mutation + link-metadata
 /// services together. Also owns the pasteboard-writing actions (copy, paste, export).
@@ -41,6 +64,7 @@ final class ClipboardManager {
 
     var mutationService: any ClipboardMutating = ClipboardMutationService()
     var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
+    var sensitiveContentAuthorizer: any SensitiveContentAuthorizing = DeviceOwnerAuthenticator()
 
     // MARK: - Transient UI state (not clipboard data)
 
@@ -363,7 +387,18 @@ final class ClipboardManager {
 
     private static let vKeyCode: UInt16 = 0x09
 
-    func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
+    func copyToClipboard(
+        _ item: ClipboardItem,
+        asPlainText: Bool = false,
+        completion: (@MainActor () -> Void)? = nil
+    ) {
+        performAfterAuthorization(for: item, reason: "Copy hidden clipboard content") {
+            self.copyToClipboardUnchecked(item, asPlainText: asPlainText)
+            completion?()
+        }
+    }
+
+    private func copyToClipboardUnchecked(_ item: ClipboardItem, asPlainText: Bool = false) {
         if !asPlainText, let customTypes = item.customPasteboardTypes {
             replayCustomPasteboardTypes(customTypes, item: item)
             return
@@ -492,20 +527,27 @@ final class ClipboardManager {
 
     /// Copy `item`, return focus to the app that was active before the panel opened, then
     /// synthesise Cmd+V there. Without the reactivation the keystroke pastes into Clipped itself.
-    func pasteToActiveApp(_ item: ClipboardItem, asPlainText: Bool = false) {
+    func pasteToActiveApp(
+        _ item: ClipboardItem,
+        asPlainText: Bool = false,
+        onAuthorized: (@MainActor () -> Void)? = nil
+    ) {
         let target = previousActiveApp
-        copyToClipboard(item, asPlainText: asPlainText)
-        Task {
+        performAfterAuthorization(for: item, reason: "Paste hidden clipboard content") {
+            self.copyToClipboardUnchecked(item, asPlainText: asPlainText)
+            onAuthorized?()
             target?.activate()
-            try? await Task.sleep(for: .milliseconds(120))
-            // Only paste if the intended app actually regained focus (and secure input is off).
-            guard !IsSecureEventInputEnabled() else { return }
-            if let target,
-               NSWorkspace.shared.frontmostApplication?.processIdentifier != target.processIdentifier
-            {
-                return
+            Task {
+                try? await Task.sleep(for: .milliseconds(120))
+                // Only paste if the intended app actually regained focus (and secure input is off).
+                guard !IsSecureEventInputEnabled() else { return }
+                if let target,
+                   NSWorkspace.shared.frontmostApplication?.processIdentifier != target.processIdentifier
+                {
+                    return
+                }
+                self.simulatePaste()
             }
-            simulatePaste()
         }
     }
 
@@ -535,9 +577,31 @@ final class ClipboardManager {
             return
         }
 
-        monitor.write { pasteboard in
-            pasteboard.clearContents()
-            pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
+        performAfterAuthorization(for: item, reason: "Copy hidden clipboard content") {
+            self.monitor.write { pasteboard in
+                pasteboard.clearContents()
+                pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
+            }
+        }
+    }
+
+    func authorizeAccess(to item: ClipboardItem, reason: String) async -> Bool {
+        guard item.isSensitive || item.containsSecret else { return true }
+        return await sensitiveContentAuthorizer.authorize(reason: reason)
+    }
+
+    private func performAfterAuthorization(
+        for item: ClipboardItem,
+        reason: String,
+        action: @escaping @MainActor () -> Void
+    ) {
+        guard item.isSensitive || item.containsSecret else {
+            action()
+            return
+        }
+        Task {
+            guard await authorizeAccess(to: item, reason: reason) else { return }
+            action()
         }
     }
 

@@ -6,6 +6,17 @@ import Testing
 import UniformTypeIdentifiers
 
 @MainActor
+private final class MockSensitiveContentAuthorizer: SensitiveContentAuthorizing {
+    var result = false
+    private(set) var authorizationCount = 0
+
+    func authorize(reason _: String) async -> Bool {
+        authorizationCount += 1
+        return result
+    }
+}
+
+@MainActor
 struct ClipboardManagerTests {
     // swiftlint:disable large_tuple
     private func makeManager(persistHistory: Bool = true)
@@ -29,6 +40,38 @@ struct ClipboardManagerTests {
         let (manager, _, _, _) = makeManager()
         #expect(manager.items.isEmpty)
         #expect(manager.pinnedItems.isEmpty)
+    }
+
+    @Test("Sensitive content is not copied when device authentication is denied")
+    func sensitiveCopyRequiresAuthentication() async {
+        let pasteboard = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: pasteboard)
+        manager.stopMonitoring()
+        let authorizer = MockSensitiveContentAuthorizer()
+        manager.sensitiveContentAuthorizer = authorizer
+        let item = ClipboardItem(
+            content: .text("secret value"),
+            contentType: .plainText,
+            isSensitive: true
+        )
+        var completionCount = 0
+
+        manager.copyToClipboard(item) { completionCount += 1 }
+        await Task.yield()
+
+        #expect(authorizer.authorizationCount == 1)
+        #expect(pasteboard.string(forType: .string) == nil)
+        #expect(completionCount == 0)
+
+        authorizer.result = true
+        manager.copyToClipboard(item) { completionCount += 1 }
+        while authorizer.authorizationCount < 2 {
+            await Task.yield()
+        }
+        await Task.yield()
+
+        #expect(pasteboard.string(forType: .string) == "secret value")
+        #expect(completionCount == 1)
     }
 
     @Test("Filter by content type returns matching items only")

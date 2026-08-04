@@ -34,3 +34,6 @@ Pods/
 *.perspectivev3
 !default.perspectivev3
 xcuserdata/
+
+# Added by saggar — local files that shouldn't be committed
+.saggar/**/*.local.*
