@@ -558,6 +558,9 @@ final class ClipboardItem: Identifiable {
     var extractedText: String?
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
+    /// Original HTML rendition captured alongside rich text. Kept separately from the
+    /// canonical RTF content so destinations that prefer HTML receive the source markup.
+    var htmlData: Data?
     /// Raw pasteboard type → data snapshot captured for items that come from apps with
     /// custom UTIs (Logic Pro regions, etc.). Replayed on copy so pasting back into the
     /// source app still works. Keys are pasteboard type identifiers (UTIs).
@@ -573,6 +576,22 @@ final class ClipboardItem: Identifiable {
 
     var wasMutated: Bool {
         !mutationsApplied.isEmpty
+    }
+
+    var availableRepresentations: [ClipboardRepresentation] {
+        switch content {
+        case .richText:
+            var formats: [ClipboardRepresentation] = []
+            if htmlData != nil {
+                formats.append(.html)
+            }
+            formats.append(contentsOf: [.richText, .plainText, .markdown])
+            return formats
+        case .text, .url:
+            return [.plainText]
+        case .image, .svg:
+            return []
+        }
     }
 
     var plainText: String? {

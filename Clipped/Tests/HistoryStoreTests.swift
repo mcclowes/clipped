@@ -252,8 +252,8 @@ struct HistoryStoreTests {
         await recovered.clear()
     }
 
-    @Test("originalContent and customPasteboardTypes survive a save/load round-trip")
-    func preservesOriginalContentAndCustomTypes() async {
+    @Test("Rich-text representations and item metadata survive a save/load round-trip")
+    func preservesRepresentationsAndItemMetadata() async {
         let store = makeStore()
         await store.clear()
 
@@ -261,10 +261,12 @@ struct HistoryStoreTests {
         item.originalContent = .text("original with tracking")
         item.mutationsApplied = ["Stripped tracking parameters"]
         item.customPasteboardTypes = ["com.example.custom": Data([1, 2, 3, 4])]
+        item.htmlData = Data("<p>cleaned</p>".utf8)
         await store.save(entries: [StoredEntry(item: item)])
 
         let restored = await store.load().first?.toClipboardItem()
         #expect(restored?.customPasteboardTypes?["com.example.custom"] == Data([1, 2, 3, 4]))
+        #expect(restored?.htmlData == Data("<p>cleaned</p>".utf8))
         if case let .text(str) = restored?.originalContent {
             #expect(str == "original with tracking")
         } else {

@@ -446,6 +446,9 @@ struct StoredEntry: Codable {
     let contentType: String
     let textContent: String?
     let rtfData: Data?
+    /// Original HTML rendition for rich-text entries. Nullable for histories written before
+    /// multi-representation capture was added.
+    let htmlData: Data?
     let urlString: String?
     let imageData: Data?
     let imageWidth: Double?
@@ -486,6 +489,7 @@ struct StoredEntry: Codable {
             contentType: contentType,
             textContent: textContent,
             rtfData: rtfData,
+            htmlData: htmlData,
             urlString: urlString,
             imageData: nil,
             imageWidth: imageWidth,
@@ -514,6 +518,7 @@ struct StoredEntry: Codable {
             contentType: contentType,
             textContent: textContent,
             rtfData: rtfData,
+            htmlData: htmlData,
             urlString: urlString,
             imageData: data,
             imageWidth: imageWidth,
@@ -595,6 +600,7 @@ extension StoredEntry {
             contentType: item.contentType.rawValue,
             textContent: textContent,
             rtfData: rtfData,
+            htmlData: item.htmlData,
             urlString: urlString,
             imageData: imageData,
             imageWidth: imageWidth,
@@ -641,6 +647,7 @@ extension StoredEntry {
         item.linkTitle = linkTitle
         item.linkFavicon = linkFavicon
         item.mutationsApplied = mutationsApplied ?? []
+        item.htmlData = htmlData
         item.customPasteboardTypes = customPasteboardTypes
         item.extractedText = extractedText
         item.originalContent = originalContent?.toClipboardContent()

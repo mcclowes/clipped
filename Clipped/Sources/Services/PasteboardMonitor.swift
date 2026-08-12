@@ -166,12 +166,14 @@ final class PasteboardMonitor {
         //    the user paste it back, search it, and mutate it instead of getting a picture of it.
         if types.contains(.rtf), let rtfData = pasteboard.data(forType: .rtf) {
             let plainText = pasteboard.string(forType: .string) ?? ""
-            return ClipboardItem(
+            let item = ClipboardItem(
                 content: .richText(rtfData, plainText),
                 contentType: .richText,
                 sourceAppName: appName,
                 sourceAppBundleID: bundleID
             )
+            item.htmlData = boundedHTMLData(from: types)
+            return item
         }
 
         // 3. Raster image. Skip oversized payloads, and read the pixel size via ImageIO instead
@@ -295,12 +297,14 @@ final class PasteboardMonitor {
             from: fullRange,
             documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
         ) {
-            return ClipboardItem(
+            let item = ClipboardItem(
                 content: .richText(rtfData, plain),
                 contentType: .richText,
                 sourceAppName: appName,
                 sourceAppBundleID: bundleID
             )
+            item.htmlData = htmlData
+            return item
         }
         return ClipboardItem(
             content: .text(plain),
@@ -308,6 +312,16 @@ final class PasteboardMonitor {
             sourceAppName: appName,
             sourceAppBundleID: bundleID
         )
+    }
+
+    private func boundedHTMLData(
+        from types: [NSPasteboard.PasteboardType]
+    ) -> Data? {
+        guard types.contains(Self.htmlType),
+              let data = pasteboard.data(forType: Self.htmlType),
+              data.count <= Self.maxHTMLBytes
+        else { return nil }
+        return data
     }
 
     private func attachCustomPasteboardTypesIfNeeded(

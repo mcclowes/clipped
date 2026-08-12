@@ -141,6 +141,32 @@ struct PasteboardIngestionTests {
         #expect(data.prefix(pngMagic.count).elementsEqual(pngMagic))
     }
 
+    @Test("Monitor retains HTML alongside RTF and plain text")
+    func monitorRetainsRichTextRepresentations() throws {
+        let mock = MockPasteboard()
+        let monitor = PasteboardMonitor(pasteboard: mock)
+        let attributed = NSAttributedString(string: "Formatted text")
+        let rtf = try #require(attributed.rtf(
+            from: NSRange(location: 0, length: attributed.length),
+            documentAttributes: [:]
+        ))
+        let html = Data("<strong>Formatted</strong> text".utf8)
+        let htmlType = NSPasteboard.PasteboardType("public.html")
+
+        var captured: ClipboardItem?
+        monitor.onNewItem = { captured = $0.item }
+        mock.stageExternalWrite(
+            types: [.rtf, htmlType, .string],
+            strings: [.string: "Formatted text"],
+            data: [.rtf: rtf, htmlType: html]
+        )
+
+        monitor.check()
+
+        #expect(captured?.htmlData == html)
+        #expect(captured?.availableRepresentations == [.html, .richText, .plainText, .markdown])
+    }
+
     // MARK: - End-to-end through ClipboardManager
 
     @Test("Dedup: copying the same text twice produces one entry at the top")
