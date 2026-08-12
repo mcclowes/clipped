@@ -69,12 +69,13 @@ struct ClipboardItemRow: View {
             manager.copyToClipboard(item)
         }
 
-        if case .richText = item.content {
-            Button("Copy as plain text") {
-                manager.copyToClipboard(item, asPlainText: true)
-            }
-            Button("Copy as Markdown") {
-                manager.copyAsMarkdown(item)
+        if item.availableRepresentations.count > 1 {
+            Menu("Copy as…") {
+                ForEach(item.availableRepresentations) { representation in
+                    Button(representation.title) {
+                        manager.copyToClipboard(item, as: representation)
+                    }
+                }
             }
         }
 

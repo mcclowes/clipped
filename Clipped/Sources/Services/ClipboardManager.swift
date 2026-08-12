@@ -374,12 +374,13 @@ final class ClipboardManager {
             case let .text(string):
                 pasteboard.setString(string, forType: .string)
             case let .richText(rtfData, plain):
-                if asPlainText {
-                    pasteboard.setString(plain, forType: .string)
-                } else {
-                    pasteboard.setData(rtfData, forType: .rtf)
-                    pasteboard.setString(plain, forType: .string)
-                }
+                Self.writeRichText(
+                    rtfData: rtfData,
+                    plain: plain,
+                    htmlData: item.htmlData,
+                    asPlainText: asPlainText,
+                    to: pasteboard
+                )
             case let .url(url):
                 pasteboard.setString(url.absoluteString, forType: .string)
             case let .image(data, _):
@@ -404,6 +405,61 @@ final class ClipboardManager {
             NSSound(named: "Pop")?.play()
         }
 
+        history.moveToTop(item)
+    }
+
+    private static func writeRichText(
+        rtfData: Data,
+        plain: String,
+        htmlData: Data?,
+        asPlainText: Bool,
+        to pasteboard: any PasteboardProtocol
+    ) {
+        guard !asPlainText else {
+            pasteboard.setString(plain, forType: .string)
+            return
+        }
+        pasteboard.setData(rtfData, forType: .rtf)
+        pasteboard.setString(plain, forType: .string)
+        if let htmlData {
+            pasteboard.setData(htmlData, forType: ClipboardRepresentation.html.pasteboardType)
+        }
+    }
+
+    func copyToClipboard(_ item: ClipboardItem, as representation: ClipboardRepresentation) {
+        guard case let .richText(rtfData, plain) = item.content else {
+            copyToClipboard(item, asPlainText: true)
+            return
+        }
+
+        let string: String? = switch representation {
+        case .plainText:
+            plain
+        case .markdown:
+            MarkdownConverter.convert(rtfData: rtfData).flatMap { $0.isEmpty ? nil : $0 } ?? plain
+        case .html, .richText:
+            nil
+        }
+
+        monitor.write { pasteboard in
+            pasteboard.clearContents()
+            switch representation {
+            case .html:
+                if let htmlData = item.htmlData {
+                    pasteboard.setData(htmlData, forType: representation.pasteboardType)
+                }
+            case .richText:
+                pasteboard.setData(rtfData, forType: representation.pasteboardType)
+            case .plainText, .markdown:
+                if let string {
+                    pasteboard.setString(string, forType: representation.pasteboardType)
+                }
+            }
+        }
+
+        if settingsManager?.playSoundOnCopy ?? true {
+            NSSound(named: "Pop")?.play()
+        }
         history.moveToTop(item)
     }
 
@@ -528,17 +584,7 @@ final class ClipboardManager {
     }
 
     func copyAsMarkdown(_ item: ClipboardItem) {
-        guard case let .richText(rtfData, plain) = item.content,
-              let markdown = MarkdownConverter.convert(rtfData: rtfData)
-        else {
-            copyToClipboard(item, asPlainText: true)
-            return
-        }
-
-        monitor.write { pasteboard in
-            pasteboard.clearContents()
-            pasteboard.setString(markdown.isEmpty ? plain : markdown, forType: .string)
-        }
+        copyToClipboard(item, as: .markdown)
     }
 
     func exportItems(_ items: [ClipboardItem]) {

@@ -204,6 +204,56 @@ struct PasteboardIngestionTests {
         #expect(mock.string(forType: .string) == "copy me")
     }
 
+    @Test("Normal rich-text copy publishes every retained representation")
+    func richTextCopyPublishesAllRepresentations() throws {
+        let mock = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: mock)
+        manager.stopMonitoring()
+        manager.settingsManager = MockSettingsManager()
+        manager.historyStore = MockHistoryStore()
+        let attributed = NSAttributedString(string: "Formatted")
+        let rtf = try #require(attributed.rtf(
+            from: NSRange(location: 0, length: attributed.length),
+            documentAttributes: [:]
+        ))
+        let html = Data("<strong>Formatted</strong>".utf8)
+        let item = ClipboardItem(content: .richText(rtf, "Formatted"), contentType: .richText)
+        item.htmlData = html
+
+        manager.copyToClipboard(item)
+
+        #expect(mock.data(forType: .rtf) == rtf)
+        #expect(mock.string(forType: .string) == "Formatted")
+        #expect(mock.data(forType: ClipboardRepresentation.html.pasteboardType) == html)
+    }
+
+    @Test("Copy as publishes only the selected representation")
+    func copyAsPublishesSelectedRepresentation() throws {
+        let mock = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: mock)
+        manager.stopMonitoring()
+        manager.settingsManager = MockSettingsManager()
+        manager.historyStore = MockHistoryStore()
+        let attributed = NSAttributedString(string: "Formatted")
+        let rtf = try #require(attributed.rtf(
+            from: NSRange(location: 0, length: attributed.length),
+            documentAttributes: [:]
+        ))
+        let html = Data("<strong>Formatted</strong>".utf8)
+        let item = ClipboardItem(content: .richText(rtf, "Formatted"), contentType: .richText)
+        item.htmlData = html
+
+        manager.copyToClipboard(item, as: .html)
+
+        #expect(mock.types == [ClipboardRepresentation.html.pasteboardType])
+        #expect(mock.data(forType: ClipboardRepresentation.html.pasteboardType) == html)
+
+        manager.copyToClipboard(item, as: .plainText)
+
+        #expect(mock.types == [.string])
+        #expect(mock.string(forType: .string) == "Formatted")
+    }
+
     @Test("Ingest flags items that look like API keys as containing a secret")
     func ingestFlagsSecrets() {
         let mock = MockPasteboard()
