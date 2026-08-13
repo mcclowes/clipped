@@ -23,8 +23,11 @@ final class SettingsWindowPresenter {
         let hostingController = NSHostingController(rootView: contentView)
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Clipped Settings"
-        window.styleMask = [.titled, .closable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.setContentSize(NSSize(width: 860, height: 640))
+        window.minSize = NSSize(width: 720, height: 520)
         window.center()
+        window.setFrameAutosaveName("ClippedSettingsWindow")
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

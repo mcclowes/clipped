@@ -2,10 +2,12 @@ import AppKit
 import Carbon
 import SwiftUI
 
-enum SettingsTab: String, CaseIterable {
+enum SettingsTab: String, CaseIterable, Identifiable {
     case general = "General"
     case transformations = "Transformations"
     case appRules = "App rules"
+
+    var id: Self { self }
 
     var systemImage: String {
         switch self {
@@ -17,40 +19,43 @@ enum SettingsTab: String, CaseIterable {
 }
 
 struct SettingsView: View {
-    @Environment(SettingsManager.self) private var settings
-    @Environment(ScreenshotWatcher.self) private var screenshotWatcher
-    @Environment(ClipboardManager.self) private var clipboardManager
-
     @State private var selectedTab: SettingsTab = .general
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            ForEach(SettingsTab.allCases, id: \.self) { tab in
-                Tab(tab.rawValue, systemImage: tab.systemImage, value: tab) {
-                    tabContent(for: tab)
-                }
+        NavigationSplitView {
+            List(SettingsTab.allCases, selection: $selectedTab) { tab in
+                Label(tab.rawValue, systemImage: tab.systemImage)
+                    .tag(tab)
             }
+            .navigationTitle("Settings")
+            .navigationSplitViewColumnWidth(min: 180, ideal: 210, max: 260)
+        } detail: {
+            tabContent(for: selectedTab)
+                .navigationTitle(selectedTab.rawValue)
+                .id(selectedTab)
         }
         .frame(
-            minWidth: 500,
-            idealWidth: 500,
-            maxWidth: .infinity,
-            minHeight: 450,
-            idealHeight: 550,
-            maxHeight: .infinity
+            minWidth: 720,
+            idealWidth: 860,
+            minHeight: 520,
+            idealHeight: 640
         )
     }
 
     @ViewBuilder
     private func tabContent(for tab: SettingsTab) -> some View {
-        switch tab {
-        case .general:
-            GeneralSettingsTab()
-        case .transformations:
-            TransformationsSettingsTab()
-        case .appRules:
-            AppRulesSettingsTab()
+        Group {
+            switch tab {
+            case .general:
+                GeneralSettingsTab()
+            case .transformations:
+                TransformationsSettingsTab()
+            case .appRules:
+                AppRulesSettingsTab()
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background)
     }
 }
 
