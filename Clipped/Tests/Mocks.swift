@@ -211,7 +211,7 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     var maxHistorySize = 10
     var historyRetention: HistoryRetention = .never
     var secureMode = true
-    var secureTimeout = 0
+    var secureTimeout = SettingsManager.defaultSecureTimeout
     var playSoundOnCopy = false
     var captureScreenshots = false
     var fetchLinkPreviews = true

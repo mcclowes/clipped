@@ -15,6 +15,12 @@ struct SettingsManagerTests {
         #expect(settings.secureMode == true)
     }
 
+    @Test("Keeps password-manager items for two minutes by default")
+    func defaultSecureTimeout() {
+        let settings = SettingsManager()
+        #expect(settings.secureTimeout == 120)
+    }
+
     @Test("Defaults hide-from-screen-sharing to true")
     func defaultHideFromScreenSharing() {
         let settings = SettingsManager()

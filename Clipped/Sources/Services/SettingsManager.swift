@@ -62,6 +62,7 @@ protocol SettingsManaging: AnyObject {
 @Observable
 final class SettingsManager: SettingsManaging, MutationRulesProviding {
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "SettingsManager")
+    static let defaultSecureTimeout = 120
 
     var persistAcrossReboots: Bool {
         didSet { UserDefaults.standard.set(persistAcrossReboots, forKey: "persistAcrossReboots") }
@@ -79,7 +80,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         didSet { UserDefaults.standard.set(secureMode, forKey: "secureMode") }
     }
 
-    /// Timeout in seconds for secure items. 0 means skip entirely.
+    /// Timeout in seconds for secure items.
     var secureTimeout: Int {
         didSet { UserDefaults.standard.set(secureTimeout, forKey: "secureTimeout") }
     }
@@ -209,9 +210,8 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "secureMode")
-        secureTimeout = UserDefaults.standard.object(forKey: "secureTimeout") == nil
-            ? 0
-            : UserDefaults.standard.integer(forKey: "secureTimeout")
+        let storedSecureTimeout = UserDefaults.standard.integer(forKey: "secureTimeout")
+        secureTimeout = storedSecureTimeout > 0 ? storedSecureTimeout : Self.defaultSecureTimeout
         playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
