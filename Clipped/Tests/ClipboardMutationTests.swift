@@ -407,6 +407,47 @@ struct ClipboardMutationTests {
         #expect(result === item)
     }
 
+    // MARK: - UnwrapSoftLineBreaksMutation
+
+    @Test("Unwraps terminal and PDF-style visual line breaks")
+    func unwrapsSoftLineBreaks() {
+        let mutation = UnwrapSoftLineBreaksMutation()
+        let item = ClipboardItem(
+            content: .text("Codex returned a sentence that wrapped\nacross the terminal width."),
+            contentType: .plainText
+        )
+
+        let result = mutation.mutate(item)
+
+        #expect(result.plainText == "Codex returned a sentence that wrapped across the terminal width.")
+    }
+
+    @Test("Preserves paragraphs and list items while unwrapping their contents")
+    func preservesStructureWhileUnwrapping() {
+        let mutation = UnwrapSoftLineBreaksMutation()
+        let item = ClipboardItem(
+            content: .text("First paragraph wraps\nhere.\n\n- First item\n- Second item wraps\nonto another line"),
+            contentType: .plainText
+        )
+
+        let result = mutation.mutate(item)
+
+        #expect(
+            result.plainText == "First paragraph wraps here.\n\n- First item\n- Second item wraps onto another line"
+        )
+    }
+
+    @Test("Preserves code-like multiline text")
+    func preservesCodeWhenUnwrapping() {
+        let mutation = UnwrapSoftLineBreaksMutation()
+        let source = "func greet() {\n    print(\"Hello\")\n}"
+        let item = ClipboardItem(content: .text(source), contentType: .plainText)
+
+        let result = mutation.mutate(item)
+
+        #expect(result === item)
+    }
+
     // MARK: - StripToPlainTextMutation
 
     @Test("Strips rich text to plain text")
@@ -543,6 +584,7 @@ struct ClipboardMutationTests {
         #expect(MutationID.cleanAmazonLinks.defaultContentTypes == [.url])
         #expect(MutationID.smartQuotesToStraight.defaultContentTypes == [.plainText])
         #expect(MutationID.collapseMultipleSpaces.defaultContentTypes == [.plainText])
+        #expect(MutationID.unwrapSoftLineBreaks.defaultContentTypes == [.plainText])
         #expect(MutationID.stripToPlainText.defaultContentTypes == [.richText])
         #expect(MutationID.convertToMarkdown.defaultContentTypes == [.richText])
         #expect(MutationID.stripANSICodes.defaultContentTypes == [.plainText])
@@ -553,6 +595,7 @@ struct ClipboardMutationTests {
         #expect(!MutationID.cleanAmazonLinks.enabledByDefault)
         #expect(!MutationID.smartQuotesToStraight.enabledByDefault)
         #expect(!MutationID.collapseMultipleSpaces.enabledByDefault)
+        #expect(MutationID.unwrapSoftLineBreaks.enabledByDefault)
         #expect(!MutationID.stripToPlainText.enabledByDefault)
         #expect(!MutationID.convertToMarkdown.enabledByDefault)
         #expect(!MutationID.stripANSICodes.enabledByDefault)

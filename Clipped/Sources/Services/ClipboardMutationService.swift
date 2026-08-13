@@ -9,6 +9,7 @@ enum MutationID: String, CaseIterable, Identifiable {
     case cleanAmazonLinks
     case smartQuotesToStraight
     case collapseMultipleSpaces
+    case unwrapSoftLineBreaks
     case stripToPlainText
     case convertToMarkdown
     case stripANSICodes
@@ -25,6 +26,7 @@ enum MutationID: String, CaseIterable, Identifiable {
         case .cleanAmazonLinks: "Clean Amazon links"
         case .smartQuotesToStraight: "Smart quotes to straight"
         case .collapseMultipleSpaces: "Collapse multiple spaces"
+        case .unwrapSoftLineBreaks: "Unwrap copied text"
         case .stripToPlainText: "Strip to plain text"
         case .convertToMarkdown: "Convert to markdown"
         case .stripANSICodes: "Strip ANSI codes"
@@ -44,6 +46,8 @@ enum MutationID: String, CaseIterable, Identifiable {
             "Converts curly \u{201C}smart\u{201D} quotes to straight \"plain\" quotes."
         case .collapseMultipleSpaces:
             "Replaces runs of multiple spaces with a single space."
+        case .unwrapSoftLineBreaks:
+            "Replaces visual line wraps from terminals and PDFs with spaces while preserving paragraphs and lists."
         case .stripToPlainText:
             "Removes rich text formatting, keeping only the plain text content."
         case .convertToMarkdown:
@@ -63,6 +67,7 @@ enum MutationID: String, CaseIterable, Identifiable {
         case .cleanAmazonLinks: [.url]
         case .smartQuotesToStraight: [.plainText]
         case .collapseMultipleSpaces: [.plainText]
+        case .unwrapSoftLineBreaks: [.plainText]
         case .stripToPlainText: [.richText]
         case .convertToMarkdown: [.richText]
         case .stripANSICodes: [.plainText]
@@ -75,6 +80,7 @@ enum MutationID: String, CaseIterable, Identifiable {
         switch self {
         case .stripTrackingParams: true
         case .trimWhitespace: true
+        case .unwrapSoftLineBreaks: true
         case .cleanAmazonLinks: false
         case .smartQuotesToStraight: false
         case .collapseMultipleSpaces: false
@@ -165,6 +171,7 @@ final class ClipboardMutationService: ClipboardMutating {
             TrimWhitespaceMutation(),
             SmartQuotesToStraightMutation(),
             CollapseMultipleSpacesMutation(),
+            UnwrapSoftLineBreaksMutation(),
             // Markdown before strip-to-plain: both consume rich text, and if a user enables both
             // we want the richer conversion to win rather than being pre-empted into plain text.
             ConvertToMarkdownMutation(),
@@ -366,6 +373,87 @@ final class CollapseMultipleSpacesMutation: ClipboardMutation {
         guard collapsed != string else { return item }
 
         return copyItem(item, content: .text(collapsed))
+    }
+}
+
+/// Replaces line breaks introduced by fixed-width visual wrapping while retaining
+/// structural breaks such as paragraphs, lists, and indented/code-like blocks.
+@MainActor
+final class UnwrapSoftLineBreaksMutation: ClipboardMutation {
+    let id = MutationID.unwrapSoftLineBreaks
+    let name = "Unwrapped copied text"
+
+    func mutate(_ item: ClipboardItem) -> ClipboardItem {
+        guard case let .text(string) = item.content,
+              string.contains("\n"),
+              !item.isDeveloperContent
+        else { return item }
+
+        let normalized = string.replacingOccurrences(of: "\r\n", with: "\n")
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard !looksLikeCode(lines) else { return item }
+
+        var result = lines[0]
+        for index in lines.indices.dropFirst() {
+            let previous = lines[index - 1]
+            let current = lines[index]
+            if shouldPreserveBreak(from: previous, to: current) {
+                result.append("\n")
+            } else if !result.hasSuffix(" "), !current.hasPrefix(" ") {
+                result.append(" ")
+            }
+            result.append(current)
+        }
+
+        guard result != string else { return item }
+        return copyItem(item, content: .text(result))
+    }
+
+    private func shouldPreserveBreak(from previous: String, to current: String) -> Bool {
+        previous.isEmpty
+            || current.isEmpty
+            || startsStructuralLine(current)
+            || startsHeading(previous)
+            || previous.first?.isWhitespace == true
+            || current.first?.isWhitespace == true
+    }
+
+    private func startsHeading(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("# ") || trimmed.hasPrefix("## ")
+    }
+
+    private func startsStructuralLine(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return false }
+
+        if trimmed.hasPrefix("> ") || trimmed.hasPrefix("# ") || trimmed.hasPrefix("## ") {
+            return true
+        }
+        if ["- ", "* ", "+ ", "• "].contains(where: trimmed.hasPrefix) {
+            return true
+        }
+
+        let prefix = trimmed.prefix { $0.isNumber }
+        guard !prefix.isEmpty else { return false }
+        let remainder = trimmed.dropFirst(prefix.count)
+        return remainder.hasPrefix(". ") || remainder.hasPrefix(") ")
+    }
+
+    private func looksLikeCode(_ lines: [String]) -> Bool {
+        let nonempty = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        guard nonempty.count > 1 else { return false }
+
+        let codeLikeCount = nonempty.count { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            return line.first?.isWhitespace == true
+                || trimmed.hasSuffix("{")
+                || trimmed.hasSuffix("}")
+                || trimmed.hasSuffix(";")
+                || trimmed.hasPrefix("$")
+                || trimmed.hasPrefix("%")
+        }
+        return codeLikeCount * 2 >= nonempty.count
     }
 }
 
