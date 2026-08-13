@@ -100,13 +100,13 @@ struct StickyNoteView: View {
     @ViewBuilder
     private func contentBody(for item: ClipboardItem) -> some View {
         if shouldMask(item) {
-            maskedContent
+            maskedContent(for: item)
         } else {
             unmaskedContentBody(for: item)
         }
     }
 
-    private var maskedContent: some View {
+    private func maskedContent(for item: ClipboardItem) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
                 Image(systemName: "lock.fill")
@@ -119,7 +119,7 @@ struct StickyNoteView: View {
                 .font(.system(.callout, design: .monospaced))
                 .foregroundStyle(.tertiary)
             Button {
-                isRevealed = true
+                manager.reveal(item) { isRevealed = true }
             } label: {
                 Label("Reveal", systemImage: "eye")
                     .font(.subheadline)

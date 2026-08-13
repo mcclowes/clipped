@@ -30,6 +30,10 @@ struct IntegrationTests {
         pasteboard.stageExternalWrite(types: [.string], strings: [.string: text])
     }
 
+    private var detectedSecret: String {
+        "sk_" + "test_EXAMPLEabcdefghij0123456789"
+    }
+
     // MARK: - End-to-end ingest
 
     @Test("External pasteboard write flows monitor -> ingest -> history -> store")
@@ -86,6 +90,82 @@ struct IntegrationTests {
         #expect(manager.items.count == 1)
         let saved = await store.savedEntries
         #expect(saved.isEmpty)
+    }
+
+    @Test("Mask-only secrets remain in encrypted history")
+    func maskOnlySecretPersists() async {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .maskOnly
+
+        capture(detectedSecret, on: pasteboard)
+        manager.monitor.check()
+        await manager.flushPendingSaves()
+
+        #expect(manager.items.first?.containsSecret == true)
+        #expect(manager.items.first?.isSensitive == false)
+        let saved = await store.savedEntries
+        #expect(saved.count == 1)
+    }
+
+    @Test("Treat-like-passwords secrets stay memory-only and expire")
+    func passwordPolicySecretExpires() async {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .treatLikePasswords
+        manager.secureRemovalDelay = { _ in .zero }
+
+        capture(detectedSecret, on: pasteboard)
+        manager.monitor.check()
+        await manager.flushPendingSaves()
+
+        let saved = await store.savedEntries
+        #expect(saved.isEmpty)
+        await manager.awaitPendingSecureRemovals()
+        #expect(manager.items.isEmpty)
+    }
+
+    @Test("Authentication mode gates copy but leaves paste frictionless")
+    func authenticationModeCopyAndPaste() {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        item.containsSecret = true
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+
+        manager.copyToClipboard(item)
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == nil)
+
+        manager.pasteToActiveApp(item)
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == detectedSecret)
+    }
+
+    @Test("Reveal follows the selected secret policy")
+    func revealPolicy() {
+        let (manager, _, _, settings) = makeRig(persistHistory: false)
+        let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        item.containsSecret = true
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(true)
+        }
+
+        settings.secretHandling = .maskOnly
+        var revealedWithoutAuthentication = false
+        manager.reveal(item) { revealedWithoutAuthentication = true }
+        #expect(revealedWithoutAuthentication == true)
+        #expect(authenticationRequests == 0)
+
+        settings.secretHandling = .requireAuthentication
+        var revealedAfterAuthentication = false
+        manager.reveal(item) { revealedAfterAuthentication = true }
+        #expect(revealedAfterAuthentication == true)
+        #expect(authenticationRequests == 1)
     }
 
     @Test("secureMode + timeout 0 drops password-manager content entirely")

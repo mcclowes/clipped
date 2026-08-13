@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import LocalAuthentication
 import Observation
 import os
 import SwiftUI
@@ -41,6 +42,25 @@ final class ClipboardManager {
 
     var mutationService: any ClipboardMutating = ClipboardMutationService()
     var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
+
+    /// Injectable authentication seam so secret-access behavior can be tested without showing
+    /// a system prompt. The default uses the Mac's configured owner-authentication policy.
+    @ObservationIgnored
+    var authenticateSecretAccess: (
+        _ reason: String,
+        _ completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) -> Void = {
+        reason, completion in
+        let context = LAContext()
+        var authError: NSError?
+        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
+            completion(true)
+            return
+        }
+        context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
+            Task { @MainActor in completion(success) }
+        }
+    }
 
     // MARK: - Transient UI state (not clipboard data)
 
@@ -258,6 +278,7 @@ final class ClipboardManager {
         // Bound the secret scan — a multi-megabyte copy shouldn't run regexes over its full length.
         if let text = item.plainText, SecretDetector.containsSecret(String(text.prefix(100_000))) {
             item.containsSecret = true
+            applySecretRetentionPolicy(to: item)
         }
 
         history.insert(item)
@@ -266,7 +287,9 @@ final class ClipboardManager {
         // for a separate timer, since an idle clipboard has nothing to show anyway.
         history.trimExpiredItems()
 
-        if policy.pendingRemoval {
+        let secretPendingRemoval = item.containsSecret
+            && settingsManager?.secretHandling == .treatLikePasswords
+        if policy.pendingRemoval || secretPendingRemoval {
             scheduleSecureAutoRemoval(itemID: item.id, timeout: policy.secureTimeout)
         }
         if case let .url(url) = item.content {
@@ -278,8 +301,14 @@ final class ClipboardManager {
 
         history.trimToMaxSize()
 
-        if !policy.pendingRemoval {
+        if !policy.pendingRemoval, !secretPendingRemoval {
             history.saveHistory()
+        }
+    }
+
+    private func applySecretRetentionPolicy(to item: ClipboardItem) {
+        if settingsManager?.secretHandling == .treatLikePasswords {
+            item.isSensitive = true
         }
     }
 
@@ -353,6 +382,13 @@ final class ClipboardManager {
                 // masked in the UI and kept out of typeahead search.
                 if SecretDetector.containsSecret(text) {
                     found.containsSecret = true
+                    applySecretRetentionPolicy(to: found)
+                    if settingsManager?.secretHandling == .treatLikePasswords {
+                        scheduleSecureAutoRemoval(
+                            itemID: found.id,
+                            timeout: settingsManager?.secureTimeout ?? SettingsManager.defaultSecureTimeout
+                        )
+                    }
                 }
                 history.saveHistory()
             }
@@ -363,7 +399,18 @@ final class ClipboardManager {
 
     private static let vKeyCode: UInt16 = 0x09
 
-    func copyToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
+    func copyToClipboard(
+        _ item: ClipboardItem,
+        asPlainText: Bool = false,
+        completion: (@MainActor @Sendable () -> Void)? = nil
+    ) {
+        performExplicitSecretAction(for: item, reason: "Copy hidden clipboard content") { [weak self] in
+            self?.writeToClipboard(item, asPlainText: asPlainText)
+            completion?()
+        }
+    }
+
+    private func writeToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
         if !asPlainText, let customTypes = item.customPasteboardTypes {
             replayCustomPasteboardTypes(customTypes, item: item)
             return
@@ -426,9 +473,20 @@ final class ClipboardManager {
         }
     }
 
-    func copyToClipboard(_ item: ClipboardItem, as representation: ClipboardRepresentation) {
+    func copyToClipboard(
+        _ item: ClipboardItem,
+        as representation: ClipboardRepresentation,
+        completion: (@MainActor @Sendable () -> Void)? = nil
+    ) {
+        performExplicitSecretAction(for: item, reason: "Copy hidden clipboard content") { [weak self] in
+            self?.writeToClipboard(item, as: representation)
+            completion?()
+        }
+    }
+
+    private func writeToClipboard(_ item: ClipboardItem, as representation: ClipboardRepresentation) {
         guard case let .richText(rtfData, plain) = item.content else {
-            copyToClipboard(item, asPlainText: true)
+            writeToClipboard(item, asPlainText: true)
             return
         }
 
@@ -550,7 +608,8 @@ final class ClipboardManager {
     /// synthesise Cmd+V there. Without the reactivation the keystroke pastes into Clipped itself.
     func pasteToActiveApp(_ item: ClipboardItem, asPlainText: Bool = false) {
         let target = previousActiveApp
-        copyToClipboard(item, asPlainText: asPlainText)
+        // Pasting remains the frictionless clipboard workflow in every secret-handling mode.
+        writeToClipboard(item, asPlainText: asPlainText)
         Task {
             target?.activate()
             try? await Task.sleep(for: .milliseconds(120))
@@ -585,6 +644,34 @@ final class ClipboardManager {
 
     func copyAsMarkdown(_ item: ClipboardItem) {
         copyToClipboard(item, as: .markdown)
+    }
+
+    func reveal(_ item: ClipboardItem, completion: @escaping @MainActor @Sendable () -> Void) {
+        guard item.isSensitive || requiresAuthenticationForSecretAccess(item) else {
+            completion()
+            return
+        }
+        authenticateSecretAccess("Reveal hidden clipboard content") { success in
+            if success { completion() }
+        }
+    }
+
+    private func performExplicitSecretAction(
+        for item: ClipboardItem,
+        reason: String,
+        action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        guard requiresAuthenticationForSecretAccess(item) else {
+            action()
+            return
+        }
+        authenticateSecretAccess(reason) { success in
+            if success { action() }
+        }
+    }
+
+    private func requiresAuthenticationForSecretAccess(_ item: ClipboardItem) -> Bool {
+        item.containsSecret && settingsManager?.secretHandling == .requireAuthentication
     }
 
     func exportItems(_ items: [ClipboardItem]) {

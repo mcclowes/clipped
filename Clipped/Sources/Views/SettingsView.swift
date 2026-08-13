@@ -131,8 +131,18 @@ private struct GeneralSettingsTab: View {
             Section {
                 Toggle("Secure mode (password manager entries)", isOn: $settings.secureMode)
 
-                if settings.secureMode {
-                    Picker("Password items", selection: $settings.secureTimeout) {
+                Picker("API keys and detected secrets", selection: $settings.secretHandling) {
+                    ForEach(SecretHandling.allCases) { handling in
+                        Text(handling.label).tag(handling)
+                    }
+                }
+
+                Text(settings.secretHandling.detail)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
+                if settings.secureMode || settings.secretHandling == .treatLikePasswords {
+                    Picker("Removal timeout", selection: $settings.secureTimeout) {
                         Text("Remove after 10s").tag(10)
                         Text("Remove after 30s").tag(30)
                         Text("Remove after 60s").tag(60)

@@ -37,6 +37,33 @@ enum HistoryRetention: Int, CaseIterable, Identifiable, Codable {
     }
 }
 
+enum SecretHandling: String, CaseIterable, Identifiable, Codable {
+    case maskOnly
+    case treatLikePasswords
+    case requireAuthentication
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .maskOnly: "Mask only"
+        case .treatLikePasswords: "Treat like passwords"
+        case .requireAuthentication: "Require authentication"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .maskOnly:
+            "Keep secrets in encrypted history. Reveal, copy, and paste normally."
+        case .treatLikePasswords:
+            "Keep secrets in memory for the password timeout, then remove them. Never save them to disk."
+        case .requireAuthentication:
+            "Keep secrets in encrypted history. Authenticate to reveal or copy them; paste normally."
+        }
+    }
+}
+
 @MainActor
 protocol SettingsManaging: AnyObject {
     var persistAcrossReboots: Bool { get }
@@ -44,6 +71,7 @@ protocol SettingsManaging: AnyObject {
     var historyRetention: HistoryRetention { get set }
     var secureMode: Bool { get }
     var secureTimeout: Int { get }
+    var secretHandling: SecretHandling { get }
     var playSoundOnCopy: Bool { get }
     var captureScreenshots: Bool { get }
     var fetchLinkPreviews: Bool { get set }
@@ -83,6 +111,10 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     /// Timeout in seconds for secure items.
     var secureTimeout: Int {
         didSet { UserDefaults.standard.set(secureTimeout, forKey: "secureTimeout") }
+    }
+
+    var secretHandling: SecretHandling {
+        didSet { UserDefaults.standard.set(secretHandling.rawValue, forKey: "secretHandling") }
     }
 
     var playSoundOnCopy: Bool {
@@ -212,6 +244,8 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             : UserDefaults.standard.bool(forKey: "secureMode")
         let storedSecureTimeout = UserDefaults.standard.integer(forKey: "secureTimeout")
         secureTimeout = storedSecureTimeout > 0 ? storedSecureTimeout : Self.defaultSecureTimeout
+        secretHandling = UserDefaults.standard.string(forKey: "secretHandling")
+            .flatMap(SecretHandling.init(rawValue:)) ?? .maskOnly
         playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
             ? true
             : UserDefaults.standard.bool(forKey: "playSoundOnCopy")

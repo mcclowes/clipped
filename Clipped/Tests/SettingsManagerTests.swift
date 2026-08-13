@@ -21,6 +21,12 @@ struct SettingsManagerTests {
         #expect(settings.secureTimeout == 120)
     }
 
+    @Test("Masks detected secrets without adding restrictions by default")
+    func defaultSecretHandling() {
+        let settings = SettingsManager()
+        #expect(settings.secretHandling == .maskOnly)
+    }
+
     @Test("Defaults hide-from-screen-sharing to true")
     func defaultHideFromScreenSharing() {
         let settings = SettingsManager()

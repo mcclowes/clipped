@@ -1,4 +1,3 @@
-import LocalAuthentication
 import SwiftUI
 
 struct ClipboardItemRow: View {
@@ -6,7 +5,7 @@ struct ClipboardItemRow: View {
     @Environment(\.openWindow) private var openWindow
     let item: ClipboardItem
     var isSelected: Bool = false
-    var onCopy: (() -> Void)?
+    var onCopy: (@MainActor @Sendable () -> Void)?
 
     @State private var isHovered = false
     @State private var isRevealed = false
@@ -43,8 +42,7 @@ struct ClipboardItemRow: View {
             if NSEvent.modifierFlags.contains(.option) {
                 pasteDirectly()
             } else {
-                manager.copyToClipboard(item)
-                onCopy?()
+                manager.copyToClipboard(item, completion: onCopy)
             }
         }
         .contextMenu {
@@ -55,8 +53,7 @@ struct ClipboardItemRow: View {
         // separate accessible element.
         .accessibilityAddTraits(.isButton)
         .accessibilityAction {
-            manager.copyToClipboard(item)
-            onCopy?()
+            manager.copyToClipboard(item, completion: onCopy)
         }
     }
 
@@ -133,8 +130,9 @@ struct ClipboardItemRow: View {
 
         if item.plainText != nil, Self.is1PasswordInstalled {
             Button("Save to 1Password") {
-                manager.copyToClipboard(item, asPlainText: true)
-                Self.open1Password()
+                manager.copyToClipboard(item, asPlainText: true) {
+                    Self.open1Password()
+                }
             }
         }
 
@@ -217,22 +215,8 @@ struct ClipboardItemRow: View {
         (item.isSensitive || item.containsSecret) && !isRevealed
     }
 
-    /// Require device authentication before unmasking a sensitive item. Falls back to revealing
-    /// only when no authentication is configured (otherwise the mask would be un-dismissable).
-    private func authenticateAndReveal() {
-        let context = LAContext()
-        var authError: NSError?
-        guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
-            isRevealed = true
-            return
-        }
-        context.evaluatePolicy(
-            .deviceOwnerAuthentication,
-            localizedReason: "Reveal hidden clipboard content"
-        ) { success, _ in
-            guard success else { return }
-            Task { @MainActor in isRevealed = true }
-        }
+    private func reveal() {
+        manager.reveal(item) { isRevealed = true }
     }
 
     @ViewBuilder
@@ -244,7 +228,7 @@ struct ClipboardItemRow: View {
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Hidden sensitive content")
                 Button {
-                    authenticateAndReveal()
+                    reveal()
                 } label: {
                     Label("Reveal", systemImage: "eye")
                         .labelStyle(.iconOnly)
