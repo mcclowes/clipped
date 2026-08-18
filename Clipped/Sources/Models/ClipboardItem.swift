@@ -107,7 +107,7 @@ enum SourceAppCategory: String, CaseIterable, Identifiable, Codable {
         case .communication: "Slack, Messages, Mail, Teams, Discord, Telegram\u{2026}"
         case .browser: "Safari, Chrome, Firefox, Edge, Arc\u{2026}"
         case .codeEditor: "Xcode, VS Code, Cursor, Sublime, JetBrains, Zed\u{2026}"
-        case .terminal: "Terminal, iTerm2, Alacritty, kitty, WezTerm\u{2026}"
+        case .terminal: "Terminal, iTerm2, Ghostty, Saggar, Alacritty, kitty\u{2026}"
         }
     }
 
@@ -168,6 +168,8 @@ enum SourceAppCategory: String, CaseIterable, Identifiable, Codable {
                 "com.github.wez.wezterm",
                 "net.kovidgoyal.kitty",
                 "dev.warp.Warp-Stable",
+                "com.mitchellh.ghostty",
+                "com.mcclowes.saggar",
             ]
         }
     }

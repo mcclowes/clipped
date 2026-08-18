@@ -384,25 +384,40 @@ final class UnwrapSoftLineBreaksMutation: ClipboardMutation {
     let name = "Unwrapped copied text"
 
     func mutate(_ item: ClipboardItem) -> ClipboardItem {
-        guard case let .text(string) = item.content,
-              string.contains("\n"),
-              !item.isDeveloperContent
-        else { return item }
+        guard case let .text(string) = item.content, string.contains("\n") else { return item }
+
+        // Terminals flag everything as developer content, so that signal is useless there;
+        // rely on the transcript normaliser and code heuristics instead.
+        let isTerminal = item.sourceAppBundleID.flatMap(SourceAppCategory.category(for:)) == .terminal
+        guard isTerminal || !item.isDeveloperContent else { return item }
 
         let normalized = string.replacingOccurrences(of: "\r\n", with: "\n")
-        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
-        guard !looksLikeCode(lines) else { return item }
+        let rawLines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
 
-        var result = lines[0]
+        let lines: [TerminalTranscriptNormalizer.Line]
+        if isTerminal {
+            let transcript = TerminalTranscriptNormalizer.normalize(rawLines)
+            guard transcript.isTranscript || !looksLikeCode(transcript.lines.map(\.text)) else { return item }
+            lines = transcript.lines
+        } else {
+            guard !looksLikeCode(rawLines) else { return item }
+            lines = rawLines.map { TerminalTranscriptNormalizer.Line(text: $0) }
+        }
+
+        var result = lines[0].text
         for index in lines.indices.dropFirst() {
             let previous = lines[index - 1]
             let current = lines[index]
-            if shouldPreserveBreak(from: previous, to: current) {
+            let joins = current.continuesPrevious && !previous.text.isEmpty
+            if !joins,
+               current.isVerbatim || previous.isVerbatim
+               || shouldPreserveBreak(from: previous.text, to: current.text)
+            {
                 result.append("\n")
-            } else if !result.hasSuffix(" "), !current.hasPrefix(" ") {
+            } else if !result.hasSuffix(" "), !current.text.hasPrefix(" ") {
                 result.append(" ")
             }
-            result.append(current)
+            result.append(current.text)
         }
 
         guard result != string else { return item }
