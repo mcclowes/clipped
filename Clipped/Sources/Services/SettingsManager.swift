@@ -42,7 +42,9 @@ enum SecretHandling: String, CaseIterable, Identifiable, Codable {
     case treatLikePasswords
     case requireAuthentication
 
-    var id: String { rawValue }
+    var id: String {
+        rawValue
+    }
 
     var label: String {
         switch self {
