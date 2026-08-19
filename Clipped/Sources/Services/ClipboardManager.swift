@@ -45,12 +45,13 @@ final class ClipboardManager {
 
     /// Injectable authentication seam so secret-access behavior can be tested without showing
     /// a system prompt. The default uses the Mac's configured owner-authentication policy.
-    @ObservationIgnored
-    var authenticateSecretAccess: (
+    typealias SecretAccessAuthenticator = (
         _ reason: String,
         _ completion: @escaping @MainActor @Sendable (Bool) -> Void
-    ) -> Void = {
-        reason, completion in
+    ) -> Void
+
+    @ObservationIgnored
+    var authenticateSecretAccess: SecretAccessAuthenticator = { reason, completion in
         let context = LAContext()
         var authError: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
@@ -652,7 +653,9 @@ final class ClipboardManager {
             return
         }
         authenticateSecretAccess("Reveal hidden clipboard content") { success in
-            if success { completion() }
+            if success {
+                completion()
+            }
         }
     }
 
@@ -666,7 +669,9 @@ final class ClipboardManager {
             return
         }
         authenticateSecretAccess(reason) { success in
-            if success { action() }
+            if success {
+                action()
+            }
         }
     }
 

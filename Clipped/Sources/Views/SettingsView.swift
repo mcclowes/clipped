@@ -7,7 +7,9 @@ enum SettingsTab: String, CaseIterable, Identifiable {
     case transformations = "Transformations"
     case appRules = "App rules"
 
-    var id: Self { self }
+    var id: Self {
+        self
+    }
 
     var systemImage: String {
         switch self {
@@ -42,7 +44,6 @@ struct SettingsView: View {
         )
     }
 
-    @ViewBuilder
     private func tabContent(for tab: SettingsTab) -> some View {
         Group {
             switch tab {
