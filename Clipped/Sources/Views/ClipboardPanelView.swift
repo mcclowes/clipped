@@ -5,6 +5,9 @@ struct ClipboardPanelView: View {
     /// The full history is reachable via the "See more" button which opens `HistoryWindowView`.
     static let quickAccessLimit = 50
 
+    /// Sentinel row used to reset the cached scroll position when the panel opens.
+    private static let topAnchorID = "clipped.panel.top"
+
     @Environment(ClipboardManager.self) private var manager
     @Environment(SettingsManager.self) private var settings
 
@@ -55,6 +58,7 @@ struct ClipboardPanelView: View {
         .onReceive(NotificationCenter.default.publisher(for: .clippedPanelWillShow)) { _ in
             // Evict expired items whenever the panel opens, so an idle session doesn't show stale rows.
             manager.trimExpiredItems()
+            selectedItemID = nil
             if manager.openedViaHotkey {
                 manager.openedViaHotkey = false
                 manager.openedWithOption = false
@@ -185,6 +189,10 @@ struct ClipboardPanelView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
+                            Color.clear
+                                .frame(height: 0)
+                                .id(Self.topAnchorID)
+
                             if !pinnedItems.isEmpty {
                                 Section {
                                     ForEach(pinnedItems) { item in
@@ -228,7 +236,7 @@ struct ClipboardPanelView: View {
                         scrollToSelected(proxy: proxy, id: newID)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
-                        scrollToSelected(proxy: proxy, id: selectedItemID)
+                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
                     }
                 }
             }
