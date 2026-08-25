@@ -1,0 +1,3 @@
+# Commands
+
+- build: `make build`
