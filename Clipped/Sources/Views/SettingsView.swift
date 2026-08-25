@@ -66,6 +66,8 @@ private struct GeneralSettingsTab: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(ScreenshotWatcher.self) private var screenshotWatcher
     @Environment(ClipboardManager.self) private var clipboardManager
+    @State private var panelHotkeyError: String?
+    @State private var historyWindowHotkeyError: String?
 
     var body: some View {
         @Bindable var settings = settings
@@ -213,53 +215,31 @@ private struct GeneralSettingsTab: View {
             }
 
             Section("Keyboard shortcuts") {
-                HStack {
-                    Text("Open clipboard panel")
-                    Spacer()
-                    KeyRecorderView(
-                        keyCode: $settings.hotkeyKeyCode,
-                        modifiers: $settings.hotkeyModifiers,
-                        onChanged: {
-                            HotkeyManager.shared.reregister(
-                                id: .panel,
-                                keyCode: settings.hotkeyKeyCode,
-                                modifiers: settings.hotkeyModifiers
-                            )
-                        }
-                    )
+                hotkeyRow(
+                    title: "Open clipboard panel",
+                    keyCode: $settings.hotkeyKeyCode,
+                    modifiers: $settings.hotkeyModifiers,
+                    error: panelHotkeyError
+                ) {
+                    updatePanelHotkey()
                 }
 
-                HStack {
-                    Text("Open full history window")
-                    Spacer()
-                    KeyRecorderView(
-                        keyCode: $settings.historyWindowHotkeyKeyCode,
-                        modifiers: $settings.historyWindowHotkeyModifiers,
-                        onChanged: {
-                            HotkeyManager.shared.reregister(
-                                id: .historyWindow,
-                                keyCode: settings.historyWindowHotkeyKeyCode,
-                                modifiers: settings.historyWindowHotkeyModifiers
-                            )
-                        }
-                    )
+                hotkeyRow(
+                    title: "Open full history window",
+                    keyCode: $settings.historyWindowHotkeyKeyCode,
+                    modifiers: $settings.historyWindowHotkeyModifiers,
+                    error: historyWindowHotkeyError
+                ) {
+                    updateHistoryWindowHotkey()
                 }
 
                 Button("Reset to defaults (\u{2325}C, \u{2325}\u{21E7}C)") {
                     settings.hotkeyKeyCode = 8
                     settings.hotkeyModifiers = UInt32(optionKey)
-                    HotkeyManager.shared.reregister(
-                        id: .panel,
-                        keyCode: 8,
-                        modifiers: UInt32(optionKey)
-                    )
+                    updatePanelHotkey()
                     settings.historyWindowHotkeyKeyCode = 8
                     settings.historyWindowHotkeyModifiers = UInt32(optionKey | shiftKey)
-                    HotkeyManager.shared.reregister(
-                        id: .historyWindow,
-                        keyCode: 8,
-                        modifiers: UInt32(optionKey | shiftKey)
-                    )
+                    updateHistoryWindowHotkey()
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -278,6 +258,49 @@ private struct GeneralSettingsTab: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func hotkeyRow(
+        title: String,
+        keyCode: Binding<UInt32>,
+        modifiers: Binding<UInt32>,
+        error: String?,
+        onChanged: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Text(title)
+                Spacer()
+                KeyRecorderView(
+                    keyCode: keyCode,
+                    modifiers: modifiers,
+                    onChanged: onChanged
+                )
+            }
+            if let error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func updatePanelHotkey() {
+        let succeeded = HotkeyManager.shared.reregister(
+            id: .panel,
+            keyCode: settings.hotkeyKeyCode,
+            modifiers: settings.hotkeyModifiers
+        )
+        panelHotkeyError = succeeded ? nil : HotkeyManager.shared.lastRegistrationError
+    }
+
+    private func updateHistoryWindowHotkey() {
+        let succeeded = HotkeyManager.shared.reregister(
+            id: .historyWindow,
+            keyCode: settings.historyWindowHotkeyKeyCode,
+            modifiers: settings.historyWindowHotkeyModifiers
+        )
+        historyWindowHotkeyError = succeeded ? nil : HotkeyManager.shared.lastRegistrationError
     }
 
     private static var appVersion: String {

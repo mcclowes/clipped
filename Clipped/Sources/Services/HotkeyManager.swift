@@ -20,16 +20,48 @@ final class HotkeyManager {
         var hotkeyRef: EventHotKeyRef?
         var keyCode: UInt32
         var modifiers: UInt32
-        var callback: @MainActor @Sendable () -> Void
+    }
+
+    @MainActor
+    struct RegistrationSystem {
+        var register: (UInt32, UInt32, EventHotKeyID) -> (OSStatus, EventHotKeyRef?)
+        var unregister: (EventHotKeyRef) -> OSStatus
+
+        static let live = RegistrationSystem(
+            register: { keyCode, modifiers, hotkeyID in
+                var hotkeyRef: EventHotKeyRef?
+                let status = RegisterEventHotKey(
+                    keyCode,
+                    modifiers,
+                    hotkeyID,
+                    GetApplicationEventTarget(),
+                    0,
+                    &hotkeyRef
+                )
+                return (status, hotkeyRef)
+            },
+            unregister: UnregisterEventHotKey
+        )
     }
 
     private var eventHandler: EventHandlerRef?
     private var registrations: [HotkeyID: Registration] = [:]
+    private var callbacks: [HotkeyID: @MainActor @Sendable () -> Void] = [:]
+    private let registrationSystem: RegistrationSystem
+    private let installsEventHandler: Bool
 
     /// The most recent registration error, if any, so the settings UI can surface it.
     private(set) var lastRegistrationError: String?
 
-    private init() {}
+    private init() {
+        registrationSystem = .live
+        installsEventHandler = true
+    }
+
+    init(registrationSystem: RegistrationSystem) {
+        self.registrationSystem = registrationSystem
+        installsEventHandler = false
+    }
 
     // MARK: - Introspection
 
@@ -59,60 +91,60 @@ final class HotkeyManager {
 
         installEventHandlerIfNeeded()
 
-        // Drop any prior registration for this slot before claiming it again.
-        if let existingRef = registrations[id]?.hotkeyRef {
-            UnregisterEventHotKey(existingRef)
-            registrations[id] = nil
-        }
-
         let hotkeyID = EventHotKeyID(signature: 0x434C_4950, id: id.rawValue) // "CLIP"
-        var hotkeyRef: EventHotKeyRef?
-
-        let registerStatus = RegisterEventHotKey(
-            keyCode,
-            modifiers,
-            hotkeyID,
-            GetApplicationEventTarget(),
-            0,
-            &hotkeyRef
-        )
+        let (registerStatus, hotkeyRef) = registrationSystem.register(keyCode, modifiers, hotkeyID)
 
         guard registerStatus == noErr, let hotkeyRef else {
             // eventHotKeyExistsErr = -9878; other conflicts are also mapped as OSStatus.
-            let message = "Shortcut is unavailable (already in use or invalid). OSStatus \(registerStatus)."
+            let message = "Shortcut is unavailable or already in use. Choose a different shortcut. " +
+                "OSStatus \(registerStatus)."
             Self.logger.error("\(message)")
             lastRegistrationError = message
+            if callbacks[id] == nil {
+                callbacks[id] = callback
+            }
             return false
+        }
+
+        if let existingRef = registrations[id]?.hotkeyRef {
+            _ = registrationSystem.unregister(existingRef)
         }
 
         registrations[id] = Registration(
             hotkeyRef: hotkeyRef,
             keyCode: keyCode,
-            modifiers: modifiers,
-            callback: callback
+            modifiers: modifiers
         )
+        callbacks[id] = callback
         lastRegistrationError = nil
         return true
     }
 
-    func reregister(id: HotkeyID, keyCode: UInt32, modifiers: UInt32) {
-        guard let existing = registrations[id] else { return }
-        register(id: id, keyCode: keyCode, modifiers: modifiers, callback: existing.callback)
+    @discardableResult
+    func reregister(id: HotkeyID, keyCode: UInt32, modifiers: UInt32) -> Bool {
+        guard let callback = callbacks[id] else { return false }
+        if registrations[id]?.keyCode == keyCode, registrations[id]?.modifiers == modifiers {
+            lastRegistrationError = nil
+            return true
+        }
+        return register(id: id, keyCode: keyCode, modifiers: modifiers, callback: callback)
     }
 
     func unregister(id: HotkeyID) {
         if let hotkeyRef = registrations[id]?.hotkeyRef {
-            UnregisterEventHotKey(hotkeyRef)
+            _ = registrationSystem.unregister(hotkeyRef)
         }
         registrations[id] = nil
+        callbacks[id] = nil
     }
 
     private func fire(rawID: UInt32) {
         guard let id = HotkeyID(rawValue: rawID) else { return }
-        registrations[id]?.callback()
+        callbacks[id]?()
     }
 
     private func installEventHandlerIfNeeded() {
+        guard installsEventHandler else { return }
         guard eventHandler == nil else { return }
 
         var eventType = EventTypeSpec(
