@@ -15,6 +15,7 @@ struct ClipboardPanelView: View {
     let onOpenSettings: () -> Void
     let onOpenHistoryWindow: () -> Void
     let onClosePanel: () -> Void
+    let onCaptureScreenshot: (ScreenshotCaptureMode) -> Void
 
     @State private var showClearConfirmation = false
     @State private var clearedSnapshot: ClipboardManager.ClearedSnapshot?
@@ -92,6 +93,12 @@ struct ClipboardPanelView: View {
             Divider()
 
             VStack(spacing: 2) {
+                quickMenuButton(
+                    title: "Capture Screenshot",
+                    icon: "camera.viewfinder",
+                    action: { captureScreenshot(.selection) }
+                )
+
                 quickMenuButton(
                     title: manager.isMonitoring ? "Pause monitoring" : "Resume monitoring",
                     icon: manager.isMonitoring ? "pause.circle" : "play.circle",
@@ -386,6 +393,17 @@ struct ClipboardPanelView: View {
 
             Spacer()
 
+            Menu {
+                screenshotCaptureButtons
+            } label: {
+                Label("Capture screenshot", systemImage: "camera.viewfinder")
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Capture a screenshot directly to the clipboard")
+
             Button(action: openHistoryWindow) {
                 Label("Full history", systemImage: "clock.arrow.circlepath")
                     .labelStyle(.iconOnly)
@@ -537,6 +555,19 @@ struct ClipboardPanelView: View {
 
     private func dismissPanel() {
         onClosePanel()
+    }
+
+    private var screenshotCaptureButtons: some View {
+        ForEach(ScreenshotCaptureMode.allCases) { mode in
+            Button(mode.label, systemImage: mode.systemImage) {
+                captureScreenshot(mode)
+            }
+        }
+    }
+
+    private func captureScreenshot(_ mode: ScreenshotCaptureMode) {
+        onClosePanel()
+        onCaptureScreenshot(mode)
     }
 
     private func openSettings() {

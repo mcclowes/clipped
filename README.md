@@ -36,7 +36,7 @@ Requires **macOS 15.0 (Sequoia)** or later.
 - **Paste as plain text** — Strip formatting and paste matching the destination style
 - **Markdown conversion** — Convert rich text items to Markdown with one click
 - **Link previews** — Automatically fetches page titles for URLs
-- **Screenshot capture** — Detects new screenshots and adds them to your history
+- **Screenshot capture** — Capture selections, windows, or screens directly to the clipboard, or detect screenshots saved by macOS
 - **Sticky notes** — Pin any item as a floating note on your desktop
 - **Export** — Merge and copy multiple items at once
 - **Persistence** — Optionally keep your history across app restarts
