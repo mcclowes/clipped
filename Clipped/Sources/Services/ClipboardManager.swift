@@ -716,6 +716,26 @@ final class ClipboardManager {
         try? FileExporter.data(for: item, format: format)
     }
 
+    /// Materialize an image as a temporary PNG and open it explicitly in Preview.
+    func openImageInPreview(_ item: ClipboardItem) {
+        guard let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") else {
+            NSSound.beep()
+            return
+        }
+
+        do {
+            let image = try FileExporter.temporaryPreviewURL(for: item)
+            NSWorkspace.shared.open(
+                [image],
+                withApplicationAt: preview,
+                configuration: NSWorkspace.OpenConfiguration()
+            )
+        } catch {
+            Self.logger.error("Opening image in Preview failed: \(error.localizedDescription, privacy: .public)")
+            NSSound.beep()
+        }
+    }
+
     private func applyImageTransform(
         _ item: ClipboardItem,
         mutation: String,

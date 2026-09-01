@@ -99,6 +99,10 @@ struct ClipboardItemRow: View {
         }
 
         if case .image = item.content {
+            Button("Open in Preview") {
+                manager.openImageInPreview(item)
+            }
+
             if let text = item.extractedText {
                 Button("Copy extracted text") {
                     manager.copyText(text)

@@ -112,6 +112,22 @@ enum FileExporter {
         }
     }
 
+    /// Writes an image to a stable temporary PNG so another app can open it.
+    /// Reusing the item ID avoids leaving a new file behind on every invocation.
+    static func temporaryPreviewURL(
+        for item: ClipboardItem,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let directory = fileManager.temporaryDirectory
+            .appending(path: "Clipped", directoryHint: .isDirectory)
+            .appending(path: "Previews", directoryHint: .isDirectory)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let url = directory.appending(path: "\(item.id.uuidString).png", directoryHint: .notDirectory)
+        try data(for: item, format: .png).write(to: url, options: .atomic)
+        return url
+    }
+
     // MARK: - Derivation
 
     private static func plainText(of item: ClipboardItem) throws -> String {

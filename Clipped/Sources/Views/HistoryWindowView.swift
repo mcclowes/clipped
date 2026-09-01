@@ -198,6 +198,10 @@ struct HistoryWindowView: View {
             Button("Open URL") { NSWorkspace.shared.open(url) }
         }
 
+        if case .image = item.content {
+            Button("Open in Preview") { manager.openImageInPreview(item) }
+        }
+
         Button("Open as sticky note") { openWindow(value: item.id) }
 
         if summarizationAvailable, Summarizer.canSummarize(item) {

@@ -81,4 +81,15 @@ struct FileExporterTests {
         let item = ClipboardItem(content: .text("   "), contentType: .plainText)
         #expect(FileExporter.suggestedBaseName(for: item) == "clipping")
     }
+
+    @Test("Image previews are materialized as temporary PNG files")
+    func temporaryPreview() throws {
+        let item = Self.pngItem()
+        let url = try FileExporter.temporaryPreviewURL(for: item)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        #expect(url.lastPathComponent == "\(item.id.uuidString).png")
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(ImageProcessor.format(of: try Data(contentsOf: url)) == .png)
+    }
 }
