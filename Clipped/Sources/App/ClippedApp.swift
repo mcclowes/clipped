@@ -57,6 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             onClosePanel: { [weak statusBar] in
                 statusBar?.close()
+            },
+            onCaptureScreenshot: { mode in
+                Task { @MainActor in
+                    // Let the popover finish closing before macOS freezes the screen image.
+                    try? await Task.sleep(for: .milliseconds(150))
+                    do {
+                        try await ScreenshotCapturer.capture(mode)
+                    } catch {
+                        NSSound.beep()
+                    }
+                }
             }
         )
         .environment(clipboardManager)
