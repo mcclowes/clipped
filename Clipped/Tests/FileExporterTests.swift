@@ -90,6 +90,6 @@ struct FileExporterTests {
 
         #expect(url.lastPathComponent == "\(item.id.uuidString).png")
         #expect(FileManager.default.fileExists(atPath: url.path))
-        #expect(ImageProcessor.format(of: try Data(contentsOf: url)) == .png)
+        #expect(try ImageProcessor.format(of: Data(contentsOf: url)) == .png)
     }
 }

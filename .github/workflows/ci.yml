@@ -12,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Remove untrusted runner tap
+        run: brew untap aws/tap || true
+
       - name: Install tools
         run: brew install swiftformat swiftlint
 
@@ -22,6 +25,9 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v6
+
+      - name: Remove untrusted runner tap
+        run: brew untap aws/tap || true
 
       - name: Install XcodeGen
         run: brew install xcodegen
