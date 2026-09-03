@@ -227,8 +227,8 @@ struct PasteboardIngestionTests {
         #expect(mock.data(forType: ClipboardRepresentation.html.pasteboardType) == html)
     }
 
-    @Test("Copy as publishes only the selected representation")
-    func copyAsPublishesSelectedRepresentation() throws {
+    @Test("Copy as publishes the selected rich representation with a plain-text fallback")
+    func copyAsPublishesSelectedRepresentationWithFallback() throws {
         let mock = MockPasteboard()
         let manager = ClipboardManager(pasteboard: mock)
         manager.stopMonitoring()
@@ -245,8 +245,15 @@ struct PasteboardIngestionTests {
 
         manager.copyToClipboard(item, as: .html)
 
-        #expect(mock.types == [ClipboardRepresentation.html.pasteboardType])
+        #expect(mock.types == [ClipboardRepresentation.html.pasteboardType, .string])
         #expect(mock.data(forType: ClipboardRepresentation.html.pasteboardType) == html)
+        #expect(mock.string(forType: .string) == "Formatted")
+
+        manager.copyToClipboard(item, as: .richText)
+
+        #expect(mock.types == [.rtf, .string])
+        #expect(mock.data(forType: .rtf) == rtf)
+        #expect(mock.string(forType: .string) == "Formatted")
 
         manager.copyToClipboard(item, as: .plainText)
 

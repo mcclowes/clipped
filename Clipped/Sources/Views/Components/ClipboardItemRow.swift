@@ -63,21 +63,21 @@ struct ClipboardItemRow: View {
     @ViewBuilder
     private var actionMenuContent: some View {
         Button("Copy") {
-            manager.copyToClipboard(item)
+            manager.copyToClipboard(item, completion: onCopy)
         }
 
         if item.availableRepresentations.count > 1 {
             Menu("Copy as…") {
                 ForEach(item.availableRepresentations) { representation in
                     Button(representation.title) {
-                        manager.copyToClipboard(item, as: representation)
+                        manager.copyToClipboard(item, as: representation, completion: onCopy)
                     }
                 }
             }
         }
 
         Button("Paste and match style") {
-            manager.pasteMatchingStyle(item)
+            pasteDirectly(asPlainText: true)
         }
 
         Button("Paste directly") {
@@ -162,9 +162,9 @@ struct ClipboardItemRow: View {
 
     /// Dismiss the panel so focus can return to the previously-active app, then copy and
     /// paste into it. The manager reactivates that app before synthesising Cmd+V.
-    private func pasteDirectly() {
+    private func pasteDirectly(asPlainText: Bool = false) {
         onCopy?()
-        manager.pasteToActiveApp(item)
+        manager.pasteToActiveApp(item, asPlainText: asPlainText)
     }
 
     /// Present the native macOS save panel for a chosen export format, then write the

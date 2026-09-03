@@ -507,8 +507,10 @@ final class ClipboardManager {
                 if let htmlData = item.htmlData {
                     pasteboard.setData(htmlData, forType: representation.pasteboardType)
                 }
+                pasteboard.setString(plain, forType: .string)
             case .richText:
                 pasteboard.setData(rtfData, forType: representation.pasteboardType)
+                pasteboard.setString(plain, forType: .string)
             case .plainText, .markdown:
                 if let string {
                     pasteboard.setString(string, forType: representation.pasteboardType)
