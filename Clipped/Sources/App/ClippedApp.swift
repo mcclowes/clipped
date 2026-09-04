@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         clipboardManager.settingsManager = settingsManager
+        // Repoint an enabled login item at this bundle in case the recorded path is stale.
+        settingsManager.repairLoginItemRegistration()
         if let mutationService = clipboardManager.mutationService as? ClipboardMutationService {
             mutationService.rulesProvider = settingsManager
         }

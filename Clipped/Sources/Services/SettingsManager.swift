@@ -191,14 +191,20 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     /// The most recent error surfaced from SMAppService so settings UI can display it.
     private(set) var launchAtLoginError: String?
 
+    private let loginItem: any LoginItemManaging
+
+    /// Debug builds live in DerivedData and vanish on the next clean, so they must never take
+    /// silent ownership of the login item. An explicit toggle is still honoured.
+    private let repairsLoginItem: Bool
+
     var launchAtLogin: Bool {
         didSet {
             guard !isRevertingLaunchAtLogin else { return }
             do {
                 if launchAtLogin {
-                    try SMAppService.mainApp.register()
+                    try loginItem.register()
                 } else {
-                    try SMAppService.mainApp.unregister()
+                    try loginItem.unregister()
                 }
                 launchAtLoginError = nil
             } catch {
@@ -208,6 +214,22 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
                 launchAtLogin = oldValue
                 isRevertingLaunchAtLogin = false
             }
+        }
+    }
+
+    /// `SMAppService` records the bundle path at registration time and never revisits it. When the
+    /// app moves, is replaced by an update, or was registered from a build that has since been
+    /// deleted, the login item stays `.enabled` while pointing at a bundle macOS can no longer
+    /// launch — the toggle reads "on" and nothing starts at login. Re-registering is idempotent and
+    /// repoints the record at the running bundle, so call this once per launch.
+    func repairLoginItemRegistration() {
+        guard repairsLoginItem, launchAtLogin else { return }
+        do {
+            try loginItem.register()
+            launchAtLoginError = nil
+        } catch {
+            Self.logger.error("Failed to repair launch-at-login: \(error.localizedDescription)")
+            launchAtLoginError = error.localizedDescription
         }
     }
 
@@ -234,7 +256,12 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
         mutationAppOverrides[key] = enabled
     }
 
-    init() {
+    init(
+        loginItem: any LoginItemManaging = MainAppLoginItem(),
+        repairsLoginItem: Bool = SettingsManager.repairsLoginItemByDefault
+    ) {
+        self.loginItem = loginItem
+        self.repairsLoginItem = repairsLoginItem
         persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
         let storedSize = UserDefaults.standard.integer(forKey: "maxHistorySize")
         maxHistorySize = storedSize > 0 ? storedSize : ClipboardHistory.defaultMaxHistorySize
@@ -295,6 +322,16 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             ? UInt32(storedHistoryModifiers)
             : UInt32(optionKey | shiftKey) // Default: Option+Shift
 
-        launchAtLogin = SMAppService.mainApp.status == .enabled
+        let loginItemStatus = loginItem.status
+        launchAtLogin = loginItemStatus == .enabled
+        if loginItemStatus == .requiresApproval {
+            launchAtLoginError = "Clipped is turned off in System Settings → General → Login Items."
+        }
     }
+
+    #if DEBUG
+        private static let repairsLoginItemByDefault = false
+    #else
+        private static let repairsLoginItemByDefault = true
+    #endif
 }

@@ -3,6 +3,7 @@ import Carbon
 @testable import Clipped
 import Foundation
 import ImageIO
+import ServiceManagement
 import UniformTypeIdentifiers
 
 /// Encodes a solid-colour test image of the given pixel size to `format`. Centralised
@@ -237,6 +238,41 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     func isOverridden(_ mutationID: MutationID, for bundleID: String) -> Bool? {
         let key = "\(mutationID.rawValue):\(bundleID)"
         return mutationAppOverrides[key]
+    }
+}
+
+@MainActor
+final class MockLoginItem: LoginItemManaging {
+    enum Failure: Error {
+        case denied
+    }
+
+    var status: SMAppService.Status
+    var registerError: Error?
+    var unregisterError: Error?
+    private(set) var registerCount = 0
+    private(set) var unregisterCount = 0
+
+    init(status: SMAppService.Status, registerError: Error? = nil, unregisterError: Error? = nil) {
+        self.status = status
+        self.registerError = registerError
+        self.unregisterError = unregisterError
+    }
+
+    func register() throws {
+        registerCount += 1
+        if let registerError {
+            throw registerError
+        }
+        status = .enabled
+    }
+
+    func unregister() throws {
+        unregisterCount += 1
+        if let unregisterError {
+            throw unregisterError
+        }
+        status = .notRegistered
     }
 }
 

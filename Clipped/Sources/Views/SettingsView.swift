@@ -75,6 +75,11 @@ private struct GeneralSettingsTab: View {
         Form {
             Section("General") {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
+                if let launchAtLoginError = settings.launchAtLoginError {
+                    Text(launchAtLoginError)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("Persist history across reboots", isOn: $settings.persistAcrossReboots)
                 Toggle("Play sound on copy", isOn: $settings.playSoundOnCopy)
                 Picker("History size", selection: $settings.maxHistorySize) {
