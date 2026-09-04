@@ -33,8 +33,10 @@ TAG="v${NEW_VERSION}"
 
 echo "Bumping version: $CURRENT_VERSION -> $NEW_VERSION ($BUMP_TYPE)"
 
-# Update project.yml
-sed -i "s/MARKETING_VERSION: \"${CURRENT_VERSION}\"/MARKETING_VERSION: \"${NEW_VERSION}\"/" "$PROJECT_YML"
+# Update project.yml (BSD and GNU sed disagree on -i, so write via a temp file)
+sed "s/MARKETING_VERSION: \"${CURRENT_VERSION}\"/MARKETING_VERSION: \"${NEW_VERSION}\"/" \
+  "$PROJECT_YML" > "${PROJECT_YML}.tmp"
+mv "${PROJECT_YML}.tmp" "$PROJECT_YML"
 
 # Commit and tag
 git add "$PROJECT_YML"
