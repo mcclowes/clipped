@@ -14,6 +14,58 @@ protocol LinkMetadataFetching: Sendable {
     func fetchMetadata(for url: URL) async -> LinkMetadata
 }
 
+protocol LinkMetadataProviding: Sendable {
+    func hostResolvesToPublicAddress(_ host: String) async -> Bool
+    func fetchMetadata(for url: URL) async throws -> sending LPLinkMetadata
+}
+
+private struct SystemLinkMetadataProvider: LinkMetadataProviding {
+    func fetchMetadata(for url: URL) async throws -> sending LPLinkMetadata {
+        let provider = LPMetadataProvider()
+        provider.timeout = 5
+        provider.shouldFetchSubresources = true
+        return try await provider.startFetchingMetadata(for: url)
+    }
+
+    /// Resolve `host` via DNS and confirm every returned address is publicly routable. Fails
+    /// closed on a resolution error or any private/reserved result, which closes the
+    /// "public name resolves to an internal IP" SSRF hole and defeats octal/hex IPv4 encodings
+    /// that the OS resolver would accept but a lexical filter wouldn't. Runs off the actor so
+    /// the blocking `getaddrinfo` call doesn't stall other fetches.
+    ///
+    /// Note: `LPMetadataProvider` follows HTTP redirects internally and exposes no per-hop hook,
+    /// so a public URL that *redirects* to a private address is not covered here. That residual
+    /// risk is the reason this validation fails closed and previews are an opt-out setting.
+    func hostResolvesToPublicAddress(_ host: String) async -> Bool {
+        // A validated IP literal needs no DNS lookup.
+        if let literal = IPLiteral(host) {
+            return !literal.isPrivateOrReserved
+        }
+        return await Task.detached(priority: .utility) {
+            var hints = addrinfo()
+            hints.ai_family = AF_UNSPEC
+            hints.ai_socktype = SOCK_STREAM
+            var result: UnsafeMutablePointer<addrinfo>?
+            let status = host.withCString { getaddrinfo($0, nil, &hints, &result) }
+            guard status == 0, let head = result else { return false }
+            defer { freeaddrinfo(head) }
+
+            var node: UnsafeMutablePointer<addrinfo>? = head
+            var sawAddress = false
+            while let current = node {
+                if let literal = IPLiteral(sockaddr: current.pointee.ai_addr) {
+                    sawAddress = true
+                    if literal.isPrivateOrReserved {
+                        return false
+                    }
+                }
+                node = current.pointee.ai_next
+            }
+            return sawAddress
+        }.value
+    }
+}
+
 /// Off-main-actor cache + network fetcher. Uses Apple's `LPMetadataProvider` so we don't
 /// hand-roll HTML parsing (and inherit whatever entity handling, charset detection, and
 /// redirects Apple ship for free). The favicon cache is origin-keyed so different URLs
@@ -27,8 +79,11 @@ actor LinkMetadataFetcher: LinkMetadataFetching {
     private var inFlight: [URL: Task<LinkMetadata, Never>] = [:]
 
     private static let maxCacheSize = 200
+    private let provider: any LinkMetadataProviding
 
-    init() {}
+    init(provider: any LinkMetadataProviding = SystemLinkMetadataProvider()) {
+        self.provider = provider
+    }
 
     func fetchMetadata(for url: URL) async -> LinkMetadata {
         let signpost = Signposts.linkMetadata.beginInterval("FetchMetadata")
@@ -89,57 +144,15 @@ actor LinkMetadataFetcher: LinkMetadataFetching {
         return true
     }
 
-    /// Resolve `host` via DNS and confirm every returned address is publicly routable. Fails
-    /// closed on a resolution error or any private/reserved result, which closes the
-    /// "public name resolves to an internal IP" SSRF hole and defeats octal/hex IPv4 encodings
-    /// that the OS resolver would accept but a lexical filter wouldn't. Runs off the actor so
-    /// the blocking `getaddrinfo` call doesn't stall other fetches.
-    ///
-    /// Note: `LPMetadataProvider` follows HTTP redirects internally and exposes no per-hop hook,
-    /// so a public URL that *redirects* to a private address is not covered here. That residual
-    /// risk is the reason this validation fails closed and previews are an opt-out setting.
-    private static func hostResolvesToPublicAddress(_ host: String) async -> Bool {
-        // A validated IP literal needs no DNS lookup.
-        if let literal = IPLiteral(host) {
-            return !literal.isPrivateOrReserved
-        }
-        return await Task.detached(priority: .utility) {
-            var hints = addrinfo()
-            hints.ai_family = AF_UNSPEC
-            hints.ai_socktype = SOCK_STREAM
-            var result: UnsafeMutablePointer<addrinfo>?
-            let status = host.withCString { getaddrinfo($0, nil, &hints, &result) }
-            guard status == 0, let head = result else { return false }
-            defer { freeaddrinfo(head) }
-
-            var node: UnsafeMutablePointer<addrinfo>? = head
-            var sawAddress = false
-            while let current = node {
-                if let literal = IPLiteral(sockaddr: current.pointee.ai_addr) {
-                    sawAddress = true
-                    if literal.isPrivateOrReserved {
-                        return false
-                    }
-                }
-                node = current.pointee.ai_next
-            }
-            return sawAddress
-        }.value
-    }
-
     // MARK: - Network
 
     private func performFetch(for url: URL) async -> LinkMetadata {
-        guard let host = url.host, await Self.hostResolvesToPublicAddress(host) else {
+        guard let host = url.host, await provider.hostResolvesToPublicAddress(host) else {
             Self.logger.debug("Refusing metadata fetch: host resolves to a non-public address")
             return LinkMetadata()
         }
-        let provider = LPMetadataProvider()
-        provider.timeout = 5
-        provider.shouldFetchSubresources = true
-
         do {
-            let lpMetadata = try await provider.startFetchingMetadata(for: url)
+            let lpMetadata = try await provider.fetchMetadata(for: url)
 
             var metadata = LinkMetadata()
             metadata.title = lpMetadata.title.map { String($0.prefix(120)) }

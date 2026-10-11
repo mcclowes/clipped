@@ -4,31 +4,41 @@ import Testing
 
 @MainActor
 struct LinkMetadataFetcherTests {
-    @Test("Parses title from HTML")
+    @Test("Returns the title supplied by Apple's metadata provider")
     func parseTitle() async throws {
-        let fetcher = LinkMetadataFetcher()
+        let provider = MockLinkMetadataProvider(title: "Fixture title")
+        let fetcher = LinkMetadataFetcher(provider: provider)
         let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
-        #expect(metadata.title != nil)
-        #expect(metadata.title?.contains("Example") == true)
+        #expect(metadata.title == "Fixture title")
+        #expect(await provider.requestedURLs.count == 1)
     }
 
     @Test("Returns nil title for non-HTTP URLs")
     func nonHttpUrl() async throws {
-        let fetcher = LinkMetadataFetcher()
+        let provider = MockLinkMetadataProvider()
+        let fetcher = LinkMetadataFetcher(provider: provider)
         let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "ftp://example.com")))
         #expect(metadata.title == nil)
         #expect(metadata.favicon == nil)
+        #expect(await provider.validatedHosts.isEmpty)
+        #expect(await provider.requestedURLs.isEmpty)
     }
 
     @Test("Caches fetched metadata")
     func caching() async throws {
-        let fetcher = LinkMetadataFetcher()
+        let favicon = TestImageFactory.data(width: 16, height: 16)
+        let provider = MockLinkMetadataProvider(favicon: favicon)
+        let fetcher = LinkMetadataFetcher(provider: provider)
         let url = try #require(URL(string: "https://example.com"))
 
         let metadata1 = await fetcher.fetchMetadata(for: url)
         let metadata2 = await fetcher.fetchMetadata(for: url)
 
-        #expect(metadata1.title == metadata2.title)
+        #expect(metadata1.title == "Fixture title")
+        #expect(metadata2.title == "Fixture title")
+        #expect(metadata1.favicon == favicon)
+        #expect(metadata2.favicon == favicon)
+        #expect(await provider.requestedURLs == [url])
     }
 
     @Test(
@@ -57,9 +67,16 @@ struct LinkMetadataFetcherTests {
             "file:///etc/passwd",
         ]
     )
-    func rejectsPrivateHosts(_ raw: String) throws {
+    func rejectsPrivateHosts(_ raw: String) async throws {
         let url = try #require(URL(string: raw))
         #expect(!LinkMetadataFetcher.isFetchableURL(url))
+        let provider = MockLinkMetadataProvider()
+        let fetcher = LinkMetadataFetcher(provider: provider)
+        let metadata = await fetcher.fetchMetadata(for: url)
+        #expect(metadata.title == nil)
+        #expect(metadata.favicon == nil)
+        #expect(await provider.validatedHosts.isEmpty)
+        #expect(await provider.requestedURLs.isEmpty)
     }
 
     @Test(
@@ -87,9 +104,59 @@ struct LinkMetadataFetcherTests {
 
     @Test("Fetches favicon data")
     func fetchesFavicon() async throws {
-        let fetcher = LinkMetadataFetcher()
+        let favicon = TestImageFactory.data(width: 16, height: 16)
+        let provider = MockLinkMetadataProvider(favicon: favicon)
+        let fetcher = LinkMetadataFetcher(provider: provider)
         let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
-        // example.com may or may not have a favicon, so we just verify the struct is populated
-        #expect(metadata.title != nil)
+        #expect(metadata.favicon == favicon)
+    }
+
+    @Test("Refuses metadata when the hostname resolves to a non-public address")
+    func rejectsNonPublicResolution() async throws {
+        let provider = MockLinkMetadataProvider(resolvesPublicly: false)
+        let fetcher = LinkMetadataFetcher(provider: provider)
+        let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
+        #expect(metadata.title == nil)
+        #expect(metadata.favicon == nil)
+        #expect(await provider.validatedHosts == ["example.com"])
+        #expect(await provider.requestedURLs.isEmpty)
+    }
+
+    @Test("Limits titles to 120 characters", arguments: [119, 120, 121])
+    func limitsTitleLength(_ length: Int) async throws {
+        let title = String(repeating: "🧑🏽‍💻", count: length)
+        let provider = MockLinkMetadataProvider(title: title)
+        let fetcher = LinkMetadataFetcher(provider: provider)
+        let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
+        #expect(metadata.title?.count == min(length, 120))
+    }
+
+    @Test("Uses the preview image when no favicon is supplied")
+    func fallsBackToPreviewImage() async throws {
+        let image = TestImageFactory.data(width: 32, height: 32)
+        let provider = MockLinkMetadataProvider(image: image)
+        let fetcher = LinkMetadataFetcher(provider: provider)
+        let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
+        #expect(metadata.favicon == image)
+    }
+
+    @Test("Prefers the favicon over the preview image")
+    func prefersFavicon() async throws {
+        let favicon = TestImageFactory.data(width: 16, height: 16)
+        let image = TestImageFactory.data(width: 32, height: 32)
+        let provider = MockLinkMetadataProvider(favicon: favicon, image: image)
+        let fetcher = LinkMetadataFetcher(provider: provider)
+        let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
+        #expect(metadata.favicon == favicon)
+    }
+
+    @Test("Rejects favicon data at the 500 KB limit", arguments: [499_999, 500_000])
+    func limitsFaviconSize(_ size: Int) async throws {
+        var favicon = TestImageFactory.data(width: 16, height: 16)
+        favicon.append(Data(count: size - favicon.count))
+        let provider = MockLinkMetadataProvider(favicon: favicon)
+        let fetcher = LinkMetadataFetcher(provider: provider)
+        let metadata = try await fetcher.fetchMetadata(for: #require(URL(string: "https://example.com")))
+        #expect(metadata.favicon == (size < 500_000 ? favicon : nil))
     }
 }

@@ -3,8 +3,53 @@ import Carbon
 @testable import Clipped
 import Foundation
 import ImageIO
+import class LinkPresentation.LPLinkMetadata
 import ServiceManagement
 import UniformTypeIdentifiers
+
+actor MockLinkMetadataProvider: LinkMetadataProviding {
+    private(set) var requestedURLs: [URL] = []
+    private(set) var validatedHosts: [String] = []
+    let title: String?
+    let favicon: Data?
+    let image: Data?
+    let resolvesPublicly: Bool
+
+    init(
+        title: String? = "Fixture title",
+        favicon: Data? = nil,
+        image: Data? = nil,
+        resolvesPublicly: Bool = true
+    ) {
+        self.title = title
+        self.favicon = favicon
+        self.image = image
+        self.resolvesPublicly = resolvesPublicly
+    }
+
+    func hostResolvesToPublicAddress(_ host: String) -> Bool {
+        validatedHosts.append(host)
+        return resolvesPublicly
+    }
+
+    func fetchMetadata(for url: URL) -> sending LPLinkMetadata {
+        requestedURLs.append(url)
+        let metadata = LPLinkMetadata()
+        metadata.title = title
+        metadata.iconProvider = favicon.map(Self.imageProvider)
+        metadata.imageProvider = image.map(Self.imageProvider)
+        return metadata
+    }
+
+    private static func imageProvider(_ data: Data) -> NSItemProvider {
+        let provider = NSItemProvider()
+        provider.registerDataRepresentation(forTypeIdentifier: UTType.png.identifier, visibility: .all) { completion in
+            completion(data, nil)
+            return nil
+        }
+        return provider
+    }
+}
 
 /// Encodes a solid-colour test image of the given pixel size to `format`. Centralised
 /// here so the force-unwraps (all on compile-time-safe ImageIO calls) live in one place.
