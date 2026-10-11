@@ -10,6 +10,17 @@ import Testing
 /// these exercise the wiring between collaborators.
 @MainActor
 struct IntegrationTests {
+    @Test("The test host skips normal app startup and clipboard monitoring", .bug(id: 131))
+    func skipsAppStartupInTests() throws {
+        try #require(AppDelegate.isTestHost)
+        let delegate = AppDelegate()
+        delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+
+        #expect(delegate.clipboardManager.settingsManager == nil)
+        #expect(!delegate.clipboardManager.isMonitoring)
+        #expect(!delegate.screenshotWatcher.isWatching)
+    }
+
     // swiftlint:disable large_tuple
     private func makeRig(persistHistory: Bool = true)
         -> (ClipboardManager, MockPasteboard, MockHistoryStore, MockSettingsManager)

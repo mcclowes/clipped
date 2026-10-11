@@ -2,6 +2,11 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static var isTestHost: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+            NSClassFromString("XCTestCase") != nil
+    }
+
     let clipboardManager = ClipboardManager()
     let settingsManager = SettingsManager()
     let screenshotWatcher = ScreenshotWatcher()
@@ -15,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        guard !Self.isTestHost else { return }
+
         clipboardManager.settingsManager = settingsManager
         // Repoint an enabled login item at this bundle in case the recorded path is stale.
         settingsManager.repairLoginItemRegistration()

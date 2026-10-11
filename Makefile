@@ -37,7 +37,7 @@ run: build
 	open "$(BUILD_DIR)/Clipped.app"
 
 test:
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug test
+	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug test $(SIGN_ARGS)
 
 release:
 	@echo "Note: For distributable builds, use the CI release workflow which handles Developer ID signing + notarization."
