@@ -9,9 +9,8 @@ enum KeychainKeyStoreError: Error, Equatable {
 }
 
 /// Loads or provisions the symmetric key that `HistoryStore` uses to encrypt
-/// clipboard history on disk. The key is a 256-bit key stored in the login
-/// Keychain with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`, so it never
-/// leaves the device and can't be read while the Mac is locked.
+/// clipboard history on disk. The 256-bit key is stored in the macOS login
+/// Keychain, whose lock state and item permissions govern access.
 protocol KeychainKeyStoring: Sendable {
     /// Returns the existing key, or `nil` if no key has been provisioned yet.
     func loadKey() throws -> SymmetricKey?

@@ -32,9 +32,8 @@ enum HistoryLoadError: Error, Equatable {
 /// - `history.enc`           — encrypted JSON of `[StoredEntry]` (without image bytes)
 /// - `images/<uuid>.enc`     — per-image encrypted blob (raster clipboard payloads)
 ///
-/// The symmetric key is provisioned on first run and stored in the login Keychain via
-/// `KeychainKeyStore`, with `kSecAttrAccessibleWhenUnlockedThisDeviceOnly`. The key
-/// never touches disk.
+/// The symmetric key is provisioned when encrypted storage is first used and stored
+/// in the login Keychain via `KeychainKeyStore`. History files do not contain the key.
 ///
 /// On first launch after upgrade, legacy plaintext `history.json` and `images/*.{png,tiff}`
 /// files are detected and re-encrypted in place, then the plaintext is deleted. Disk I/O
