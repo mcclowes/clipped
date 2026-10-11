@@ -103,9 +103,9 @@ struct ClipboardItemRow: View {
                 manager.openImageInPreview(item)
             }
 
-            if let text = item.extractedText {
+            if item.extractedText != nil {
                 Button("Copy extracted text") {
-                    manager.copyText(text)
+                    manager.copyExtractedText(from: item)
                 }
             }
         }
@@ -165,25 +165,25 @@ struct ClipboardItemRow: View {
         manager.pasteToActiveApp(item, asPlainText: asPlainText)
     }
 
-    /// Present the native macOS save panel for a chosen export format, then write the
-    /// derived bytes to the picked location. Encoding happens after the user confirms so
-    /// cancelling costs nothing.
+    /// Authorize export before deriving the filename or presenting the destination picker.
     private func presentSavePanel(format: ExportFormat) {
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [format.utType]
-        panel.canCreateDirectories = true
-        panel.isExtensionHidden = false
-        panel.nameFieldStringValue = "\(FileExporter.suggestedBaseName(for: item)).\(format.fileExtension)"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            guard let data = manager.exportData(for: item, format: format) else {
+        manager.exportData(for: item, format: format) { data in
+            guard let data else {
                 NSSound.beep()
                 return
             }
-            do {
-                try data.write(to: url)
-            } catch {
-                NSSound.beep()
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [format.utType]
+            panel.canCreateDirectories = true
+            panel.isExtensionHidden = false
+            panel.nameFieldStringValue = "\(FileExporter.suggestedBaseName(for: item)).\(format.fileExtension)"
+            panel.begin { response in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try data.write(to: url)
+                } catch {
+                    NSSound.beep()
+                }
             }
         }
     }

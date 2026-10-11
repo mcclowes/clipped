@@ -512,7 +512,9 @@ struct ClipboardManagerTests {
     func exportDataMarkdown() throws {
         let (manager, _, _, _) = makeManager()
         let item = ClipboardItem(content: .text("body text"), contentType: .plainText)
-        let data = try #require(manager.exportData(for: item, format: .markdown))
+        var exportedData: Data?
+        manager.exportData(for: item, format: .markdown) { exportedData = $0 }
+        let data = try #require(exportedData)
         #expect(String(data: data, encoding: .utf8) == "body text")
     }
 }

@@ -490,6 +490,307 @@ struct IntegrationTests {
         #expect(environment.pastedProcessIDs == [editor.processIdentifier])
     }
 
+    @Test("Denied bulk secret export leaves the clipboard unchanged", .bug(id: 111))
+    func deniedBulkSecretExport() {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        capture("keep this clipboard", on: pasteboard)
+        let initialChangeCount = pasteboard.changeCount
+        let ordinary = ClipboardItem(content: .text("public text"), contentType: .plainText)
+        let secret = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+
+        manager.exportItems([ordinary, secret])
+
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == "keep this clipboard")
+        #expect(pasteboard.changeCount == initialChangeCount)
+    }
+
+    @Test("Secret file export waits for approval before delivering bytes", .bug(id: 111), arguments: [false, true])
+    func fileExportWaitsForApproval(_ approved: Bool) throws {
+        let (manager, _, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        var exportedData: Data?
+        var completions = 0
+        manager.authenticateSecretAccess = { _, completion in pendingApproval = completion }
+
+        manager.exportData(for: item, format: .plainText) { data in
+            exportedData = data
+            completions += 1
+        }
+        #expect(exportedData == nil)
+        #expect(completions == 0)
+        let authorize = try #require(pendingApproval)
+        authorize(approved)
+
+        #expect(exportedData == (approved ? Data(detectedSecret.utf8) : nil))
+        #expect(completions == (approved ? 1 : 0))
+    }
+
+    @Test("Secret image preview waits for approval before creating a file", .bug(id: 111), arguments: [false, true])
+    func imagePreviewWaitsForApproval(_ approved: Bool) throws {
+        let (manager, _, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        let item = ClipboardItem(content: .image(Data([1]), .zero), contentType: .image)
+        item.containsSecret = true
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        var previewedIDs: [UUID] = []
+        manager.authenticateSecretAccess = { _, completion in pendingApproval = completion }
+        manager.previewImage = { previewedIDs.append($0.id) }
+
+        manager.openImageInPreview(item)
+
+        #expect(previewedIDs.isEmpty)
+        let authorize = try #require(pendingApproval)
+        authorize(approved)
+        #expect(previewedIDs == (approved ? [item.id] : []))
+    }
+
+    @Test("Unavailable owner authentication cannot release secret export bytes", .bug(id: 111))
+    func unavailableAuthenticationBlocksExport() {
+        let (manager, _, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        let context = MockUnavailableAuthenticationContext()
+        manager.authenticateSecretAccess = { reason, completion in
+            ClipboardManager.authenticateOwner(reason: reason, context: context, completion: completion)
+        }
+        let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        var exportedData: Data?
+        var completions = 0
+
+        manager.exportData(for: item, format: .plainText) {
+            exportedData = $0
+            completions += 1
+        }
+
+        #expect(exportedData == nil)
+        #expect(completions == 0)
+        #expect(context.evaluations == 0)
+    }
+
+    @Test(
+        "Sensitive entries require approval for exports in every secret mode",
+        .bug(id: 111),
+        arguments: SecretHandling.allCases
+    )
+    func sensitiveExportsRequireApproval(_ handling: SecretHandling) {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = handling
+        capture("keep this clipboard", on: pasteboard)
+        let item = ClipboardItem(content: .text("private password"), contentType: .plainText)
+        item.isSensitive = true
+        item.containsSecret = false
+        let image = ClipboardItem(content: .image(Data([1]), .zero), contentType: .image)
+        image.isSensitive = true
+        var authenticationRequests = 0
+        var fileExports = 0
+        var previewExports = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+        manager.previewImage = { _ in previewExports += 1 }
+
+        manager.exportItems([item])
+        manager.exportData(for: item, format: .plainText) { _ in fileExports += 1 }
+        manager.openImageInPreview(image)
+
+        #expect(authenticationRequests == 3)
+        #expect(pasteboard.string(forType: .string) == "keep this clipboard")
+        #expect(fileExports == 0)
+        #expect(previewExports == 0)
+    }
+
+    @Test("A mixed bulk export waits for one approval and preserves every contributor", .bug(id: 111))
+    func bulkExportWaitsForApproval() throws {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        capture("keep this clipboard", on: pasteboard)
+        let ordinary = ClipboardItem(content: .text("public text"), contentType: .plainText)
+        let firstSecret = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        let nextSecretText = detectedSecret + "2"
+        let nextSecret = ClipboardItem(content: .text(nextSecretText), contentType: .plainText)
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            pendingApproval = completion
+        }
+
+        manager.exportItems([ordinary, firstSecret, nextSecret])
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == "keep this clipboard")
+        let authorize = try #require(pendingApproval)
+        authorize(true)
+
+        #expect(pasteboard
+            .string(forType: .string) == "public text\n\n---\n\n\(detectedSecret)\n\n---\n\n\(nextSecretText)")
+        #expect(authenticationRequests == 1)
+    }
+
+    @Test("Detected-secret exports follow the selected mode", .bug(id: 111), arguments: SecretHandling.allCases)
+    func secretExportModes(_ handling: SecretHandling) {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = handling
+        let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        item.isSensitive = handling == .treatLikePasswords
+        let image = ClipboardItem(content: .image(Data([1]), .zero), contentType: .image)
+        image.containsSecret = true
+        image.isSensitive = item.isSensitive
+        var authenticationRequests = 0
+        var previewExports = 0
+        var exportedData: Data?
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(true)
+        }
+        manager.previewImage = { _ in previewExports += 1 }
+
+        manager.exportItems([item])
+        manager.exportData(for: item, format: .plainText) { exportedData = $0 }
+        manager.openImageInPreview(image)
+
+        #expect(pasteboard.string(forType: .string) == detectedSecret)
+        #expect(exportedData == Data(detectedSecret.utf8))
+        #expect(previewExports == 1)
+        #expect(authenticationRequests == (handling == .maskOnly ? 0 : 3))
+    }
+
+    @Test("Ordinary exports and empty selections do not request authentication", .bug(id: 111))
+    func ordinaryExportsSkipAuthentication() {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        capture("keep this clipboard", on: pasteboard)
+        let initialChangeCount = pasteboard.changeCount
+        let ordinary = ClipboardItem(content: .text("public text"), contentType: .plainText)
+        let image = ClipboardItem(content: .image(Data([1]), .zero), contentType: .image)
+        image.containsSecret = true
+        var authenticationRequests = 0
+        var exportedData: Data?
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+
+        manager.exportItems([])
+        manager.exportItems([image])
+        #expect(pasteboard.changeCount == initialChangeCount)
+
+        manager.exportItems([ordinary, image])
+        manager.exportData(for: ordinary, format: .markdown) { exportedData = $0 }
+        #expect(pasteboard.string(forType: .string) == "public text")
+        #expect(exportedData == Data("public text".utf8))
+        #expect(authenticationRequests == 0)
+    }
+
+    @Test(
+        "Extracted sensitive text waits for approval and stays out of saved history",
+        .bug(id: 111),
+        arguments: [false, true]
+    )
+    func sensitiveExtractedTextCopy(_ approved: Bool) async throws {
+        let (manager, pasteboard, store, _) = makeRig()
+        manager.secureRemovalDelay = { _ in .zero }
+        capture("keep this clipboard", on: pasteboard)
+        let image = ClipboardItem(content: .image(Data([1]), .zero), contentType: .image)
+        image.isSensitive = true
+        image.extractedText = "private password"
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            pendingApproval = completion
+        }
+
+        manager.copyExtractedText(from: image)
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == "keep this clipboard")
+        #expect(manager.items.isEmpty)
+        let authorize = try #require(pendingApproval)
+        authorize(approved)
+        if approved {
+            #expect(manager.items.first?.isSensitive == true)
+        }
+
+        await manager.flushPendingSaves()
+        await manager.awaitPendingSecureRemovals()
+        #expect(pasteboard.string(forType: .string) == (approved ? "private password" : "keep this clipboard"))
+        #expect(authenticationRequests == 1)
+        #expect(manager.items.isEmpty)
+        #expect(await store.savedEntries.isEmpty)
+    }
+
+    @Test(
+        "Extracted text keeps source secret flags and detects new secrets with one approval",
+        .bug(id: 111),
+        arguments: [false, true]
+    )
+    func extractedSecretClassification(_ sourceWasFlagged: Bool) async throws {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .requireAuthentication
+        capture("keep this clipboard", on: pasteboard)
+        let image = ClipboardItem(content: .image(Data([1]), .zero), contentType: .image)
+        image.containsSecret = sourceWasFlagged
+        let text = sourceWasFlagged ? "private password" : detectedSecret
+        image.extractedText = text
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            pendingApproval = completion
+        }
+
+        manager.copyExtractedText(from: image)
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == "keep this clipboard")
+        let authorize = try #require(pendingApproval)
+        authorize(true)
+        await manager.flushPendingSaves()
+
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == text)
+        #expect(manager.items.first?.containsSecret == true)
+        let saved = await store.savedEntries
+        #expect(saved.count == 1)
+        #expect(saved.first?.containsSecret == true)
+    }
+
+    @Test("Ordinary extracted text copies without authentication and preserves its source", .bug(id: 111))
+    func ordinaryExtractedTextCopy() async {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .requireAuthentication
+        capture("keep this clipboard", on: pasteboard)
+        let image = ClipboardItem(
+            content: .image(Data([1]), .zero), contentType: .image,
+            sourceAppName: "Example", sourceAppBundleID: "com.example.editor"
+        )
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+
+        manager.copyExtractedText(from: image)
+        #expect(pasteboard.string(forType: .string) == "keep this clipboard")
+        #expect(manager.items.isEmpty)
+        image.extractedText = "public label"
+        manager.copyExtractedText(from: image)
+        await manager.flushPendingSaves()
+
+        #expect(authenticationRequests == 0)
+        #expect(pasteboard.string(forType: .string) == "public label")
+        #expect(manager.items.first?.sourceAppBundleID == "com.example.editor")
+        #expect(manager.items.first?.containsSecret == false)
+        #expect(await store.savedEntries.count == 1)
+    }
+
     @Test("Reveal follows the selected secret policy")
     func revealPolicy() {
         let (manager, _, _, settings) = makeRig(persistHistory: false)

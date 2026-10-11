@@ -57,11 +57,11 @@ enum SecretHandling: String, CaseIterable, Identifiable, Codable {
     var detail: String {
         switch self {
         case .maskOnly:
-            "Keep secrets in encrypted history. Reveal, copy, and paste normally."
+            "Keep secrets in encrypted history. Reveal, copy, export, and paste normally."
         case .treatLikePasswords:
-            "Keep secrets in memory for the password timeout, then remove them. Never save them to disk."
+            "Keep secrets in memory for the password timeout, then remove them. Exclude them from saved history."
         case .requireAuthentication:
-            "Keep secrets in encrypted history. Authenticate to reveal or copy them; paste normally."
+            "Keep secrets in encrypted history. Authenticate to reveal, copy, or export them; paste normally."
         }
     }
 }

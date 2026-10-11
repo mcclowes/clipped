@@ -5,8 +5,35 @@ import CryptoKit
 import Foundation
 import ImageIO
 import class LinkPresentation.LPLinkMetadata
+import LocalAuthentication
 import ServiceManagement
 import UniformTypeIdentifiers
+
+final class MockUnavailableAuthenticationContext: LAContext {
+    private let lock = NSLock()
+    private var evaluationCount = 0
+
+    var evaluations: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return evaluationCount
+    }
+
+    override func canEvaluatePolicy(_ policy: LAPolicy, error: NSErrorPointer) -> Bool {
+        false
+    }
+
+    override func evaluatePolicy(
+        _ policy: LAPolicy,
+        localizedReason: String,
+        reply: @escaping @Sendable (Bool, Error?) -> Void
+    ) {
+        lock.lock()
+        evaluationCount += 1
+        lock.unlock()
+        reply(false, nil)
+    }
+}
 
 @MainActor
 final class MockPasteBackApplication: PasteBackApplication {

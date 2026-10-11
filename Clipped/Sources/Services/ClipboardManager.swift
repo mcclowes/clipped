@@ -52,6 +52,20 @@ final class ClipboardManager {
     @ObservationIgnored
     var dismissPanelForPaste: (() -> Void)?
 
+    @ObservationIgnored
+    var previewImage: (ClipboardItem) throws -> Void = { item in
+        guard let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") else {
+            NSSound.beep()
+            return
+        }
+        let image = try FileExporter.temporaryPreviewURL(for: item)
+        NSWorkspace.shared.open(
+            [image],
+            withApplicationAt: preview,
+            configuration: NSWorkspace.OpenConfiguration()
+        )
+    }
+
     /// Injectable authentication seam so secret-access behavior can be tested without showing
     /// a system prompt. The default uses the Mac's configured owner-authentication policy.
     typealias SecretAccessAuthenticator = (
@@ -61,10 +75,17 @@ final class ClipboardManager {
 
     @ObservationIgnored
     var authenticateSecretAccess: SecretAccessAuthenticator = { reason, completion in
-        let context = LAContext()
+        ClipboardManager.authenticateOwner(reason: reason, completion: completion)
+    }
+
+    static func authenticateOwner(
+        reason: String,
+        context: LAContext = LAContext(),
+        completion: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
         var authError: NSError?
         guard context.canEvaluatePolicy(.deviceOwnerAuthentication, error: &authError) else {
-            completion(true)
+            completion(false)
             return
         }
         context.evaluatePolicy(.deviceOwnerAuthentication, localizedReason: reason) { success, _ in
@@ -563,28 +584,44 @@ final class ClipboardManager {
     func copyText(_ text: String) {
         let item = ClipboardItem(content: .text(text), contentType: .plainText)
         performExplicitSecretAction(for: item, reason: "Copy hidden clipboard content") { [weak self] in
-            guard let self else { return }
-            monitor.write { pasteboard in
-                pasteboard.clearContents()
-                pasteboard.setString(text, forType: .string)
-            }
+            self?.writeGeneratedTextItem(item)
+        }
+    }
 
-            let secretPendingRemoval = applySecretRetentionPolicy(to: item)
-            if history.insert(item) {
-                history.trimToMaxSize()
-                if secretPendingRemoval {
-                    scheduleSecureAutoRemoval(
-                        itemID: item.id,
-                        timeout: settingsManager?.secureTimeout ?? SettingsManager.defaultSecureTimeout
-                    )
-                } else {
-                    history.saveHistory()
-                }
-            }
+    private func writeGeneratedTextItem(_ item: ClipboardItem) {
+        guard case let .text(text) = item.content else { return }
+        monitor.write { pasteboard in
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+        }
 
-            if settingsManager?.playSoundOnCopy ?? true {
-                NSSound(named: "Pop")?.play()
+        let pendingRemoval = applySecretRetentionPolicy(to: item) || item.isSensitive
+        if history.insert(item) {
+            history.trimToMaxSize()
+            if pendingRemoval {
+                scheduleSecureAutoRemoval(
+                    itemID: item.id,
+                    timeout: settingsManager?.secureTimeout ?? SettingsManager.defaultSecureTimeout
+                )
+            } else {
+                history.saveHistory()
             }
+        }
+
+        if settingsManager?.playSoundOnCopy ?? true {
+            NSSound(named: "Pop")?.play()
+        }
+    }
+
+    func copyExtractedText(from source: ClipboardItem) {
+        guard let text = source.extractedText else { return }
+        let item = ClipboardItem(
+            content: .text(text), contentType: .plainText,
+            sourceAppName: source.sourceAppName, sourceAppBundleID: source.sourceAppBundleID,
+            isSensitive: source.isSensitive, containsSecret: source.containsSecret
+        )
+        performProtectedRead(for: [item], reason: "Copy hidden extracted text") { [weak self] in
+            self?.writeGeneratedTextItem(item)
         }
     }
 
@@ -665,15 +702,7 @@ final class ClipboardManager {
     }
 
     func reveal(_ item: ClipboardItem, completion: @escaping @MainActor @Sendable () -> Void) {
-        guard item.isSensitive || requiresAuthenticationForSecretAccess(item) else {
-            completion()
-            return
-        }
-        authenticateSecretAccess("Reveal hidden clipboard content") { success in
-            if success {
-                completion()
-            }
-        }
+        performProtectedRead(for: [item], reason: "Reveal hidden clipboard content", action: completion)
     }
 
     private func performExplicitSecretAction(
@@ -681,7 +710,26 @@ final class ClipboardManager {
         reason: String,
         action: @escaping @MainActor @Sendable () -> Void
     ) {
-        guard requiresAuthenticationForSecretAccess(item) else {
+        performAuthenticatedAction(
+            required: requiresAuthenticationForSecretAccess(item), reason: reason, action: action
+        )
+    }
+
+    private func performProtectedRead(
+        for items: [ClipboardItem],
+        reason: String,
+        action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        let required = items.contains { $0.isSensitive || requiresAuthenticationForSecretAccess($0) }
+        performAuthenticatedAction(required: required, reason: reason, action: action)
+    }
+
+    private func performAuthenticatedAction(
+        required: Bool,
+        reason: String,
+        action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        guard required else {
             action()
             return
         }
@@ -697,12 +745,16 @@ final class ClipboardManager {
     }
 
     func exportItems(_ items: [ClipboardItem]) {
-        let merged = items.compactMap(\.plainText).joined(separator: "\n\n---\n\n")
-        guard !merged.isEmpty else { return }
+        let contributors = items.filter { $0.plainText != nil }
+        guard !contributors.isEmpty else { return }
+        performProtectedRead(for: contributors, reason: "Export hidden clipboard content") { [self] in
+            let merged = contributors.compactMap(\.plainText).joined(separator: "\n\n---\n\n")
+            guard !merged.isEmpty else { return }
 
-        monitor.write { pasteboard in
-            pasteboard.clearContents()
-            pasteboard.setString(merged, forType: .string)
+            monitor.write { pasteboard in
+                pasteboard.clearContents()
+                pasteboard.setString(merged, forType: .string)
+            }
         }
     }
 
@@ -727,29 +779,27 @@ final class ClipboardManager {
         await applyImageTransform(item, mutation: "Resized \(percent)%") { ImageProcessor.resize($0, scale: scale) }
     }
 
-    /// Bytes for "Save as…", produced by `FileExporter`. Returns `nil` when the
-    /// item can't be represented in `format`.
-    func exportData(for item: ClipboardItem, format: ExportFormat) -> Data? {
-        try? FileExporter.data(for: item, format: format)
+    /// Bytes for "Save as…", or `nil` when the item can't be represented in `format`.
+    func exportData(
+        for item: ClipboardItem,
+        format: ExportFormat,
+        completion: @escaping @MainActor @Sendable (Data?) -> Void
+    ) {
+        performProtectedRead(for: [item], reason: "Save hidden clipboard content") {
+            completion(try? FileExporter.data(for: item, format: format))
+        }
     }
 
     /// Materialize an image as a temporary PNG and open it explicitly in Preview.
     func openImageInPreview(_ item: ClipboardItem) {
-        guard let preview = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Preview") else {
-            NSSound.beep()
-            return
-        }
-
-        do {
-            let image = try FileExporter.temporaryPreviewURL(for: item)
-            NSWorkspace.shared.open(
-                [image],
-                withApplicationAt: preview,
-                configuration: NSWorkspace.OpenConfiguration()
-            )
-        } catch {
-            Self.logger.error("Opening image in Preview failed: \(error.localizedDescription, privacy: .public)")
-            NSSound.beep()
+        performProtectedRead(for: [item], reason: "Preview hidden clipboard content") { [weak self] in
+            guard let self else { return }
+            do {
+                try previewImage(item)
+            } catch {
+                Self.logger.error("Opening image in Preview failed: \(error.localizedDescription, privacy: .public)")
+                NSSound.beep()
+            }
         }
     }
 
