@@ -132,12 +132,11 @@ actor HistoryStore: HistoryStoring {
             wireEntries.append(entry.strippingImageData())
         }
 
-        deleteOrphanedImageFiles(keeping: liveImageIDs)
-
         do {
             let plaintext = try JSONEncoder().encode(wireEntries)
             let ciphertext = try crypto.encrypt(plaintext)
             try writeAtomically(data: ciphertext, to: encryptedFileURL)
+            deleteOrphanedImageFiles(keeping: liveImageIDs)
 
             // Deliberately no legacy-plaintext cleanup here. `migrateLegacyPlaintext` deletes
             // `history.json` itself once it has safely re-encrypted it, so the only time this

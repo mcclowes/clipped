@@ -381,6 +381,43 @@ struct HistoryStoreTests {
         await store.clear()
     }
 
+    @Test("A failed history save preserves images referenced by the previous history")
+    func failedSavePreservesReferencedImages() async throws {
+        let keyStore = InMemoryKeyStore()
+        let store = makeStore(keyStore: keyStore)
+        defer { try? FileManager.default.removeItem(at: baseDir) }
+
+        let imageData = Self.onePixelPNG()
+        let itemA = ClipboardItem(content: .image(imageData, CGSize(width: 1, height: 1)), contentType: .image)
+        let itemB = ClipboardItem(content: .image(imageData, CGSize(width: 1, height: 1)), contentType: .image)
+        let entryA = StoredEntry(item: itemA)
+        let entryB = StoredEntry(item: itemB)
+        await store.save(entries: [entryA, entryB])
+        let originalHistory = try Data(contentsOf: historyEncURL())
+        let originalImageA = try Data(contentsOf: encryptedImageURL(id: itemA.id))
+        let initial = await store.load()
+        try #require(initial.map(\.id) == [itemA.id, itemB.id])
+        try #require(initial.allSatisfy { $0.imageData == imageData })
+
+        let blockedURL = historyEncURL().appendingPathExtension("tmp")
+        try FileManager.default.createDirectory(at: blockedURL, withIntermediateDirectories: false)
+        try Data("block history write".utf8).write(to: blockedURL.appendingPathComponent("blocker"))
+        await store.save(entries: [entryB])
+
+        #expect(try Data(contentsOf: historyEncURL()) == originalHistory)
+        #expect((try? Data(contentsOf: encryptedImageURL(id: itemA.id))) == originalImageA)
+        let restartedStore = makeStore(keyStore: keyStore)
+        let recovered = await restartedStore.load()
+        #expect(recovered.map(\.id) == [itemA.id, itemB.id])
+        #expect(recovered.map(\.imageData) == [imageData, imageData])
+
+        try FileManager.default.removeItem(at: blockedURL)
+        await restartedStore.save(entries: [entryB])
+        #expect(FileManager.default.fileExists(atPath: encryptedImageURL(id: itemA.id).path) == false)
+        #expect(await restartedStore.load().map(\.id) == [itemB.id])
+        #expect(await restartedStore.load().first?.imageData == imageData)
+    }
+
     @Test("Legacy plaintext image files are migrated to encrypted side files")
     func migratesLegacyImageFiles() async throws {
         let store = makeStore()
