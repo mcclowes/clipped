@@ -7,6 +7,28 @@ import class LinkPresentation.LPLinkMetadata
 import ServiceManagement
 import UniformTypeIdentifiers
 
+@MainActor
+final class MockKeyEventMonitor {
+    private let token = NSObject()
+    private(set) var additions = 0
+    private(set) var removals = 0
+    private(set) var handler: (@MainActor (NSEvent) -> NSEvent?)?
+
+    var system: KeyRecorderMonitor.MonitorSystem {
+        .init(
+            add: { handler in
+                self.additions += 1
+                self.handler = handler
+                return self.token
+            },
+            remove: { monitor in
+                precondition((monitor as AnyObject) === self.token)
+                self.removals += 1
+            }
+        )
+    }
+}
+
 actor MockLinkMetadataProvider: LinkMetadataProviding {
     private(set) var requestedURLs: [URL] = []
     private(set) var validatedHosts: [String] = []
