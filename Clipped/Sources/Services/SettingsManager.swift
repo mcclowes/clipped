@@ -95,66 +95,66 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     static let defaultSecureTimeout = 120
 
     var persistAcrossReboots: Bool {
-        didSet { UserDefaults.standard.set(persistAcrossReboots, forKey: "persistAcrossReboots") }
+        didSet { defaults.set(persistAcrossReboots, forKey: "persistAcrossReboots") }
     }
 
     var maxHistorySize: Int {
-        didSet { UserDefaults.standard.set(maxHistorySize, forKey: "maxHistorySize") }
+        didSet { defaults.set(maxHistorySize, forKey: "maxHistorySize") }
     }
 
     var historyRetention: HistoryRetention {
-        didSet { UserDefaults.standard.set(historyRetention.rawValue, forKey: "historyRetention") }
+        didSet { defaults.set(historyRetention.rawValue, forKey: "historyRetention") }
     }
 
     var secureMode: Bool {
-        didSet { UserDefaults.standard.set(secureMode, forKey: "secureMode") }
+        didSet { defaults.set(secureMode, forKey: "secureMode") }
     }
 
     /// Timeout in seconds for secure items.
     var secureTimeout: Int {
-        didSet { UserDefaults.standard.set(secureTimeout, forKey: "secureTimeout") }
+        didSet { defaults.set(secureTimeout, forKey: "secureTimeout") }
     }
 
     var secretHandling: SecretHandling {
-        didSet { UserDefaults.standard.set(secretHandling.rawValue, forKey: "secretHandling") }
+        didSet { defaults.set(secretHandling.rawValue, forKey: "secretHandling") }
     }
 
     var playSoundOnCopy: Bool {
-        didSet { UserDefaults.standard.set(playSoundOnCopy, forKey: "playSoundOnCopy") }
+        didSet { defaults.set(playSoundOnCopy, forKey: "playSoundOnCopy") }
     }
 
     var captureScreenshots: Bool {
-        didSet { UserDefaults.standard.set(captureScreenshots, forKey: "captureScreenshots") }
+        didSet { defaults.set(captureScreenshots, forKey: "captureScreenshots") }
     }
 
     var fetchLinkPreviews: Bool {
-        didSet { UserDefaults.standard.set(fetchLinkPreviews, forKey: "fetchLinkPreviews") }
+        didSet { defaults.set(fetchLinkPreviews, forKey: "fetchLinkPreviews") }
     }
 
     /// When `true`, app-owned windows that surface clipboard contents (panel, history window,
     /// sticky notes) set `NSWindow.sharingType = .none` so they don't appear in screen
     /// captures, recordings, or screen-sharing sessions.
     var hideFromScreenSharing: Bool {
-        didSet { UserDefaults.standard.set(hideFromScreenSharing, forKey: "hideFromScreenSharing") }
+        didSet { defaults.set(hideFromScreenSharing, forKey: "hideFromScreenSharing") }
     }
 
     var hotkeyKeyCode: UInt32 {
-        didSet { UserDefaults.standard.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode") }
+        didSet { defaults.set(Int(hotkeyKeyCode), forKey: "hotkeyKeyCode") }
     }
 
     var hotkeyModifiers: UInt32 {
-        didSet { UserDefaults.standard.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers") }
+        didSet { defaults.set(Int(hotkeyModifiers), forKey: "hotkeyModifiers") }
     }
 
     var historyWindowHotkeyKeyCode: UInt32 {
         didSet {
-            UserDefaults.standard.set(Int(historyWindowHotkeyKeyCode), forKey: "historyWindowHotkeyKeyCode")
+            defaults.set(Int(historyWindowHotkeyKeyCode), forKey: "historyWindowHotkeyKeyCode")
         }
     }
 
     var historyWindowHotkeyModifiers: UInt32 {
         didSet {
-            UserDefaults.standard.set(Int(historyWindowHotkeyModifiers), forKey: "historyWindowHotkeyModifiers")
+            defaults.set(Int(historyWindowHotkeyModifiers), forKey: "historyWindowHotkeyModifiers")
         }
     }
 
@@ -162,7 +162,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     var mutationRules: [String: Bool] {
         didSet {
             if let data = try? JSONEncoder().encode(mutationRules) {
-                UserDefaults.standard.set(data, forKey: "mutationRules")
+                defaults.set(data, forKey: "mutationRules")
             }
         }
     }
@@ -171,7 +171,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     var mutationAppOverrides: [String: Bool] {
         didSet {
             if let data = try? JSONEncoder().encode(mutationAppOverrides) {
-                UserDefaults.standard.set(data, forKey: "mutationAppOverrides")
+                defaults.set(data, forKey: "mutationAppOverrides")
             }
         }
     }
@@ -181,7 +181,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     /// default without needing a migration.
     var disabledFilterIDs: Set<String> {
         didSet {
-            UserDefaults.standard.set(Array(disabledFilterIDs), forKey: "disabledFilterIDs")
+            defaults.set(Array(disabledFilterIDs), forKey: "disabledFilterIDs")
         }
     }
 
@@ -191,6 +191,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     /// The most recent error surfaced from SMAppService so settings UI can display it.
     private(set) var launchAtLoginError: String?
 
+    private let defaults: UserDefaults
     private let loginItem: any LoginItemManaging
 
     /// Debug builds live in DerivedData and vanish on the next clean, so they must never take
@@ -257,36 +258,38 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
     }
 
     init(
+        defaults: UserDefaults = .standard,
         loginItem: any LoginItemManaging = MainAppLoginItem(),
         repairsLoginItem: Bool = SettingsManager.repairsLoginItemByDefault
     ) {
+        self.defaults = defaults
         self.loginItem = loginItem
         self.repairsLoginItem = repairsLoginItem
-        persistAcrossReboots = UserDefaults.standard.bool(forKey: "persistAcrossReboots")
-        let storedSize = UserDefaults.standard.integer(forKey: "maxHistorySize")
+        persistAcrossReboots = defaults.bool(forKey: "persistAcrossReboots")
+        let storedSize = defaults.integer(forKey: "maxHistorySize")
         maxHistorySize = storedSize > 0 ? storedSize : ClipboardHistory.defaultMaxHistorySize
-        let storedRetention = UserDefaults.standard.integer(forKey: "historyRetention")
+        let storedRetention = defaults.integer(forKey: "historyRetention")
         // Default to .never so existing users see no behavior change after upgrade.
         historyRetention = HistoryRetention(rawValue: storedRetention) ?? .never
-        secureMode = UserDefaults.standard.object(forKey: "secureMode") == nil
+        secureMode = defaults.object(forKey: "secureMode") == nil
             ? true
-            : UserDefaults.standard.bool(forKey: "secureMode")
-        let storedSecureTimeout = UserDefaults.standard.integer(forKey: "secureTimeout")
+            : defaults.bool(forKey: "secureMode")
+        let storedSecureTimeout = defaults.integer(forKey: "secureTimeout")
         secureTimeout = storedSecureTimeout > 0 ? storedSecureTimeout : Self.defaultSecureTimeout
-        secretHandling = UserDefaults.standard.string(forKey: "secretHandling")
+        secretHandling = defaults.string(forKey: "secretHandling")
             .flatMap(SecretHandling.init(rawValue:)) ?? .maskOnly
-        playSoundOnCopy = UserDefaults.standard.object(forKey: "playSoundOnCopy") == nil
+        playSoundOnCopy = defaults.object(forKey: "playSoundOnCopy") == nil
             ? true
-            : UserDefaults.standard.bool(forKey: "playSoundOnCopy")
-        captureScreenshots = UserDefaults.standard.bool(forKey: "captureScreenshots")
-        fetchLinkPreviews = UserDefaults.standard.object(forKey: "fetchLinkPreviews") == nil
+            : defaults.bool(forKey: "playSoundOnCopy")
+        captureScreenshots = defaults.bool(forKey: "captureScreenshots")
+        fetchLinkPreviews = defaults.object(forKey: "fetchLinkPreviews") == nil
             ? true
-            : UserDefaults.standard.bool(forKey: "fetchLinkPreviews")
-        hideFromScreenSharing = UserDefaults.standard.object(forKey: "hideFromScreenSharing") == nil
+            : defaults.bool(forKey: "fetchLinkPreviews")
+        hideFromScreenSharing = defaults.object(forKey: "hideFromScreenSharing") == nil
             ? true
-            : UserDefaults.standard.bool(forKey: "hideFromScreenSharing")
+            : defaults.bool(forKey: "hideFromScreenSharing")
 
-        if let rulesData = UserDefaults.standard.data(forKey: "mutationRules"),
+        if let rulesData = defaults.data(forKey: "mutationRules"),
            let decoded = try? JSONDecoder().decode([String: Bool].self, from: rulesData)
         {
             mutationRules = decoded
@@ -294,7 +297,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             mutationRules = [:]
         }
 
-        if let overridesData = UserDefaults.standard.data(forKey: "mutationAppOverrides"),
+        if let overridesData = defaults.data(forKey: "mutationAppOverrides"),
            let decoded = try? JSONDecoder().decode([String: Bool].self, from: overridesData)
         {
             mutationAppOverrides = decoded
@@ -302,7 +305,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             mutationAppOverrides = [:]
         }
 
-        if let stored = UserDefaults.standard.array(forKey: "disabledFilterIDs") as? [String] {
+        if let stored = defaults.array(forKey: "disabledFilterIDs") as? [String] {
             disabledFilterIDs = Set(stored)
         } else {
             // First launch — default the extended content + source-app filters to hidden
@@ -310,14 +313,14 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             disabledFilterIDs = ClipboardFilter.defaultHiddenCategoryIDs
         }
 
-        let storedKeyCode = UserDefaults.standard.integer(forKey: "hotkeyKeyCode")
+        let storedKeyCode = defaults.integer(forKey: "hotkeyKeyCode")
         hotkeyKeyCode = storedKeyCode > 0 ? UInt32(storedKeyCode) : 8 // Default: 'C'
-        let storedModifiers = UserDefaults.standard.integer(forKey: "hotkeyModifiers")
+        let storedModifiers = defaults.integer(forKey: "hotkeyModifiers")
         hotkeyModifiers = storedModifiers > 0 ? UInt32(storedModifiers) : UInt32(optionKey) // Default: Option
 
-        let storedHistoryKeyCode = UserDefaults.standard.integer(forKey: "historyWindowHotkeyKeyCode")
+        let storedHistoryKeyCode = defaults.integer(forKey: "historyWindowHotkeyKeyCode")
         historyWindowHotkeyKeyCode = storedHistoryKeyCode > 0 ? UInt32(storedHistoryKeyCode) : 8 // Default: 'C'
-        let storedHistoryModifiers = UserDefaults.standard.integer(forKey: "historyWindowHotkeyModifiers")
+        let storedHistoryModifiers = defaults.integer(forKey: "historyWindowHotkeyModifiers")
         historyWindowHotkeyModifiers = storedHistoryModifiers > 0
             ? UInt32(storedHistoryModifiers)
             : UInt32(optionKey | shiftKey) // Default: Option+Shift

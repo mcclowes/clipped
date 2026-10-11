@@ -1,42 +1,99 @@
 @testable import Clipped
+import Foundation
 import Testing
 
 @MainActor
 struct SettingsManagerTests {
+    private func withSettings(_ body: (SettingsManager, UserDefaults) -> Void) throws {
+        let suiteName = "SettingsManagerTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        body(
+            SettingsManager(
+                defaults: defaults,
+                loginItem: MockLoginItem(status: .notRegistered),
+                repairsLoginItem: false
+            ),
+            defaults
+        )
+    }
+
     @Test("Defaults max history size to at least 10")
-    func defaultMaxHistorySize() {
-        let settings = SettingsManager()
-        #expect(settings.maxHistorySize >= 10)
+    func defaultMaxHistorySize() throws {
+        try withSettings { settings, _ in
+            #expect(settings.maxHistorySize >= 10)
+        }
     }
 
     @Test("Defaults secure mode to true")
-    func defaultSecureMode() {
-        let settings = SettingsManager()
-        #expect(settings.secureMode == true)
+    func defaultSecureMode() throws {
+        try withSettings { settings, _ in
+            #expect(settings.secureMode == true)
+        }
     }
 
     @Test("Keeps password-manager items for two minutes by default")
-    func defaultSecureTimeout() {
-        let settings = SettingsManager()
-        #expect(settings.secureTimeout == 120)
+    func defaultSecureTimeout() throws {
+        try withSettings { settings, _ in
+            #expect(settings.secureTimeout == 120)
+        }
     }
 
     @Test("Masks detected secrets without adding restrictions by default")
-    func defaultSecretHandling() {
-        let settings = SettingsManager()
-        #expect(settings.secretHandling == .maskOnly)
+    func defaultSecretHandling() throws {
+        try withSettings { settings, _ in
+            #expect(settings.secretHandling == .maskOnly)
+        }
     }
 
     @Test("Defaults hide-from-screen-sharing to true")
-    func defaultHideFromScreenSharing() {
-        let settings = SettingsManager()
-        #expect(settings.hideFromScreenSharing == true)
+    func defaultHideFromScreenSharing() throws {
+        try withSettings { settings, _ in
+            #expect(settings.hideFromScreenSharing == true)
+        }
     }
 
     @Test("Conforms to SettingsManaging protocol")
-    func protocolConformance() {
-        let settings: any SettingsManaging = SettingsManager()
-        #expect(settings.maxHistorySize >= 10)
+    func protocolConformance() throws {
+        try withSettings { settings, _ in
+            let manager: any SettingsManaging = settings
+            #expect(manager.maxHistorySize >= 10)
+        }
+    }
+
+    @Test("Settings persist in the supplied store without affecting another store", .bug(id: 127))
+    func storesSettingsIndependently() throws {
+        try withSettings { settings, defaults in
+            settings.secureMode = false
+            settings.hideFromScreenSharing = false
+            settings.maxHistorySize = 42
+            settings.secretHandling = .requireAuthentication
+            settings.mutationRules = ["test:plainText": false]
+            settings.mutationAppOverrides = ["test:com.example.app": true]
+            settings.disabledFilterIDs = [ClipboardFilter.developer.id]
+
+            #expect(defaults.bool(forKey: "hideFromScreenSharing") == false)
+            #expect(defaults.integer(forKey: "maxHistorySize") == 42)
+            let reloaded = SettingsManager(
+                defaults: defaults,
+                loginItem: MockLoginItem(status: .notRegistered),
+                repairsLoginItem: false
+            )
+            #expect(reloaded.secureMode == false)
+            #expect(reloaded.hideFromScreenSharing == false)
+            #expect(reloaded.maxHistorySize == 42)
+            #expect(reloaded.secretHandling == .requireAuthentication)
+            #expect(reloaded.mutationRules == settings.mutationRules)
+            #expect(reloaded.mutationAppOverrides == settings.mutationAppOverrides)
+            #expect(reloaded.disabledFilterIDs == settings.disabledFilterIDs)
+        }
+        try withSettings { settings, _ in
+            #expect(settings.secureMode == true)
+            #expect(settings.hideFromScreenSharing == true)
+            #expect(settings.secretHandling == .maskOnly)
+            #expect(settings.mutationRules.isEmpty)
+            #expect(settings.mutationAppOverrides.isEmpty)
+        }
     }
 
     @Test("Core content-type filter categories are enabled by default")
