@@ -33,6 +33,13 @@ authoritative listing — do not hand-maintain a tree here (it rots). Notable se
 Resources: `Resources/Info.plist`, `Resources/Clipped.entitlements`, `Resources/Assets.xcassets/`.
 Project spec: `Clipped/project.yml` (XcodeGen — source of truth).
 
+## Review findings
+
+Track defects and review findings in [GitHub issues](https://github.com/mcclowes/clipped/issues),
+where they can be fixed and verified. Keep enduring design decisions in repository docs;
+don't add root-level review reports. See [#128](https://github.com/mcclowes/clipped/issues/128)
+for the retired reports and their replacement issues.
+
 ## Observability
 
 Logging uses `os.Logger` (subsystem `com.mcclowes.clipped`, one category per service).
