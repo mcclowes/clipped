@@ -23,7 +23,7 @@ help:
 	@echo "  build     - Debug build"
 	@echo "  run       - Build and launch"
 	@echo "  test      - Run unit tests"
-	@echo "  release   - Release build (unsigned)"
+	@echo "  release   - Release build with local signing when available"
 	@echo "  package   - Release build + zip for distribution"
 	@echo "  clean     - Clean build artifacts"
 	@echo "  generate  - Regenerate Xcode project from project.yml"
@@ -41,7 +41,7 @@ test:
 
 release:
 	@echo "Note: For distributable builds, use the CI release workflow which handles Developer ID signing + notarization."
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Release build
+	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Release build $(SIGN_ARGS)
 	@echo "Built to: $(BUILD_DIR)/../Release/Clipped.app"
 
 package: release
