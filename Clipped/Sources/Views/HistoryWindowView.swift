@@ -539,7 +539,7 @@ private struct HistoryItemRow: View {
             if let nsImage = ThumbnailCache.shared.thumbnail(for: item.id, data: data, maxPixel: 56) {
                 Image(nsImage: nsImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .scaledToFill()
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
@@ -550,7 +550,7 @@ private struct HistoryItemRow: View {
             if let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .frame(width: 28, height: 28)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             } else {
@@ -562,7 +562,7 @@ private struct HistoryItemRow: View {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .frame(width: 18, height: 18)
                     .clipShape(RoundedRectangle(cornerRadius: 3))
             } else {
@@ -711,14 +711,14 @@ private struct HistoryDetailView: View {
             if let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .frame(maxWidth: .infinity)
             }
         case let .svg(data, _):
             if let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .frame(maxWidth: .infinity)
             }
         }

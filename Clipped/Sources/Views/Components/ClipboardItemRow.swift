@@ -203,7 +203,7 @@ struct ClipboardItemRow: View {
                 Image(nsImage: nsImage)
                     .resizable()
                     .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .frame(width: 14, height: 14)
                     .clipShape(RoundedRectangle(cornerRadius: 2))
             } else {
@@ -251,7 +251,7 @@ struct ClipboardItemRow: View {
                     HStack(spacing: 8) {
                         Image(nsImage: nsImage)
                             .resizable()
-                            .aspectRatio(contentMode: .fit)
+                            .scaledToFit()
                             .frame(maxHeight: 48)
                             .clipShape(.rect(cornerRadius: 4))
                         if let text = item.extractedText {
@@ -268,7 +268,7 @@ struct ClipboardItemRow: View {
                         Image(nsImage: nsImage)
                             .resizable()
                             .interpolation(.high)
-                            .aspectRatio(contentMode: .fit)
+                            .scaledToFit()
                             .frame(maxHeight: 48)
                             .clipShape(.rect(cornerRadius: 4))
                         Text("SVG")

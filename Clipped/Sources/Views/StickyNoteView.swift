@@ -154,7 +154,7 @@ struct StickyNoteView: View {
             if let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
-                    .aspectRatio(contentMode: .fit)
+                    .scaledToFit()
                     .clipShape(.rect(cornerRadius: 6))
             }
 
@@ -164,7 +164,7 @@ struct StickyNoteView: View {
                     Image(nsImage: nsImage)
                         .resizable()
                         .interpolation(.high)
-                        .aspectRatio(contentMode: .fit)
+                        .scaledToFit()
                         .frame(maxWidth: .infinity)
                         .clipShape(.rect(cornerRadius: 6))
                     if let markup = String(data: data, encoding: .utf8) {
