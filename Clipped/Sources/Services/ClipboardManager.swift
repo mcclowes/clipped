@@ -279,11 +279,7 @@ final class ClipboardManager {
             item.isSensitive = true
         }
 
-        // Bound the secret scan — a multi-megabyte copy shouldn't run regexes over its full length.
-        if let text = item.plainText, SecretDetector.containsSecret(String(text.prefix(100_000))) {
-            item.containsSecret = true
-            applySecretRetentionPolicy(to: item)
-        }
+        let secretPendingRemoval = applySecretRetentionPolicy(to: item)
 
         guard history.insert(item) else { return }
 
@@ -291,8 +287,6 @@ final class ClipboardManager {
         // for a separate timer, since an idle clipboard has nothing to show anyway.
         history.trimExpiredItems()
 
-        let secretPendingRemoval = item.containsSecret
-            && settingsManager?.secretHandling == .treatLikePasswords
         if policy.pendingRemoval || secretPendingRemoval {
             scheduleSecureAutoRemoval(itemID: item.id, timeout: policy.secureTimeout)
         }
@@ -310,10 +304,10 @@ final class ClipboardManager {
         }
     }
 
-    private func applySecretRetentionPolicy(to item: ClipboardItem) {
-        if settingsManager?.secretHandling == .treatLikePasswords {
-            item.isSensitive = true
-        }
+    private func applySecretRetentionPolicy(to item: ClipboardItem) -> Bool {
+        guard item.containsSecret, settingsManager?.secretHandling == .treatLikePasswords else { return false }
+        item.isSensitive = true
+        return true
     }
 
     /// How long a secure-mode item survives before eviction. Injected so tests can drive the
@@ -398,8 +392,7 @@ final class ClipboardManager {
                 // masked in the UI and kept out of typeahead search.
                 if SecretDetector.containsSecret(text) {
                     found.containsSecret = true
-                    applySecretRetentionPolicy(to: found)
-                    if settingsManager?.secretHandling == .treatLikePasswords {
+                    if applySecretRetentionPolicy(to: found) {
                         scheduleSecureAutoRemoval(
                             itemID: found.id,
                             timeout: settingsManager?.secureTimeout ?? SettingsManager.defaultSecureTimeout
@@ -564,18 +557,30 @@ final class ClipboardManager {
     /// existing item to move to the top. The monitor's own write suppression means we
     /// must insert into history explicitly.
     func copyText(_ text: String) {
-        monitor.write { pasteboard in
-            pasteboard.clearContents()
-            pasteboard.setString(text, forType: .string)
-        }
-
         let item = ClipboardItem(content: .text(text), contentType: .plainText)
-        history.insert(item)
-        history.trimToMaxSize()
-        history.saveHistory()
+        performExplicitSecretAction(for: item, reason: "Copy hidden clipboard content") { [weak self] in
+            guard let self else { return }
+            monitor.write { pasteboard in
+                pasteboard.clearContents()
+                pasteboard.setString(text, forType: .string)
+            }
 
-        if settingsManager?.playSoundOnCopy ?? true {
-            NSSound(named: "Pop")?.play()
+            let secretPendingRemoval = applySecretRetentionPolicy(to: item)
+            if history.insert(item) {
+                history.trimToMaxSize()
+                if secretPendingRemoval {
+                    scheduleSecureAutoRemoval(
+                        itemID: item.id,
+                        timeout: settingsManager?.secureTimeout ?? SettingsManager.defaultSecureTimeout
+                    )
+                } else {
+                    history.saveHistory()
+                }
+            }
+
+            if settingsManager?.playSoundOnCopy ?? true {
+                NSSound(named: "Pop")?.play()
+            }
         }
     }
 

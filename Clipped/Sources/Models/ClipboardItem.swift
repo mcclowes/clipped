@@ -538,6 +538,8 @@ enum DeveloperContentDetector {
 @MainActor
 @Observable
 final class ClipboardItem: Identifiable {
+    private static let maxSecretScanCharacters = 100_000
+
     let id: UUID
     var content: ClipboardContent
     let contentType: ContentType
@@ -664,6 +666,9 @@ final class ClipboardItem: Identifiable {
         self.containsSecret = containsSecret
         self.isDeveloperContent = isDeveloperContent
         self.detectedCategories = detectedCategories
+        if !containsSecret, let text = plainText {
+            self.containsSecret = SecretDetector.containsSecret(String(text.prefix(Self.maxSecretScanCharacters)))
+        }
     }
 }
 

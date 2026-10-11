@@ -179,6 +179,104 @@ struct IntegrationTests {
         #expect(saved.count == 1)
     }
 
+    @Test("Copying generated secret text preserves classification in masked history", .bug(id: 114))
+    func generatedSecretIsClassified() async {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .maskOnly
+
+        manager.copyText(detectedSecret)
+        await manager.flushPendingSaves()
+
+        #expect(pasteboard.string(forType: .string) == detectedSecret)
+        #expect(manager.items.first?.containsSecret == true)
+        #expect(manager.items.first?.isSensitive == false)
+        let saved = await store.savedEntries
+        #expect(saved.count == 1)
+        #expect(saved.first?.containsSecret == true)
+    }
+
+    @Test("Authentication denial leaves generated secret text off the clipboard and history", .bug(id: 114))
+    func generatedSecretAuthenticationDenied() {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        capture("Previous clipboard", on: pasteboard)
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+
+        manager.copyText(detectedSecret)
+
+        #expect(authenticationRequests == 1)
+        #expect(pasteboard.string(forType: .string) == "Previous clipboard")
+        #expect(manager.items.isEmpty)
+    }
+
+    @Test("Generated secret copies wait for authentication approval", .bug(id: 114))
+    func generatedSecretAuthenticationApproved() async throws {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .requireAuthentication
+        capture("Previous clipboard", on: pasteboard)
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        manager.authenticateSecretAccess = { _, completion in pendingApproval = completion }
+
+        manager.copyText(detectedSecret)
+        #expect(pasteboard.string(forType: .string) == "Previous clipboard")
+        #expect(manager.items.isEmpty)
+        let approve = try #require(pendingApproval)
+        approve(true)
+        await manager.flushPendingSaves()
+
+        #expect(pasteboard.string(forType: .string) == detectedSecret)
+        #expect(manager.items.first?.containsSecret == true)
+        let saved = await store.savedEntries
+        #expect(saved.count == 1)
+        #expect(saved.first?.containsSecret == true)
+    }
+
+    @Test("Ordinary generated text copies without authentication", .bug(id: 114))
+    func ordinaryGeneratedTextCopies() async {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .requireAuthentication
+        var authenticationRequests = 0
+        manager.authenticateSecretAccess = { _, completion in
+            authenticationRequests += 1
+            completion(false)
+        }
+
+        manager.copyText("A normal summary")
+        await manager.flushPendingSaves()
+
+        #expect(authenticationRequests == 0)
+        #expect(pasteboard.string(forType: .string) == "A normal summary")
+        #expect(manager.items.first?.containsSecret == false)
+        let saved = await store.savedEntries
+        #expect(saved.count == 1)
+    }
+
+    @Test("Generated secrets follow memory-only retention and expire", .bug(id: 114), arguments: [false, true])
+    func generatedSecretExpires(pinBeforeExpiry: Bool) async throws {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.secretHandling = .treatLikePasswords
+        manager.secureRemovalDelay = { _ in .zero }
+
+        manager.copyText(detectedSecret)
+
+        #expect(pasteboard.string(forType: .string) == detectedSecret)
+        #expect(manager.items.first?.containsSecret == true)
+        #expect(manager.items.first?.isSensitive == true)
+        if pinBeforeExpiry {
+            try manager.togglePin(#require(manager.items.first))
+        }
+        await manager.flushPendingSaves()
+        let saved = await store.savedEntries
+        #expect(saved.isEmpty)
+        await manager.awaitPendingSecureRemovals()
+        #expect(manager.items.isEmpty)
+        #expect(manager.pinnedItems.isEmpty)
+    }
+
     @Test("Treat-like-passwords secrets stay memory-only and expire")
     func passwordPolicySecretExpires() async {
         let (manager, pasteboard, store, settings) = makeRig()

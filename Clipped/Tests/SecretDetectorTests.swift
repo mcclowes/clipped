@@ -1,7 +1,36 @@
 @testable import Clipped
+import Foundation
 import Testing
 
 struct SecretDetectorTests {
+    @MainActor
+    @Test("New text-bearing clipboard items classify secrets", .bug(id: 114))
+    func newItemsClassifySecrets() throws {
+        let secret = Self.token("sk_", "test_EXAMPLEabcdefghij0123456789")
+        let url = try #require(URL(string: "https://example.com/?key=" + secret))
+        let examples: [(ClipboardContent, ContentType)] = [
+            (.text(secret), .plainText),
+            (.richText(Data(), secret), .richText),
+            (.url(url), .url),
+            (.svg(Data(("<svg><text>" + secret + "</text></svg>").utf8), .zero), .image),
+        ]
+
+        for (content, type) in examples {
+            let item = ClipboardItem(content: content, contentType: type)
+            #expect(item.containsSecret)
+        }
+    }
+
+    @MainActor
+    @Test("Item construction preserves explicit secret flags and ordinary text", .bug(id: 114))
+    func itemClassificationPreservesFlags() {
+        let flagged = ClipboardItem(content: .image(Data(), .zero), contentType: .image, containsSecret: true)
+        let ordinary = ClipboardItem(content: .text("A normal summary"), contentType: .plainText)
+
+        #expect(flagged.containsSecret)
+        #expect(ordinary.containsSecret == false)
+    }
+
     /// Fixtures are assembled at runtime via concatenation so the literal source bytes
     /// never contain a full secret-looking token. This keeps GitHub push-protection happy
     /// while still giving the detector a string that matches its regexes.
