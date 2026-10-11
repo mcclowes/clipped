@@ -96,33 +96,3 @@ struct KeychainKeyStore: KeychainKeyStoring {
         ]
     }
 }
-
-/// In-memory store used by tests so they don't touch the real Keychain.
-final class InMemoryKeyStore: KeychainKeyStoring, @unchecked Sendable {
-    private let lock = NSLock()
-    private var key: SymmetricKey?
-
-    init(initialKey: SymmetricKey? = nil) {
-        key = initialKey
-    }
-
-    func loadKey() throws -> SymmetricKey? {
-        lock.lock()
-        defer { lock.unlock() }
-        return key
-    }
-
-    func generateAndStoreKey() throws -> SymmetricKey {
-        lock.lock()
-        defer { lock.unlock() }
-        let newKey = SymmetricKey(size: .bits256)
-        key = newKey
-        return newKey
-    }
-
-    func deleteKey() throws {
-        lock.lock()
-        defer { lock.unlock() }
-        key = nil
-    }
-}

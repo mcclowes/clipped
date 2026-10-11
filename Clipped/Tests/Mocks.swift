@@ -1,11 +1,42 @@
 import AppKit
 import Carbon
 @testable import Clipped
+import CryptoKit
 import Foundation
 import ImageIO
 import class LinkPresentation.LPLinkMetadata
 import ServiceManagement
 import UniformTypeIdentifiers
+
+/// Test key store; every access to its symmetric key is protected by the lock.
+final class InMemoryKeyStore: KeychainKeyStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var key: SymmetricKey?
+
+    init(initialKey: SymmetricKey? = nil) {
+        key = initialKey
+    }
+
+    func loadKey() throws -> SymmetricKey? {
+        lock.lock()
+        defer { lock.unlock() }
+        return key
+    }
+
+    func generateAndStoreKey() throws -> SymmetricKey {
+        lock.lock()
+        defer { lock.unlock() }
+        let newKey = SymmetricKey(size: .bits256)
+        key = newKey
+        return newKey
+    }
+
+    func deleteKey() throws {
+        lock.lock()
+        defer { lock.unlock() }
+        key = nil
+    }
+}
 
 @MainActor
 final class MockKeyEventMonitor {
