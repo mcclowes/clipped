@@ -8,6 +8,45 @@ import class LinkPresentation.LPLinkMetadata
 import ServiceManagement
 import UniformTypeIdentifiers
 
+@MainActor
+final class MockPasteBackApplication: PasteBackApplication {
+    let bundleIdentifier: String?
+    let processIdentifier: pid_t
+    var isTerminated = false
+    var activationSucceeds = true
+    var onActivate: (() -> Void)?
+    private(set) var activationCount = 0
+
+    init(bundleIdentifier: String = "com.example.editor", processIdentifier: pid_t = 123) {
+        self.bundleIdentifier = bundleIdentifier
+        self.processIdentifier = processIdentifier
+    }
+
+    func activateForPaste() -> Bool {
+        activationCount += 1
+        onActivate?()
+        return activationSucceeds
+    }
+}
+
+@MainActor
+final class MockPasteBackEnvironment: PasteBackEnvironment {
+    var frontmostApplication: (any PasteBackApplication)?
+    var isSecureInputEnabled = false
+    var onWait: (() throws -> Void)?
+    private(set) var waitCount = 0
+    private(set) var pastedProcessIDs: [pid_t?] = []
+
+    func waitForActivation() async throws {
+        waitCount += 1
+        try onWait?()
+    }
+
+    func postPaste() {
+        pastedProcessIDs.append(frontmostApplication?.processIdentifier)
+    }
+}
+
 /// Test key store; every access to its symmetric key is protected by the lock.
 final class InMemoryKeyStore: KeychainKeyStoring, @unchecked Sendable {
     private let lock = NSLock()

@@ -160,10 +160,8 @@ struct ClipboardItemRow: View {
         }
     }
 
-    /// Dismiss the panel so focus can return to the previously-active app, then copy and
-    /// paste into it. The manager reactivates that app before synthesising Cmd+V.
+    /// Skip the copy-toast delay; the manager closes the panel before returning focus and pasting.
     private func pasteDirectly(asPlainText: Bool = false) {
-        onCopy?()
         manager.pasteToActiveApp(item, asPlainText: asPlainText)
     }
 

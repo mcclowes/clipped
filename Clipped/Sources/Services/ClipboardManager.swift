@@ -46,6 +46,12 @@ final class ClipboardManager {
         await ImageTextExtractor.extractText(from: data)
     }
 
+    @ObservationIgnored
+    var pasteBackEnvironment: any PasteBackEnvironment = WorkspacePasteBackEnvironment()
+
+    @ObservationIgnored
+    var dismissPanelForPaste: (() -> Void)?
+
     /// Injectable authentication seam so secret-access behavior can be tested without showing
     /// a system prompt. The default uses the Mac's configured owner-authentication policy.
     typealias SecretAccessAuthenticator = (
@@ -74,10 +80,10 @@ final class ClipboardManager {
     /// so the panel can read it synchronously instead of racing `NSEvent.modifierFlags`.
     var openedWithOption = false
 
-    /// The app that was frontmost when the panel opened. Paste actions reactivate it before
+    /// The app that was frontmost when the panel or history opened. Paste actions reactivate it before
     /// synthesising Cmd+V, so the keystroke lands in the user's app rather than in Clipped
     /// (which had to activate itself to take keyboard focus for the search field).
-    private(set) var previousActiveApp: NSRunningApplication?
+    private(set) var previousActiveApp: (any PasteBackApplication)?
 
     // MARK: - Forwarded history API (keeps existing view/test call sites working)
 
@@ -406,8 +412,6 @@ final class ClipboardManager {
 
     // MARK: - Pasteboard-writing actions
 
-    private static let vKeyCode: UInt16 = 0x09
-
     func copyToClipboard(
         _ item: ClipboardItem,
         asPlainText: Bool = false,
@@ -614,55 +618,46 @@ final class ClipboardManager {
         }
     }
 
-    /// Snapshot the frontmost app just before the panel activates Clipped, so paste-back has a
-    /// target to return focus to. Ignores Clipped itself.
+    /// Capture before presenting clipboard UI. Preserve the target when moving between Clipped windows.
     func captureFrontmostApp() {
-        guard let frontmost = NSWorkspace.shared.frontmostApplication,
-              frontmost.bundleIdentifier != Bundle.main.bundleIdentifier
-        else { return }
-        previousActiveApp = frontmost
+        guard let frontmost = pasteBackEnvironment.frontmostApplication else {
+            previousActiveApp = nil
+            return
+        }
+        guard frontmost.bundleIdentifier != Bundle.main.bundleIdentifier else { return }
+        previousActiveApp = frontmost.isTerminated ? nil : frontmost
     }
 
-    func pasteMatchingStyle(_ item: ClipboardItem) {
+    @discardableResult
+    func pasteMatchingStyle(_ item: ClipboardItem) -> Task<Void, Never>? {
         pasteToActiveApp(item, asPlainText: true)
     }
 
-    /// Copy `item`, return focus to the app that was active before the panel opened, then
-    /// synthesise Cmd+V there. Without the reactivation the keystroke pastes into Clipped itself.
-    func pasteToActiveApp(_ item: ClipboardItem, asPlainText: Bool = false) {
+    private static let pasteActivationCheckLimit = 25
+
+    /// Copy, dismiss the panel, and paste only after the captured app regains focus.
+    @discardableResult
+    func pasteToActiveApp(_ item: ClipboardItem, asPlainText: Bool = false) -> Task<Void, Never>? {
         let target = previousActiveApp
+        let environment = pasteBackEnvironment
         // Pasting remains the frictionless clipboard workflow in every secret-handling mode.
         writeToClipboard(item, asPlainText: asPlainText)
-        Task {
-            target?.activate()
-            try? await Task.sleep(for: .milliseconds(120))
-            // Only paste if the intended app actually regained focus (and secure input is off).
-            guard !IsSecureEventInputEnabled() else { return }
-            if let target,
-               NSWorkspace.shared.frontmostApplication?.processIdentifier != target.processIdentifier
-            {
+        dismissPanelForPaste?()
+        guard let target, !target.isTerminated else { return nil }
+        return Task {
+            guard !Task.isCancelled, !environment.isSecureInputEnabled, target.activateForPaste() else { return }
+            for _ in 0..<Self.pasteActivationCheckLimit {
+                do {
+                    try await environment.waitForActivation()
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, !target.isTerminated, !environment.isSecureInputEnabled else { return }
+                guard environment.frontmostApplication?.processIdentifier == target.processIdentifier else { continue }
+                environment.postPaste()
                 return
             }
-            simulatePaste()
         }
-    }
-
-    func simulatePaste() {
-        // Don't inject keystrokes when secure input is active (e.g. password dialogs)
-        if IsSecureEventInputEnabled() {
-            return
-        }
-
-        let source = CGEventSource(stateID: .hidSystemState)
-
-        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: true)
-        keyDown?.flags = .maskCommand
-
-        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: Self.vKeyCode, keyDown: false)
-        keyUp?.flags = .maskCommand
-
-        keyDown?.post(tap: .cghidEventTap)
-        keyUp?.post(tap: .cghidEventTap)
     }
 
     func copyAsMarkdown(_ item: ClipboardItem) {
@@ -806,6 +801,56 @@ final class ClipboardManager {
         item.originalContent = nil
         item.mutationsApplied = []
         history.saveHistory()
+    }
+}
+
+@MainActor
+protocol PasteBackApplication: AnyObject {
+    var bundleIdentifier: String? { get }
+    var processIdentifier: pid_t { get }
+    var isTerminated: Bool { get }
+    @discardableResult func activateForPaste() -> Bool
+}
+
+extension NSRunningApplication: PasteBackApplication {
+    func activateForPaste() -> Bool {
+        NSApp.yieldActivation(to: self)
+        return activate(from: .current, options: [])
+    }
+}
+
+@MainActor
+protocol PasteBackEnvironment {
+    var frontmostApplication: (any PasteBackApplication)? { get }
+    var isSecureInputEnabled: Bool { get }
+    func waitForActivation() async throws
+    func postPaste()
+}
+
+@MainActor
+struct WorkspacePasteBackEnvironment: PasteBackEnvironment {
+    var frontmostApplication: (any PasteBackApplication)? {
+        NSWorkspace.shared.frontmostApplication
+    }
+
+    var isSecureInputEnabled: Bool {
+        IsSecureEventInputEnabled()
+    }
+
+    func waitForActivation() async throws {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+
+    func postPaste() {
+        guard !isSecureInputEnabled else { return }
+        let source = CGEventSource(stateID: .hidSystemState)
+        let pasteKeyCode: UInt16 = 0x09
+        let keyDown = CGEvent(keyboardEventSource: source, virtualKey: pasteKeyCode, keyDown: true)
+        keyDown?.flags = .maskCommand
+        let keyUp = CGEvent(keyboardEventSource: source, virtualKey: pasteKeyCode, keyDown: false)
+        keyUp?.flags = .maskCommand
+        keyDown?.post(tap: .cghidEventTap)
+        keyUp?.post(tap: .cghidEventTap)
     }
 }
 

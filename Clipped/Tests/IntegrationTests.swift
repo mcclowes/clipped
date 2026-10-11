@@ -1,7 +1,41 @@
 import AppKit
 @testable import Clipped
 import Foundation
+import SwiftUI
 import Testing
+
+enum PasteBackBlock: CaseIterable, Sendable {
+    case focusNotRestored
+    case secureInput
+    case secureInputDuringHandoff
+    case activationDenied
+    case terminated
+    case terminatedDuringHandoff
+    case waitInterrupted
+    case canceled
+
+    @MainActor
+    func configure(environment: MockPasteBackEnvironment, editor: MockPasteBackApplication) {
+        switch self {
+        case .focusNotRestored:
+            environment.frontmostApplication = MockPasteBackApplication(processIdentifier: 456)
+        case .secureInput:
+            environment.isSecureInputEnabled = true
+        case .secureInputDuringHandoff:
+            environment.onWait = { [weak environment] in environment?.isSecureInputEnabled = true }
+        case .activationDenied:
+            editor.activationSucceeds = false
+        case .terminated:
+            editor.isTerminated = true
+        case .terminatedDuringHandoff:
+            environment.onWait = { [weak editor] in editor?.isTerminated = true }
+        case .waitInterrupted:
+            environment.onWait = { throw CancellationError() }
+        case .canceled:
+            break
+        }
+    }
+}
 
 /// Multi-service integration tests. Wires the real `ClipboardManager`,
 /// `PasteboardMonitor`, `ClipboardHistory`, and mutation service together with
@@ -28,6 +62,7 @@ struct IntegrationTests {
         // swiftlint:enable large_tuple
         let pasteboard = MockPasteboard()
         let manager = ClipboardManager(pasteboard: pasteboard)
+        manager.pasteBackEnvironment = MockPasteBackEnvironment()
         manager.stopMonitoring() // We drive `monitor.check()` deterministically.
         let store = MockHistoryStore()
         let settings = MockSettingsManager()
@@ -293,9 +328,149 @@ struct IntegrationTests {
         #expect(manager.items.isEmpty)
     }
 
+    @Test("A missing paste target copies without sending a keystroke", .bug(id: 116))
+    func pasteWithoutTarget() async {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let environment = MockPasteBackEnvironment()
+        manager.pasteBackEnvironment = environment
+        let item = ClipboardItem(content: .text("copy only"), contentType: .plainText)
+
+        await manager.pasteToActiveApp(item)?.value
+
+        #expect(pasteboard.string(forType: .string) == "copy only")
+        #expect(environment.pastedProcessIDs.isEmpty)
+        #expect(environment.waitCount == 0)
+    }
+
+    @Test("Opening history directly pastes plain text into the previously active app", .bug(id: 116))
+    func historyWindowPasteTarget() async throws {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let environment = MockPasteBackEnvironment()
+        let editor = MockPasteBackApplication()
+        let clipped = try MockPasteBackApplication(
+            bundleIdentifier: #require(Bundle.main.bundleIdentifier), processIdentifier: 456
+        )
+        environment.frontmostApplication = editor
+        manager.pasteBackEnvironment = environment
+        editor.onActivate = { [weak editor, weak environment] in
+            environment?.frontmostApplication = editor
+        }
+        var presentations = 0
+        let presenter = HistoryWindowPresenter { _ in
+            presentations += 1
+            environment.frontmostApplication = clipped
+        }
+        let controller = StatusBarController(history: presenter)
+        controller.clipboardManager = manager
+        let item = ClipboardItem(content: .richText(Data([1, 2, 3]), "Styled text"), contentType: .richText)
+
+        controller.openHistoryWindow(contentView: EmptyView())
+        await manager.pasteMatchingStyle(item)?.value
+
+        #expect(presentations == 1)
+        #expect(manager.previousActiveApp?.processIdentifier == editor.processIdentifier)
+        #expect(editor.activationCount == 1)
+        #expect(environment.pastedProcessIDs == [editor.processIdentifier])
+        #expect(pasteboard.string(forType: .string) == "Styled text")
+        #expect(pasteboard.data(forType: .rtf) == nil)
+    }
+
+    @Test("Paste dismisses the panel before waiting for the intended app to regain focus", .bug(id: 116))
+    func pasteWaitsForFocus() async throws {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let environment = MockPasteBackEnvironment()
+        let editor = MockPasteBackApplication()
+        let clipped = try MockPasteBackApplication(
+            bundleIdentifier: #require(Bundle.main.bundleIdentifier), processIdentifier: 456
+        )
+        environment.frontmostApplication = editor
+        manager.pasteBackEnvironment = environment
+        manager.captureFrontmostApp()
+        environment.frontmostApplication = clipped
+        var events: [String] = []
+        manager.dismissPanelForPaste = { events.append("dismiss") }
+        editor.onActivate = { events.append("activate") }
+        environment.onWait = { [weak editor, weak environment] in
+            if environment?.waitCount == 3 {
+                environment?.frontmostApplication = editor
+            }
+        }
+        let item = ClipboardItem(content: .text("paste after focus"), contentType: .plainText)
+
+        await manager.pasteToActiveApp(item)?.value
+
+        #expect(events == ["dismiss", "activate"])
+        #expect(environment.waitCount == 3)
+        #expect(environment.pastedProcessIDs == [editor.processIdentifier])
+        #expect(pasteboard.string(forType: .string) == "paste after focus")
+    }
+
+    @Test("Target capture preserves panel-to-history navigation and refreshes external apps", .bug(id: 116))
+    func pasteTargetCaptureTransitions() throws {
+        let (manager, _, _, _) = makeRig(persistHistory: false)
+        let environment = MockPasteBackEnvironment()
+        let firstEditor = MockPasteBackApplication()
+        let nextEditor = MockPasteBackApplication(processIdentifier: 789)
+        let clipped = try MockPasteBackApplication(
+            bundleIdentifier: #require(Bundle.main.bundleIdentifier), processIdentifier: 456
+        )
+        manager.pasteBackEnvironment = environment
+
+        environment.frontmostApplication = firstEditor
+        manager.captureFrontmostApp()
+        environment.frontmostApplication = clipped
+        manager.captureFrontmostApp()
+        #expect(manager.previousActiveApp?.processIdentifier == firstEditor.processIdentifier)
+
+        environment.frontmostApplication = nextEditor
+        manager.captureFrontmostApp()
+        #expect(manager.previousActiveApp?.processIdentifier == nextEditor.processIdentifier)
+
+        environment.frontmostApplication = nil
+        manager.captureFrontmostApp()
+        #expect(manager.previousActiveApp == nil)
+    }
+
+    @Test(
+        "Blocked paste-back keeps the clipboard without sending keys",
+        .bug(id: 116),
+        arguments: PasteBackBlock.allCases
+    )
+    func blockedPasteBack(_ block: PasteBackBlock) async {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let environment = MockPasteBackEnvironment()
+        let editor = MockPasteBackApplication()
+        environment.frontmostApplication = editor
+        manager.pasteBackEnvironment = environment
+        manager.captureFrontmostApp()
+
+        block.configure(environment: environment, editor: editor)
+
+        let item = ClipboardItem(content: .text("copy despite blocked paste"), contentType: .plainText)
+        let task = manager.pasteToActiveApp(item)
+        if block == .canceled {
+            task?.cancel()
+        }
+        await task?.value
+
+        #expect(environment.pastedProcessIDs.isEmpty)
+        #expect(pasteboard.string(forType: .string) == "copy despite blocked paste")
+        if block == .focusNotRestored {
+            #expect(environment.waitCount > 1)
+        }
+        if block == .canceled {
+            #expect(editor.activationCount == 0)
+        }
+    }
+
     @Test("Authentication mode gates copy but leaves paste frictionless")
-    func authenticationModeCopyAndPaste() {
+    func authenticationModeCopyAndPaste() async {
         let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        let environment = MockPasteBackEnvironment()
+        let editor = MockPasteBackApplication()
+        environment.frontmostApplication = editor
+        manager.pasteBackEnvironment = environment
+        manager.captureFrontmostApp()
         settings.secretHandling = .requireAuthentication
         let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
         item.containsSecret = true
@@ -309,9 +484,10 @@ struct IntegrationTests {
         #expect(authenticationRequests == 1)
         #expect(pasteboard.string(forType: .string) == nil)
 
-        manager.pasteToActiveApp(item)
+        await manager.pasteToActiveApp(item)?.value
         #expect(authenticationRequests == 1)
         #expect(pasteboard.string(forType: .string) == detectedSecret)
+        #expect(environment.pastedProcessIDs == [editor.processIdentifier])
     }
 
     @Test("Reveal follows the selected secret policy")

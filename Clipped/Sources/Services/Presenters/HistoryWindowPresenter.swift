@@ -10,6 +10,14 @@ final class HistoryWindowPresenter {
     )
 
     private var historyWindow: NSWindow?
+    private let presentWindow: (NSWindow) -> Void
+
+    init(presentWindow: @escaping (NSWindow) -> Void = { window in
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }) {
+        self.presentWindow = presentWindow
+    }
 
     /// When `true`, the history window sets `NSWindow.sharingType = .none` so clipboard
     /// contents stay out of screen captures, recordings, and screen-sharing sessions.
@@ -21,8 +29,7 @@ final class HistoryWindowPresenter {
     /// presenter before calling this method (mirroring the original `openHistoryWindow` behaviour).
     func open(contentView: some View) {
         if let existing = historyWindow, existing.isVisible {
-            existing.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
+            presentWindow(existing)
             return
         }
 
@@ -36,8 +43,7 @@ final class HistoryWindowPresenter {
         window.center()
         window.isReleasedWhenClosed = false
         window.sharingType = hideFromScreenSharing ? .none : .readOnly
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        presentWindow(window)
         historyWindow = window
     }
 }

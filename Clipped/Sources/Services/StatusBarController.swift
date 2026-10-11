@@ -17,7 +17,11 @@ final class StatusBarController {
 
     /// Injected by `AppDelegate` at construction time so the option-click handler can
     /// write to `openedWithOption` without reaching through a global.
-    weak var clipboardManager: ClipboardManager?
+    weak var clipboardManager: ClipboardManager? {
+        didSet {
+            clipboardManager?.dismissPanelForPaste = { [weak self] in self?.close() }
+        }
+    }
 
     /// When `true`, app-owned windows that surface clipboard contents set
     /// `NSWindow.sharingType = .none` so they stay out of screen captures, recordings,
@@ -37,11 +41,12 @@ final class StatusBarController {
     private let panel: ClipboardPanelPresenter
     private let onboarding = OnboardingWindowPresenter()
     private let settings = SettingsWindowPresenter()
-    private let history = HistoryWindowPresenter()
+    private let history: HistoryWindowPresenter
 
     // MARK: - Init
 
-    init() {
+    init(history: HistoryWindowPresenter = HistoryWindowPresenter()) {
+        self.history = history
         panel = ClipboardPanelPresenter(panelSize: Self.panelSize)
 
         statusBarItem.onClick = { [weak self] optionHeld in
@@ -68,10 +73,9 @@ final class StatusBarController {
 
     func show() {
         guard let button = statusBarItem.button else { return }
-        // Capture the target app *before* the panel activates Clipped, so paste-back can
-        // return focus to it.
-        clipboardManager?.captureFrontmostApp()
-        panel.show(button: button, statusBarScreen: statusBarItem.buttonScreen)
+        presentClipboardContent {
+            panel.show(button: button, statusBarScreen: statusBarItem.buttonScreen)
+        }
     }
 
     func close() {
@@ -110,7 +114,14 @@ final class StatusBarController {
     // MARK: - History window
 
     func openHistoryWindow(contentView: some View) {
-        panel.close()
-        history.open(contentView: contentView)
+        presentClipboardContent {
+            panel.close()
+            history.open(contentView: contentView)
+        }
+    }
+
+    private func presentClipboardContent(_ present: () -> Void) {
+        clipboardManager?.captureFrontmostApp()
+        present()
     }
 }
