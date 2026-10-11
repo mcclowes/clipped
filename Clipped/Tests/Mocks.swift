@@ -390,6 +390,20 @@ final class MockScreenshotWatcher: ScreenshotWatching {
     }
 }
 
+actor MockImageTextExtractor {
+    private(set) var requestedImages: [Data] = []
+    let text: String?
+
+    init(text: String? = nil) {
+        self.text = text
+    }
+
+    func extractText(from data: Data) -> String? {
+        requestedImages.append(data)
+        return text
+    }
+}
+
 final class MockLinkMetadataFetcher: LinkMetadataFetching, @unchecked Sendable {
     private let state: State
 

@@ -109,9 +109,9 @@ struct ClipboardHistoryInsertTests {
     @Test("Re-inserting identical content replaces the old entry and moves it to the top")
     func dedupesIdenticalContent() {
         let history = makeHistory()
-        history.insert(textItem("a"))
-        history.insert(textItem("b"))
-        history.insert(textItem("a"))
+        #expect(history.insert(textItem("a")))
+        #expect(history.insert(textItem("b")))
+        #expect(history.insert(textItem("a")))
         #expect(history.items.map(\.preview) == ["a", "b"])
     }
 
@@ -122,7 +122,7 @@ struct ClipboardHistoryInsertTests {
         pinned.isPinned = true
         history.pinnedItems = [pinned]
 
-        history.insert(textItem("shared"))
+        #expect(history.insert(textItem("shared")) == false)
 
         #expect(history.items.isEmpty)
         #expect(history.pinnedItems.count == 1)

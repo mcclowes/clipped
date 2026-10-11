@@ -42,6 +42,9 @@ final class ClipboardManager {
 
     var mutationService: any ClipboardMutating = ClipboardMutationService()
     var linkMetadataFetcher: any LinkMetadataFetching = LinkMetadataFetcher.shared
+    var extractImageText: @Sendable (Data) async -> String? = { data in
+        await ImageTextExtractor.extractText(from: data)
+    }
 
     /// Injectable authentication seam so secret-access behavior can be tested without showing
     /// a system prompt. The default uses the Mac's configured owner-authentication policy.
@@ -282,7 +285,7 @@ final class ClipboardManager {
             applySecretRetentionPolicy(to: item)
         }
 
-        history.insert(item)
+        guard history.insert(item) else { return }
 
         // Each ingest is a natural moment to evict already-expired items — no need
         // for a separate timer, since an idle clipboard has nothing to show anyway.
@@ -345,14 +348,23 @@ final class ClipboardManager {
         }
     }
 
+    private var enrichmentTasks: [UUID: Task<Void, Never>] = [:]
+
+    func awaitPendingEnrichments() async {
+        for task in enrichmentTasks.values {
+            await task.value
+        }
+    }
+
     private func scheduleLinkMetadataFetch(for url: URL, itemID: UUID) {
         // Respect the user's privacy preference — when previews are disabled we never
         // reach out to the remote origin.
         guard settingsManager?.fetchLinkPreviews ?? true else { return }
         let fetcher = linkMetadataFetcher
-        Task { [weak self] in
+        enrichmentTasks[itemID] = Task { [weak self] in
             let metadata = await fetcher.fetchMetadata(for: url)
             guard let self else { return }
+            defer { enrichmentTasks[itemID] = nil }
             // Look up by ID in case the item was replaced/restored after mutation.
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
@@ -369,11 +381,14 @@ final class ClipboardManager {
 
     private func scheduleImageTextExtraction(for itemID: UUID, content: ClipboardContent) {
         guard case let .image(data, _) = content else { return }
-        Task { [weak self] in
+        let extract = extractImageText
+        enrichmentTasks[itemID] = Task { [weak self] in
             await Self.ocrLimiter.acquire()
-            let text = await ImageTextExtractor.extractText(from: data)
+            let text = await extract(data)
             await Self.ocrLimiter.release()
-            guard let self, let text else { return }
+            guard let self else { return }
+            defer { enrichmentTasks[itemID] = nil }
+            guard let text else { return }
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
             {

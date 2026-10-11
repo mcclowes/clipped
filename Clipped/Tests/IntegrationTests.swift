@@ -88,6 +88,67 @@ struct IntegrationTests {
         #expect(manager.items.count == 1)
     }
 
+    @Test("Recopying a pinned URL skips link metadata requests", .bug(id: 115))
+    func pinnedURLSkipsEnrichment() async throws {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let url = try #require(URL(string: "https://example.com/pinned"))
+        let pinned = ClipboardItem(content: .url(url), contentType: .url, isPinned: true)
+        pinned.linkTitle = "Saved title"
+        manager.pinnedItems = [pinned]
+        let fetcher = MockLinkMetadataFetcher()
+        manager.linkMetadataFetcher = fetcher
+
+        capture(url.absoluteString, on: pasteboard)
+        manager.monitor.check()
+        await manager.awaitPendingEnrichments()
+
+        #expect(await fetcher.fetchCallCount == 0)
+        #expect(manager.items.isEmpty)
+        #expect(manager.pinnedItems.map(\.id) == [pinned.id])
+        #expect(pinned.linkTitle == "Saved title")
+    }
+
+    @Test("Accepted URLs still receive link metadata", .bug(id: 115))
+    func acceptedURLReceivesEnrichment() async throws {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let url = try #require(URL(string: "https://example.com/accepted"))
+        let fetcher = MockLinkMetadataFetcher()
+        await fetcher.setMetadata(LinkMetadata(title: "Local fixture"), for: url)
+        manager.linkMetadataFetcher = fetcher
+
+        capture(url.absoluteString, on: pasteboard)
+        manager.monitor.check()
+        await manager.awaitPendingEnrichments()
+
+        #expect(await fetcher.fetchCallCount == 1)
+        #expect(manager.items.count == 1)
+        #expect(manager.items.first?.linkTitle == "Local fixture")
+    }
+
+    @Test("Accepted images receive OCR but a pinned recopy skips extraction", .bug(id: 115))
+    func pinnedImageSkipsEnrichment() async throws {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let extractor = MockImageTextExtractor(text: "Local OCR result")
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        pasteboard.stageExternalWrite(types: [.png], data: [.png: data])
+        manager.monitor.check()
+        await manager.awaitPendingEnrichments()
+        let pinned = try #require(manager.items.first)
+        #expect(pinned.extractedText == "Local OCR result")
+        manager.togglePin(pinned)
+
+        pasteboard.stageExternalWrite(types: [.png], data: [.png: data])
+        manager.monitor.check()
+        await manager.awaitPendingEnrichments()
+
+        #expect(await extractor.requestedImages == [data])
+        #expect(manager.items.isEmpty)
+        #expect(manager.pinnedItems.map(\.id) == [pinned.id])
+        #expect(pinned.extractedText == "Local OCR result")
+    }
+
     // MARK: - Settings <-> ingestion
 
     @Test("persistAcrossReboots=false captures in memory but never saves")

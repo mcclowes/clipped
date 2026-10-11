@@ -100,10 +100,11 @@ final class ClipboardHistory {
     // MARK: - Mutation
 
     /// Insert a new item at the top, replacing any existing unpinned item with identical content.
-    func insert(_ item: ClipboardItem) {
+    @discardableResult
+    func insert(_ item: ClipboardItem) -> Bool {
         // Re-copying content that's already pinned shouldn't spawn a duplicate unpinned row.
         if pinnedItems.contains(where: { $0.content == item.content }) {
-            return
+            return false
         }
 
         // Carry the previous copy's enriched metadata (link preview, OCR text) onto the new item
@@ -115,6 +116,7 @@ final class ClipboardHistory {
         }
         items.removeAll { $0.content == item.content }
         items.insert(item, at: 0)
+        return true
     }
 
     func togglePin(_ item: ClipboardItem) {
