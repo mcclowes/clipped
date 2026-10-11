@@ -37,3 +37,6 @@ jobs:
 
       - name: Build and test
         run: make test
+
+      - name: Build Release
+        run: make release
