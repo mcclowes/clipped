@@ -3,6 +3,40 @@ import Foundation
 import Testing
 
 @MainActor
+struct OnboardingPresentationTests {
+    @Test("Presenting onboarding once prevents another launch without completing the wizard", .bug(id: 125))
+    func closingWithoutCompletionDoesNotRepeat() throws {
+        let suite = "OnboardingPresentationTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var presentations = 0
+
+        AppDelegate.presentOnboardingIfNeeded(defaults: defaults) { presentations += 1 }
+        #expect(presentations == 1)
+        #expect(defaults.bool(forKey: "hasLaunchedBefore"))
+        let relaunchedDefaults = try #require(UserDefaults(suiteName: suite))
+        AppDelegate.presentOnboardingIfNeeded(defaults: relaunchedDefaults) { presentations += 1 }
+
+        #expect(presentations == 1)
+        #expect(relaunchedDefaults.bool(forKey: "hasLaunchedBefore"))
+    }
+
+    @Test("Existing first-launch flags skip onboarding", .bug(id: 125))
+    func existingLaunchDoesNotPresent() throws {
+        let suite = "OnboardingPresentationTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(true, forKey: "hasLaunchedBefore")
+        var presentations = 0
+
+        AppDelegate.presentOnboardingIfNeeded(defaults: defaults) { presentations += 1 }
+
+        #expect(presentations == 0)
+        #expect(defaults.bool(forKey: "hasLaunchedBefore"))
+    }
+}
+
+@MainActor
 struct OnboardingSeederTests {
     private func freshDefaults(function: String = #function) -> UserDefaults {
         let suiteName = "OnboardingSeederTests.\(function).\(UUID().uuidString)"

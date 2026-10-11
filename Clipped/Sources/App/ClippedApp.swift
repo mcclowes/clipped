@@ -2,6 +2,12 @@ import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    static func presentOnboardingIfNeeded(defaults: UserDefaults = .standard, present: () -> Void) {
+        guard !defaults.bool(forKey: "hasLaunchedBefore") else { return }
+        present()
+        defaults.set(true, forKey: "hasLaunchedBefore")
+    }
+
     static var isTestHost: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
             NSClassFromString("XCTestCase") != nil
@@ -84,9 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusBar.setup(contentView: panelContent)
 
-        if !UserDefaults.standard.bool(forKey: "hasLaunchedBefore") {
+        Self.presentOnboardingIfNeeded {
             let onboardingContent = OnboardingView {
-                UserDefaults.standard.set(true, forKey: "hasLaunchedBefore")
                 statusBar.closeOnboarding()
                 statusBar.show()
             }
