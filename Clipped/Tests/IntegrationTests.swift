@@ -521,8 +521,8 @@ struct IntegrationTests {
         var completions = 0
         manager.authenticateSecretAccess = { _, completion in pendingApproval = completion }
 
-        manager.exportData(for: item, format: .plainText) { data in
-            exportedData = data
+        manager.prepareFileExport(for: item, format: .plainText) { export in
+            exportedData = export.data()
             completions += 1
         }
         #expect(exportedData == nil)
@@ -565,8 +565,8 @@ struct IntegrationTests {
         var exportedData: Data?
         var completions = 0
 
-        manager.exportData(for: item, format: .plainText) {
-            exportedData = $0
+        manager.prepareFileExport(for: item, format: .plainText) {
+            exportedData = $0.data()
             completions += 1
         }
 
@@ -599,7 +599,7 @@ struct IntegrationTests {
         manager.previewImage = { _ in previewExports += 1 }
 
         manager.exportItems([item])
-        manager.exportData(for: item, format: .plainText) { _ in fileExports += 1 }
+        manager.prepareFileExport(for: item, format: .plainText) { _ in fileExports += 1 }
         manager.openImageInPreview(image)
 
         #expect(authenticationRequests == 3)
@@ -654,7 +654,7 @@ struct IntegrationTests {
         manager.previewImage = { _ in previewExports += 1 }
 
         manager.exportItems([item])
-        manager.exportData(for: item, format: .plainText) { exportedData = $0 }
+        manager.prepareFileExport(for: item, format: .plainText) { exportedData = $0.data() }
         manager.openImageInPreview(image)
 
         #expect(pasteboard.string(forType: .string) == detectedSecret)
@@ -684,7 +684,7 @@ struct IntegrationTests {
         #expect(pasteboard.changeCount == initialChangeCount)
 
         manager.exportItems([ordinary, image])
-        manager.exportData(for: ordinary, format: .markdown) { exportedData = $0 }
+        manager.prepareFileExport(for: ordinary, format: .markdown) { exportedData = $0.data() }
         #expect(pasteboard.string(forType: .string) == "public text")
         #expect(exportedData == Data("public text".utf8))
         #expect(authenticationRequests == 0)
@@ -789,6 +789,35 @@ struct IntegrationTests {
         #expect(manager.items.first?.sourceAppBundleID == "com.example.editor")
         #expect(manager.items.first?.containsSecret == false)
         #expect(await store.savedEntries.count == 1)
+    }
+
+    @Test("An approved file export encodes only when save is confirmed", .bug(id: 111), arguments: [false, true])
+    func fileExportDefersEncoding(_ saveConfirmed: Bool) throws {
+        let (manager, _, _, settings) = makeRig(persistHistory: false)
+        settings.secretHandling = .requireAuthentication
+        let item = ClipboardItem(content: .text(detectedSecret), contentType: .plainText)
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        var prepared: PreparedFileExport?
+        var encodingCount = 0
+        manager.authenticateSecretAccess = { _, completion in pendingApproval = completion }
+        manager.renderExportData = { _, _ in
+            encodingCount += 1
+            return Data("encoded export".utf8)
+        }
+
+        manager.prepareFileExport(for: item, format: .plainText) { prepared = $0 }
+        #expect(prepared == nil)
+        #expect(encodingCount == 0)
+        let authorize = try #require(pendingApproval)
+        authorize(true)
+        let export = try #require(prepared)
+        #expect(export.suggestedFilename.hasSuffix(".txt"))
+        #expect(encodingCount == 0)
+
+        if saveConfirmed {
+            #expect(export.data() == Data("encoded export".utf8))
+        }
+        #expect(encodingCount == (saveConfirmed ? 1 : 0))
     }
 
     @Test("Reveal follows the selected secret policy")

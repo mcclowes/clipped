@@ -66,6 +66,11 @@ final class ClipboardManager {
         )
     }
 
+    @ObservationIgnored
+    var renderExportData: (ClipboardItem, ExportFormat) -> Data? = { item, format in
+        try? FileExporter.data(for: item, format: format)
+    }
+
     /// Injectable authentication seam so secret-access behavior can be tested without showing
     /// a system prompt. The default uses the Mac's configured owner-authentication policy.
     typealias SecretAccessAuthenticator = (
@@ -779,14 +784,18 @@ final class ClipboardManager {
         await applyImageTransform(item, mutation: "Resized \(percent)%") { ImageProcessor.resize($0, scale: scale) }
     }
 
-    /// Bytes for "Save as…", or `nil` when the item can't be represented in `format`.
-    func exportData(
+    /// Authorize "Save as…" before exposing a filename or export bytes.
+    func prepareFileExport(
         for item: ClipboardItem,
         format: ExportFormat,
-        completion: @escaping @MainActor @Sendable (Data?) -> Void
+        completion: @escaping @MainActor @Sendable (PreparedFileExport) -> Void
     ) {
+        let render = renderExportData
         performProtectedRead(for: [item], reason: "Save hidden clipboard content") {
-            completion(try? FileExporter.data(for: item, format: format))
+            completion(PreparedFileExport(
+                suggestedFilename: "\(FileExporter.suggestedBaseName(for: item)).\(format.fileExtension)",
+                encode: { render(item, format) }
+            ))
         }
     }
 
@@ -851,6 +860,21 @@ final class ClipboardManager {
         item.originalContent = nil
         item.mutationsApplied = []
         history.saveHistory()
+    }
+}
+
+@MainActor
+struct PreparedFileExport {
+    let suggestedFilename: String
+    private let encode: () -> Data?
+
+    fileprivate init(suggestedFilename: String, encode: @escaping () -> Data?) {
+        self.suggestedFilename = suggestedFilename
+        self.encode = encode
+    }
+
+    func data() -> Data? {
+        encode()
     }
 }
 

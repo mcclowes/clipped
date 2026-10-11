@@ -508,12 +508,12 @@ struct ClipboardManagerTests {
         #expect(manager.items.count == 1)
     }
 
-    @Test("exportData returns markdown bytes for a text item")
-    func exportDataMarkdown() throws {
+    @Test("An authorized file export returns markdown bytes for a text item")
+    func fileExportMarkdown() throws {
         let (manager, _, _, _) = makeManager()
         let item = ClipboardItem(content: .text("body text"), contentType: .plainText)
         var exportedData: Data?
-        manager.exportData(for: item, format: .markdown) { exportedData = $0 }
+        manager.prepareFileExport(for: item, format: .markdown) { exportedData = $0.data() }
         let data = try #require(exportedData)
         #expect(String(data: data, encoding: .utf8) == "body text")
     }

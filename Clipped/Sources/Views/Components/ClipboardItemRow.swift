@@ -167,18 +167,18 @@ struct ClipboardItemRow: View {
 
     /// Authorize export before deriving the filename or presenting the destination picker.
     private func presentSavePanel(format: ExportFormat) {
-        manager.exportData(for: item, format: format) { data in
-            guard let data else {
-                NSSound.beep()
-                return
-            }
+        manager.prepareFileExport(for: item, format: format) { export in
             let panel = NSSavePanel()
             panel.allowedContentTypes = [format.utType]
             panel.canCreateDirectories = true
             panel.isExtensionHidden = false
-            panel.nameFieldStringValue = "\(FileExporter.suggestedBaseName(for: item)).\(format.fileExtension)"
+            panel.nameFieldStringValue = export.suggestedFilename
             panel.begin { response in
                 guard response == .OK, let url = panel.url else { return }
+                guard let data = export.data() else {
+                    NSSound.beep()
+                    return
+                }
                 do {
                     try data.write(to: url)
                 } catch {
