@@ -22,14 +22,14 @@ Requires **macOS 15.0 (Sequoia)** or later.
 
 1. Launch Clipped — it appears as an icon in your menu bar (no Dock icon).
 2. Copy things as you normally would. Clipped automatically tracks your clipboard.
-3. Press **`⌘⇧V`** to open the Clipped panel from anywhere, or click the menu bar icon.
+3. Press **`⌥C` (Option+C)** to open the Clipped panel from anywhere, or click the menu bar icon. You can change the shortcut in Settings.
 4. Click any item to copy it back to your clipboard.
 
 ## Features
 
 - **Clipboard history** — Automatically tracks what you copy, with configurable history size
 - **Format preservation** — Rich text, URLs, images, and code snippets retain their formatting
-- **Global hotkey** — Press `⌘⇧V` to open Clipped from any app
+- **Global hotkey** — Press `⌥C` (Option+C) to open Clipped from any app
 - **Search & filter** — Find past items by text or filter by content type (text, images, links, etc.)
 - **Pinned items** — Pin frequently used snippets so they always stay at the top
 - **Secure mode** — Automatically skips or auto-expires entries from password managers
@@ -39,17 +39,22 @@ Requires **macOS 15.0 (Sequoia)** or later.
 - **Screenshot capture** — Capture selections, windows, or screens directly to the clipboard, or detect screenshots saved by macOS
 - **Sticky notes** — Pin any item as a floating note on your desktop
 - **Export** — Merge and copy multiple items at once
-- **Persistence** — Optionally keep your history across app restarts
-- **Encrypted at rest** — Clipboard history on disk is encrypted with an authenticated key held in your login Keychain
+- **Persistence** — Off by default; enable "Persist history across reboots" in Settings → General to keep your history across app restarts
+- **Encrypted at rest** — When persistence is enabled, saved history and cached images use authenticated encryption with a key held in your login Keychain
 - **Launch at login** — Start Clipped automatically when you log in
 
 ## Privacy & security
 
-Clipped runs entirely on your Mac. No data is sent anywhere — your clipboard history stays local, stored in `~/Library/Application Support/Clipped/`.
+Clipboard processing and history storage happen on your Mac. Link previews are enabled by default and make requests to copied websites and their preview-image servers. Turn off "Fetch link previews" in the Privacy section of Settings → General to keep copied URLs local.
 
-- **Encrypted at rest** — `history.enc` and cached clipboard images are encrypted with ChaCha20-Poly1305. The 256-bit key is generated on first launch and stored in your login Keychain with `WhenUnlockedThisDeviceOnly`, so it never leaves the device and can't be read while the Mac is locked. Time Machine snapshots, cloud backups, and forensic disk access only ever see ciphertext.
+- **Local history** — Persistence is off by default. When enabled, history is saved in `~/Library/Application Support/Clipped/`.
+- **Encrypted storage** — When persistence is enabled, `history.enc` and cached clipboard images are encrypted with ChaCha20-Poly1305. The 256-bit key is created when encrypted storage is first used and stored in your login Keychain with `WhenUnlockedThisDeviceOnly`, so it never leaves the device and can't be read while the Mac is locked.
 - **Secure mode** — Entries from password managers can be automatically skipped or expired.
-- **No telemetry, no sync** — Clipped never phones home and has no cloud component.
+- **No telemetry, no sync** — Clipped has no telemetry or cloud-sync component. Link previews still make the requests described above.
+
+### Upgrading from plaintext storage
+
+When persisted history is loaded, Clipped migrates older `history.json` files and plaintext image caches to encrypted storage. Existing Time Machine snapshots and other backups taken before the upgrade may still contain plaintext; the upgrade cannot rewrite those copies. If `history.json` cannot be migrated, Clipped keeps it for recovery.
 
 ## Building from source
 

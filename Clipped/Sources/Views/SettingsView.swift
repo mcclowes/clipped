@@ -165,8 +165,9 @@ private struct GeneralSettingsTab: View {
             } header: {
                 Text("Security")
             } footer: {
-                Text("Clipboard history is encrypted at rest with a 256-bit key stored in " +
-                    "your login Keychain. The key never leaves this device.")
+                Text("When persistence is enabled, saved clipboard history and cached images " +
+                    "are encrypted with a 256-bit key stored in your login Keychain. " +
+                    "The key never leaves this device.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
