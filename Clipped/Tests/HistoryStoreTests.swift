@@ -412,7 +412,89 @@ struct HistoryStoreTests {
         await store.clear()
     }
 
+    @Test("Failed image migration preserves the plaintext sidecar", arguments: ["png", "tiff"])
+    func failedImageMigrationPreservesPlaintext(ext: String) async throws {
+        let store = makeStore()
+        defer { try? FileManager.default.removeItem(at: baseDir) }
+        let entry = try prepareBlockedImageMigration(ext: ext)
+        let legacyURL = legacyPlaintextImageURL(id: entry.id, ext: ext)
+
+        _ = await store.load()
+
+        #expect((try? Data(contentsOf: legacyURL)) == Self.onePixelPNG())
+    }
+
+    @Test("A later load retries a failed image migration", arguments: ["png", "tiff"])
+    func retriesFailedImageMigration(ext: String) async throws {
+        let keyStore = InMemoryKeyStore()
+        let store = makeStore(keyStore: keyStore)
+        defer { try? FileManager.default.removeItem(at: baseDir) }
+        let entry = try prepareBlockedImageMigration(ext: ext)
+        let legacyURL = legacyPlaintextImageURL(id: entry.id, ext: ext)
+
+        _ = await store.load()
+        try #require(FileManager.default.fileExists(atPath: historyEncURL().path))
+        try #require(FileManager.default.fileExists(atPath: historyJSONURL().path) == false)
+        try #require(FileManager.default.fileExists(atPath: legacyURL.path))
+        try FileManager.default.removeItem(at: encryptedImageURL(id: entry.id).appendingPathExtension("tmp"))
+
+        let restartedStore = makeStore(keyStore: keyStore)
+        let recovered = await restartedStore.load()
+
+        #expect(recovered.first?.id == entry.id)
+        #expect(recovered.first?.imageData == Self.onePixelPNG())
+        #expect(FileManager.default.fileExists(atPath: legacyURL.path) == false)
+        let ciphertext = try #require(try? Data(contentsOf: encryptedImageURL(id: entry.id)))
+        let crypto = try HistoryCrypto(key: keyStore.loadOrCreateKey())
+        #expect(try crypto.decrypt(ciphertext) == Self.onePixelPNG())
+    }
+
+    @Test("Failed image migrations remain usable through saves", arguments: ["png", "tiff"])
+    func failedImageMigrationSurvivesSaves(ext: String) async throws {
+        let keyStore = InMemoryKeyStore()
+        let store = makeStore(keyStore: keyStore)
+        defer { try? FileManager.default.removeItem(at: baseDir) }
+        let entry = try prepareBlockedImageMigration(ext: ext)
+        let legacyURL = legacyPlaintextImageURL(id: entry.id, ext: ext)
+
+        let loaded = await store.load()
+        #expect(loaded.first?.imageData == Self.onePixelPNG())
+        await store.save(entries: loaded)
+        #expect((try? Data(contentsOf: legacyURL)) == Self.onePixelPNG())
+
+        let restartedStore = makeStore(keyStore: keyStore)
+        let reloaded = await restartedStore.load()
+        #expect(reloaded.first?.imageData == Self.onePixelPNG())
+
+        try FileManager.default.removeItem(at: encryptedImageURL(id: entry.id).appendingPathExtension("tmp"))
+        await restartedStore.save(entries: reloaded)
+
+        #expect(FileManager.default.fileExists(atPath: legacyURL.path) == false)
+        let ciphertext = try #require(try? Data(contentsOf: encryptedImageURL(id: entry.id)))
+        let crypto = try HistoryCrypto(key: keyStore.loadOrCreateKey())
+        #expect(try crypto.decrypt(ciphertext) == Self.onePixelPNG())
+        #expect(await restartedStore.load().first?.imageData == Self.onePixelPNG())
+    }
+
     // MARK: - Fixtures
+
+    private func prepareBlockedImageMigration(ext: String) throws -> StoredEntry {
+        let imageData = Self.onePixelPNG()
+        let item = ClipboardItem(
+            content: .image(imageData, CGSize(width: 1, height: 1)),
+            contentType: .image
+        )
+        let entry = StoredEntry(item: item).strippingImageData()
+        try JSONEncoder().encode([entry]).write(to: historyJSONURL())
+        let legacyURL = legacyPlaintextImageURL(id: item.id, ext: ext)
+        try imageData.write(to: legacyURL)
+
+        let blockedURL = encryptedImageURL(id: item.id).appendingPathExtension("tmp")
+        try FileManager.default.createDirectory(at: blockedURL, withIntermediateDirectories: false)
+        try Data("block temporary write".utf8).write(to: blockedURL.appendingPathComponent("blocker"))
+
+        return entry
+    }
 
     private static func onePixelPNG() -> Data {
         Data([

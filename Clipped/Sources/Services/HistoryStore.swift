@@ -122,7 +122,11 @@ actor HistoryStore: HistoryStoring {
 
         for entry in entries {
             if let data = entry.imageData {
-                writeEncryptedImageFile(data: data, id: entry.id, crypto: crypto)
+                if writeEncryptedImageFile(data: data, id: entry.id, crypto: crypto) {
+                    for url in legacyImageURLs(for: entry.id) {
+                        try? FileManager.default.removeItem(at: url)
+                    }
+                }
                 liveImageIDs.insert(entry.id)
             }
             wireEntries.append(entry.strippingImageData())
@@ -164,9 +168,7 @@ actor HistoryStore: HistoryStoring {
             return []
         }
 
-        // First-launch-after-upgrade migration: legacy plaintext present, encrypted file
-        // absent. Re-encrypt the JSON in place, migrate each image file, then delete the
-        // plaintext originals.
+        // Re-encrypt legacy history when no encrypted history exists yet.
         if !FileManager.default.fileExists(atPath: encryptedFileURL.path),
            FileManager.default.fileExists(atPath: legacyPlaintextFileURL.path)
         {
@@ -225,6 +227,7 @@ actor HistoryStore: HistoryStoring {
 
         loadError = nil
         saveBlocked = false
+        migrateLegacyImageFiles(crypto: crypto)
 
         // Hydrate image payloads from the side files. If a legacy entry still has
         // imageData embedded, pass it through untouched — the next save() will migrate
@@ -233,7 +236,7 @@ actor HistoryStore: HistoryStoring {
         return decoded.map { entry in
             guard entry.contentType == "Image", entry.imageData == nil, entry.svgData == nil
             else { return entry }
-            guard let payload = loadEncryptedImageFile(for: entry.id, crypto: crypto)
+            guard let payload = loadImageFile(for: entry.id, crypto: crypto)
             else { return entry }
             return entry.withImageData(payload)
         }
@@ -303,11 +306,13 @@ actor HistoryStore: HistoryStoring {
     private func writeAtomically(data: Data, to url: URL) throws {
         let tempURL = url.deletingLastPathComponent()
             .appendingPathComponent(url.lastPathComponent + ".tmp")
-        FileManager.default.createFile(
+        guard FileManager.default.createFile(
             atPath: tempURL.path,
             contents: data,
             attributes: [.posixPermissions: 0o600]
-        )
+        ) else {
+            throw CocoaError(.fileWriteUnknown, userInfo: [NSFilePathErrorKey: tempURL.path])
+        }
         _ = try FileManager.default.replaceItemAt(
             url,
             withItemAt: tempURL,
@@ -327,24 +332,32 @@ actor HistoryStore: HistoryStoring {
         }
     }
 
-    private func loadEncryptedImageFile(for id: UUID, crypto: HistoryCrypto) -> Data? {
+    private func loadImageFile(for id: UUID, crypto: HistoryCrypto) -> Data? {
         let url = encryptedImageURL(for: id)
-        guard let ciphertext = try? Data(contentsOf: url) else { return nil }
-        return try? crypto.decrypt(ciphertext)
+        if let ciphertext = try? Data(contentsOf: url), let data = try? crypto.decrypt(ciphertext) {
+            return data
+        }
+        // Failed migrations remain usable while their encrypted writes are retried.
+        for legacyURL in legacyImageURLs(for: id) {
+            if let data = try? Data(contentsOf: legacyURL) {
+                return data
+            }
+        }
+        return nil
     }
 
-    private func writeEncryptedImageFile(data: Data, id: UUID, crypto: HistoryCrypto) {
+    private func writeEncryptedImageFile(data: Data, id: UUID, crypto: HistoryCrypto) -> Bool {
         do {
             let ciphertext = try crypto.encrypt(data)
             try writeAtomically(data: ciphertext, to: encryptedImageURL(for: id))
+            return true
         } catch {
             Self.logger.error("Failed to write encrypted image \(id): \(error.localizedDescription)")
+            return false
         }
     }
 
-    /// Remove any encrypted image files on disk whose UUID is no longer in the live set.
-    /// Legacy plaintext images are swept up at the same time — once migration has run
-    /// there's no reason to leave them around.
+    /// Remove orphaned sidecars, preserving live plaintext images whose migration failed.
     private func deleteOrphanedImageFiles(keeping liveIDs: Set<UUID>) {
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: imagesDir,
@@ -353,16 +366,8 @@ actor HistoryStore: HistoryStoring {
 
         for url in entries {
             let stem = url.deletingPathExtension().lastPathComponent
-            guard let id = UUID(uuidString: stem) else { continue }
-            let ext = url.pathExtension.lowercased()
-            if ext == "png" || ext == "tiff" {
-                // Legacy plaintext image — always remove, it's been migrated by now.
-                try? FileManager.default.removeItem(at: url)
-                continue
-            }
-            if !liveIDs.contains(id) {
-                try? FileManager.default.removeItem(at: url)
-            }
+            guard let id = UUID(uuidString: stem), !liveIDs.contains(id) else { continue }
+            try? FileManager.default.removeItem(at: url)
         }
     }
 
@@ -383,7 +388,12 @@ actor HistoryStore: HistoryStoring {
             return
         }
 
-        // Migrate any plaintext image side files.
+        // Drop plaintext history only after the encrypted copy is safe.
+        try? FileManager.default.removeItem(at: legacyPlaintextFileURL)
+    }
+
+    /// Retry sidecars on every successful load, including after history.json has migrated.
+    private func migrateLegacyImageFiles(crypto: HistoryCrypto) {
         if let entries = try? FileManager.default.contentsOfDirectory(
             at: imagesDir,
             includingPropertiesForKeys: nil
@@ -394,13 +404,10 @@ actor HistoryStore: HistoryStoring {
                 let stem = url.deletingPathExtension().lastPathComponent
                 guard let id = UUID(uuidString: stem) else { continue }
                 guard let data = try? Data(contentsOf: url) else { continue }
-                writeEncryptedImageFile(data: data, id: id, crypto: crypto)
+                guard writeEncryptedImageFile(data: data, id: id, crypto: crypto) else { continue }
                 try? FileManager.default.removeItem(at: url)
             }
         }
-
-        // Finally, drop the plaintext history file now that the encrypted copy is safe.
-        try? FileManager.default.removeItem(at: legacyPlaintextFileURL)
     }
 }
 

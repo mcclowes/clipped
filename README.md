@@ -54,7 +54,7 @@ Clipboard processing and history storage happen on your Mac. Link previews are e
 
 ### Upgrading from plaintext storage
 
-When persisted history is loaded, Clipped migrates older `history.json` files and plaintext image caches to encrypted storage. Existing Time Machine snapshots and other backups taken before the upgrade may still contain plaintext; the upgrade cannot rewrite those copies. If `history.json` cannot be migrated, Clipped keeps it for recovery.
+When persisted history is loaded, Clipped migrates older `history.json` files and plaintext image caches to encrypted storage. Existing Time Machine snapshots and other backups taken before the upgrade may still contain plaintext; the upgrade cannot rewrite those copies. If `history.json` cannot be migrated, Clipped keeps it for recovery. Failed image migrations keep the original plaintext images usable and retry on later loads or saves; those originals are deleted only after their encrypted replacements are written successfully.
 
 ## Building from source
 
