@@ -560,6 +560,8 @@ final class ClipboardItem: Identifiable {
     /// Text extracted from image content via on-device OCR. Populated asynchronously
     /// after ingest; `nil` until recognition completes or if the image contains no text.
     var extractedText: String?
+    /// New images stay out of saved history until OCR has classified any embedded secrets.
+    var isAwaitingImageText = false
     var originalContent: ClipboardContent?
     var mutationsApplied: [String] = []
     /// Original HTML rendition captured alongside rich text. Kept separately from the

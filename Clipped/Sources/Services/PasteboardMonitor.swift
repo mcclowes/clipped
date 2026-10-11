@@ -50,7 +50,7 @@ final class PasteboardMonitor {
     private static let pollInterval: TimeInterval = 0.5
     /// Skip ingesting raster payloads larger than this so a giant copy can't stall the UI or
     /// exhaust memory. The compact original still round-trips for reasonably sized images.
-    private static let maxImageBytes = 64 * 1024 * 1024
+    nonisolated static let maxImageBytes = 64 * 1024 * 1024
     /// Content classifiers (dev/category/secret detection) only see this many characters — a
     /// multi-megabyte blob would otherwise run several regex passes on the poll loop.
     private static let maxDetectorChars = 100_000

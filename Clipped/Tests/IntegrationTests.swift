@@ -186,6 +186,249 @@ struct IntegrationTests {
 
     // MARK: - Settings <-> ingestion
 
+    @Test("Watched screenshots receive OCR through the clipboard pipeline", .bug(id: 112))
+    func screenshotReceivesOCR() async throws {
+        let (manager, _, store, _) = makeRig()
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let folder = try screenshotFolder(containing: data)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = MockImageTextExtractor(text: "Screenshot text")
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        #expect(await extractor.requestedImages == [data])
+        #expect(manager.items.count == 1)
+        #expect(manager.items.first?.extractedText == "Screenshot text")
+        #expect(manager.items.first?.sourceAppBundleID == "com.apple.screencaptureui")
+        #expect(await store.savedEntries.count == 1)
+    }
+
+    @Test("Watched screenshots over the image byte limit are rejected", .bug(id: 112))
+    func oversizedScreenshotIsRejected() async throws {
+        let (manager, pasteboard, store, _) = makeRig()
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = try FileHandle(forWritingTo: folder.appendingPathComponent("Screenshot.png"))
+        try file.truncate(atOffset: 64 * 1024 * 1024 + 1)
+        try file.close()
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications = 0
+        watcher.notifyScreenshot = { _ in notifications += 1 }
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        #expect(manager.items.isEmpty)
+        #expect(await extractor.requestedImages.isEmpty)
+        #expect(await store.savedEntries.isEmpty)
+        #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+        #expect(pasteboard.changeCount == originalChangeCount)
+        #expect(notifications == 0)
+    }
+
+    @Test("Screenshot secrets never enter saved history while OCR is pending", .bug(id: 112))
+    func screenshotSecretWaitsForOCR() async throws {
+        let (manager, _, store, settings) = makeRig()
+        settings.secretHandling = .treatLikePasswords
+        settings.secureTimeout = 60
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = DeferredImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await extractor.waitUntilRequested()
+        await manager.flushPendingSaves()
+        #expect(await store.savedEntries.isEmpty)
+
+        await extractor.complete(with: detectedSecret)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+        let item = try #require(manager.items.first)
+        #expect(item.containsSecret)
+        #expect(item.isSensitive)
+        #expect(item.extractedText == detectedSecret)
+        #expect(await store.savedEntries.isEmpty)
+        manager.removeItem(item)
+    }
+
+    @Test("Pinned screenshots stay unsaved through clear until OCR finishes", .bug(id: 112), arguments: [false, true])
+    func pendingPinnedScreenshotWaitsForOCR(_ hasText: Bool) async throws {
+        let (manager, _, store, settings) = makeRig()
+        settings.secretHandling = .treatLikePasswords
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = DeferredImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await extractor.waitUntilRequested()
+        let item = try #require(manager.items.first)
+        manager.togglePin(item)
+        manager.clearAll()
+        await manager.flushPendingSaves()
+        #expect(await store.savedEntries.isEmpty)
+
+        let text = hasText ? "Ordinary screenshot text" : nil
+        await extractor.complete(with: text)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+        #expect(manager.pinnedItems.map(\.id) == [item.id])
+        #expect(item.extractedText == text)
+        #expect(!item.containsSecret)
+        #expect(await store.savedEntries.map(\.id) == [item.id])
+    }
+
+    @Test(
+        "Screenshot secrets follow every configured retention mode",
+        .bug(id: 112),
+        arguments: SecretHandling.allCases
+    )
+    func screenshotSecretRetention(_ mode: SecretHandling) async throws {
+        let (manager, _, store, settings) = makeRig()
+        settings.secretHandling = mode
+        manager.secureRemovalDelay = { _ in .zero }
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = MockImageTextExtractor(text: detectedSecret)
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.awaitPendingSecureRemovals()
+        await manager.flushPendingSaves()
+
+        if mode == .treatLikePasswords {
+            #expect(manager.items.isEmpty)
+            #expect(await store.savedEntries.isEmpty)
+        } else {
+            let item = try #require(manager.items.first)
+            #expect(item.containsSecret)
+            #expect(!item.isSensitive)
+            #expect(item.extractedText == detectedSecret)
+            #expect(await store.savedEntries.map(\.id) == [item.id])
+        }
+    }
+
+    @Test("A rejected pinned screenshot leaves the clipboard and enrichment untouched", .bug(id: 112))
+    func pinnedScreenshotIsRejected() async throws {
+        let (manager, pasteboard, store, _) = makeRig()
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let folder = try screenshotFolder(containing: data)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications = 0
+        watcher.notifyScreenshot = { _ in notifications += 1 }
+        let pinned = ClipboardItem(
+            content: .image(data, CGSize(width: 40, height: 30)),
+            contentType: .image,
+            isPinned: true
+        )
+        pinned.extractedText = "Existing extraction"
+        manager.pinnedItems = [pinned]
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        #expect(manager.items.isEmpty)
+        #expect(manager.pinnedItems.map(\.id) == [pinned.id])
+        #expect(pinned.extractedText == "Existing extraction")
+        #expect(await extractor.requestedImages.isEmpty)
+        #expect(await store.saveCallCount == 0)
+        #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+        #expect(pasteboard.changeCount == originalChangeCount)
+        #expect(notifications == 0)
+    }
+
+    @Test("Screenshot ingestion evicts expired history", .bug(id: 112))
+    func screenshotTrimsExpiredItems() async throws {
+        let (manager, _, store, settings) = makeRig()
+        settings.historyRetention = .oneDay
+        let expired = ClipboardItem(
+            content: .text("Expired"), contentType: .plainText,
+            timestamp: Date(timeIntervalSinceNow: -2 * 24 * 60 * 60)
+        )
+        manager.items = [expired]
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        #expect(manager.items.count == 1)
+        #expect(!manager.items.contains { $0.id == expired.id })
+        #expect(await store.savedEntries.map(\.id) == manager.items.map(\.id))
+    }
+
+    @Test("A screenshot recopy retains known OCR secrets when recognition returns no text", .bug(id: 112))
+    func screenshotRecopyKeepsKnownSecret() async throws {
+        let (manager, _, store, settings) = makeRig()
+        settings.secretHandling = .treatLikePasswords
+        settings.secureTimeout = 60
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let folder = try screenshotFolder(containing: data)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let existing = ClipboardItem(content: .image(data, CGSize(width: 40, height: 30)), contentType: .image)
+        existing.extractedText = detectedSecret
+        existing.containsSecret = true
+        existing.isSensitive = true
+        manager.items = [existing]
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        let item = try #require(manager.items.first)
+        #expect(item.extractedText == detectedSecret)
+        #expect(item.containsSecret)
+        #expect(item.isSensitive)
+        #expect(await store.savedEntries.isEmpty)
+        manager.removeItem(item)
+    }
+
+    private func screenshotFolder(containing data: Data) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try data.write(to: folder.appendingPathComponent("Screenshot.png"))
+        return folder
+    }
+
+    private func screenshotWatcher(for manager: ClipboardManager) throws -> ScreenshotWatcher {
+        let defaults = try #require(UserDefaults(suiteName: "ScreenshotIntegration.\(UUID().uuidString)"))
+        let watcher = ScreenshotWatcher(
+            defaults: defaults,
+            floatingThumbnailEnabled: { false },
+            presentFloatingThumbnailTip: {}
+        )
+        watcher.clipboardManager = manager
+        watcher.notifyScreenshot = { _ in }
+        return watcher
+    }
+
     @Test("persistAcrossReboots=false captures in memory but never saves")
     func noPersistenceWhenDisabled() async {
         let (manager, pasteboard, store, _) = makeRig(persistHistory: false)

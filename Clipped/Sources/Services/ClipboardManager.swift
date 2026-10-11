@@ -289,20 +289,25 @@ final class ClipboardManager {
         )
     }
 
-    private func ingest(_ event: PasteboardMonitor.NewItemEvent) {
+    @discardableResult
+    func ingest(_ event: PasteboardMonitor.NewItemEvent) -> Bool {
         let signpost = Signposts.clipboard.beginInterval("Ingest")
         defer { Signposts.clipboard.endInterval("Ingest", signpost) }
 
+        if case let .image(data, _) = event.item.content, data.count > PasteboardMonitor.maxImageBytes {
+            return false
+        }
+
         let policy = passwordPolicy(hasConcealed: event.hasConcealedType, bundleID: event.bundleID)
         if policy.shouldSkip {
-            return
+            return false
         }
 
         let item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
 
         // A mutation (e.g. trim-whitespace) can reduce content to nothing — don't store a blank row.
         if case let .text(str) = item.content, str.isEmpty {
-            return
+            return false
         }
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
@@ -312,8 +317,11 @@ final class ClipboardManager {
         }
 
         let secretPendingRemoval = applySecretRetentionPolicy(to: item)
+        if case .image = item.content {
+            item.isAwaitingImageText = true
+        }
 
-        guard history.insert(item) else { return }
+        guard history.insert(item) else { return false }
 
         // Each ingest is a natural moment to evict already-expired items — no need
         // for a separate timer, since an idle clipboard has nothing to show anyway.
@@ -334,6 +342,7 @@ final class ClipboardManager {
         if !policy.pendingRemoval, !secretPendingRemoval {
             history.saveHistory()
         }
+        return true
     }
 
     private func applySecretRetentionPolicy(to item: ClipboardItem) -> Bool {
@@ -414,15 +423,16 @@ final class ClipboardManager {
             await Self.ocrLimiter.release()
             guard let self else { return }
             defer { enrichmentTasks[itemID] = nil }
-            guard let text else { return }
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
             {
-                found.extractedText = text
+                if let text {
+                    found.extractedText = text
+                }
                 // OCR can surface secrets from screenshots of password managers, 2FA screens,
                 // terminals, etc. Run the same detector the plain-text path uses so the item is
                 // masked in the UI and kept out of typeahead search.
-                if SecretDetector.containsSecret(text) {
+                if let text = found.extractedText, SecretDetector.containsSecret(text) {
                     found.containsSecret = true
                     if applySecretRetentionPolicy(to: found) {
                         scheduleSecureAutoRemoval(
@@ -431,6 +441,7 @@ final class ClipboardManager {
                         )
                     }
                 }
+                found.isAwaitingImageText = false
                 history.saveHistory()
             }
         }

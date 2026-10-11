@@ -501,6 +501,29 @@ actor MockImageTextExtractor {
     }
 }
 
+actor DeferredImageTextExtractor {
+    private var result: CheckedContinuation<String?, Never>?
+    private var started: CheckedContinuation<Void, Never>?
+
+    func extractText(from _: Data) async -> String? {
+        await withCheckedContinuation { continuation in
+            result = continuation
+            started?.resume()
+            started = nil
+        }
+    }
+
+    func waitUntilRequested() async {
+        guard result == nil else { return }
+        await withCheckedContinuation { started = $0 }
+    }
+
+    func complete(with text: String?) {
+        result?.resume(returning: text)
+        result = nil
+    }
+}
+
 final class MockLinkMetadataFetcher: LinkMetadataFetching, @unchecked Sendable {
     private let state: State
 

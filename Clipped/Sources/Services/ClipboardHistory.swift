@@ -185,7 +185,7 @@ final class ClipboardHistory {
         let store = historyStore
         let shouldPersist = settingsManager?.persistAcrossReboots == true
         let survivors = (items + pinnedItems)
-            .filter { !$0.isSensitive }
+            .filter { !$0.isSensitive && !$0.isAwaitingImageText }
             .map { StoredEntry(item: $0) }
 
         saveDebounceTask = Task { [survivors] in
@@ -305,7 +305,7 @@ final class ClipboardHistory {
             return
         }
         let entries = (items + pinnedItems)
-            .filter { !$0.isSensitive }
+            .filter { !$0.isSensitive && !$0.isAwaitingImageText }
             .map { StoredEntry(item: $0) }
         saveDebounceTask?.cancel()
         let store = historyStore

@@ -43,6 +43,9 @@ final class ScreenshotWatcher: ScreenshotWatching {
 
     var clipboardManager: ClipboardManager?
 
+    @ObservationIgnored
+    var notifyScreenshot: (String) -> Void = { ScreenshotWatcher.sendScreenshotNotification(fileName: $0) }
+
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let floatingThumbnailEnabled: @MainActor () -> Bool
     @ObservationIgnored private let presentFloatingThumbnailTip: @MainActor () -> Void
@@ -200,11 +203,14 @@ final class ScreenshotWatcher: ScreenshotWatching {
         }
     }
 
-    private func ingestScreenshot(fileName: String, in folder: URL) async {
+    func ingestScreenshot(fileName: String, in folder: URL) async {
         let fileURL = folder.appendingPathComponent(fileName)
         // Read + decode off the main actor so a multi-MB screenshot doesn't stall the UI.
         let decoded = await Task.detached(priority: .utility) { () -> (Data, CGSize)? in
-            guard let data = try? Data(contentsOf: fileURL) else { return nil }
+            guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                  size <= PasteboardMonitor.maxImageBytes,
+                  let data = try? Data(contentsOf: fileURL),
+                  data.count <= PasteboardMonitor.maxImageBytes else { return nil }
             guard let size = ImageProcessor.pixelSize(of: data) ?? NSImage(data: data)?.size else { return nil }
             return (data, size)
         }.value
@@ -223,15 +229,16 @@ final class ScreenshotWatcher: ScreenshotWatching {
             sourceAppName: "Screenshot",
             sourceAppBundleID: "com.apple.screencaptureui"
         )
-        clipboardManager?.history.insert(item)
+        guard let clipboardManager, clipboardManager.ingest(PasteboardMonitor.NewItemEvent(
+            item: item,
+            bundleID: item.sourceAppBundleID,
+            hasConcealedType: false
+        )) else { return }
 
         // Copy screenshot to system clipboard so user can paste immediately.
-        clipboardManager?.copyToClipboard(item)
+        clipboardManager.copyToClipboard(item)
 
-        clipboardManager?.trimToMaxSize()
-        clipboardManager?.saveHistory()
-
-        sendScreenshotNotification(fileName: fileName)
+        notifyScreenshot(fileName)
         offerFloatingThumbnailTipIfNeeded()
     }
 
@@ -267,7 +274,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
         NSWorkspace.shared.openApplication(at: screenshotApp, configuration: .init())
     }
 
-    private func sendScreenshotNotification(fileName: String) {
+    private static func sendScreenshotNotification(fileName: String) {
         let content = UNMutableNotificationContent()
         content.title = "Screenshot captured"
         content.body = "Copied to clipboard — ready to paste"
