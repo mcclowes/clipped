@@ -186,6 +186,26 @@ struct IntegrationTests {
 
     // MARK: - Settings <-> ingestion
 
+    @Test("Screenshot history capture preserves the existing clipboard by default", .bug(id: 113))
+    func screenshotPreservesClipboardByDefault() async throws {
+        let (manager, pasteboard, _, _) = makeRig(persistHistory: false)
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let folder = try screenshotFolder(containing: data)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+
+        #expect(manager.items.count == 1)
+        #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+        #expect(pasteboard.changeCount == originalChangeCount)
+    }
+
     @Test("Watched screenshots receive OCR through the clipboard pipeline", .bug(id: 112))
     func screenshotReceivesOCR() async throws {
         let (manager, _, store, _) = makeRig()
@@ -207,6 +227,40 @@ struct IntegrationTests {
         #expect(await store.savedEntries.count == 1)
     }
 
+    @Test("Renamed screenshots copy only with the explicit opt-in", .bug(id: 113), arguments: [false, true])
+    func renamedScreenshotRespectsCopySetting(_ enabled: Bool) async throws {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.copyScreenshotsToClipboard = enabled
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let folder = try screenshotFolder(containing: data)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let name = "Reference image.png"
+        try FileManager.default.moveItem(
+            at: folder.appendingPathComponent("Screenshot.png"),
+            to: folder.appendingPathComponent(name)
+        )
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications: [Bool] = []
+        watcher.notifyScreenshot = { _, copied in notifications.append(copied) }
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: name, in: folder)
+        await manager.awaitPendingEnrichments()
+
+        #expect(manager.items.count == 1)
+        #expect(notifications == [enabled])
+        if enabled {
+            #expect(pasteboard.data(forType: .png) == data)
+            #expect(pasteboard.changeCount > originalChangeCount)
+        } else {
+            #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+            #expect(pasteboard.changeCount == originalChangeCount)
+        }
+    }
+
     @Test("Watched screenshots over the image byte limit are rejected", .bug(id: 112))
     func oversizedScreenshotIsRejected() async throws {
         let (manager, pasteboard, store, _) = makeRig()
@@ -219,7 +273,7 @@ struct IntegrationTests {
         try file.close()
         let watcher = try screenshotWatcher(for: manager)
         var notifications = 0
-        watcher.notifyScreenshot = { _ in notifications += 1 }
+        watcher.notifyScreenshot = { _, _ in notifications += 1 }
         let extractor = MockImageTextExtractor()
         manager.extractImageText = { data in await extractor.extractText(from: data) }
 
@@ -332,7 +386,7 @@ struct IntegrationTests {
         defer { try? FileManager.default.removeItem(at: folder) }
         let watcher = try screenshotWatcher(for: manager)
         var notifications = 0
-        watcher.notifyScreenshot = { _ in notifications += 1 }
+        watcher.notifyScreenshot = { _, _ in notifications += 1 }
         let pinned = ClipboardItem(
             content: .image(data, CGSize(width: 40, height: 30)),
             contentType: .image,
@@ -410,10 +464,135 @@ struct IntegrationTests {
         manager.removeItem(item)
     }
 
-    private func screenshotFolder(containing data: Data) throws -> URL {
+    @Test("An ordinary image with a screenshot filename is ignored", .bug(id: 113))
+    func unmarkedScreenshotIsRejected() async throws {
+        let (manager, pasteboard, store, _) = makeRig()
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30), marked: false)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications = 0
+        watcher.notifyScreenshot = { _, _ in notifications += 1 }
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        #expect(manager.items.isEmpty)
+        #expect(await extractor.requestedImages.isEmpty)
+        #expect(await store.savedEntries.isEmpty)
+        #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+        #expect(pasteboard.changeCount == originalChangeCount)
+        #expect(notifications == 0)
+    }
+
+    @Test("Opt-in screenshot copying applies the detected-secret auth policy", .bug(id: 113), arguments: [false, true])
+    func optedInSecretScreenshotAuthenticates(_ approved: Bool) async throws {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.copyScreenshotsToClipboard = true
+        settings.secretHandling = .requireAuthentication
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let data = TestImageFactory.data(width: 40, height: 30)
+        let folder = try screenshotFolder(containing: data)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications: [Bool] = []
+        watcher.notifyScreenshot = { _, copied in notifications.append(copied) }
+        let extractor = MockImageTextExtractor(text: detectedSecret)
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+        var pendingApproval: (@MainActor @Sendable (Bool) -> Void)?
+        manager.authenticateSecretAccess = { _, completion in pendingApproval = completion }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+
+        #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+        #expect(pasteboard.changeCount == originalChangeCount)
+        let authorize = try #require(pendingApproval)
+        authorize(approved)
+        if approved {
+            #expect(pasteboard.data(forType: .png) == data)
+            #expect(notifications == [true])
+        } else {
+            #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+            #expect(pasteboard.changeCount == originalChangeCount)
+            #expect(notifications.isEmpty)
+        }
+    }
+
+    @Test(
+        "Invalid screenshot metadata never triggers history or clipboard capture",
+        .bug(id: 113),
+        arguments: ScreenshotMetadataFixture.InvalidValue.allCases
+    )
+    func invalidScreenshotMetadataIsRejected(_ value: ScreenshotMetadataFixture.InvalidValue) async throws {
+        let (manager, pasteboard, store, settings) = makeRig()
+        settings.copyScreenshotsToClipboard = true
+        capture("Existing clipboard", on: pasteboard)
+        let originalChangeCount = pasteboard.changeCount
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try ScreenshotMetadataFixture.write(value.data(), to: folder.appendingPathComponent("Screenshot.png"))
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications = 0
+        watcher.notifyScreenshot = { _, _ in notifications += 1 }
+        let extractor = MockImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+
+        await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder)
+        await manager.awaitPendingEnrichments()
+        await manager.flushPendingSaves()
+
+        #expect(manager.items.isEmpty)
+        #expect(await extractor.requestedImages.isEmpty)
+        #expect(await store.saveCallCount == 0)
+        #expect(pasteboard.string(forType: .string) == "Existing clipboard")
+        #expect(pasteboard.changeCount == originalChangeCount)
+        #expect(notifications == 0)
+    }
+
+    @Test("Opt-in screenshot copying respects changes while OCR is pending", .bug(id: 113), arguments: [false, true])
+    func pendingScreenshotRespectsUserChanges(_ clipboardChanged: Bool) async throws {
+        let (manager, pasteboard, _, settings) = makeRig(persistHistory: false)
+        settings.copyScreenshotsToClipboard = true
+        capture("Existing clipboard", on: pasteboard)
+        let folder = try screenshotFolder(containing: TestImageFactory.data(width: 40, height: 30))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let watcher = try screenshotWatcher(for: manager)
+        var notifications: [Bool] = []
+        watcher.notifyScreenshot = { _, copied in notifications.append(copied) }
+        let extractor = DeferredImageTextExtractor()
+        manager.extractImageText = { data in await extractor.extractText(from: data) }
+        let ingestion = Task { await watcher.ingestScreenshot(fileName: "Screenshot.png", in: folder) }
+        await extractor.waitUntilRequested()
+
+        if clipboardChanged {
+            capture("Newer clipboard", on: pasteboard)
+        } else {
+            settings.copyScreenshotsToClipboard = false
+        }
+        let changeCount = pasteboard.changeCount
+        await extractor.complete(with: "Ordinary text")
+        await ingestion.value
+
+        #expect(manager.items.count == 1)
+        #expect(pasteboard.string(forType: .string) == (clipboardChanged ? "Newer clipboard" : "Existing clipboard"))
+        #expect(pasteboard.changeCount == changeCount)
+        #expect(notifications == [false])
+    }
+
+    private func screenshotFolder(containing data: Data, marked: Bool = true) throws -> URL {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try data.write(to: folder.appendingPathComponent("Screenshot.png"))
+        let file = folder.appendingPathComponent("Screenshot.png")
+        try data.write(to: file)
+        if marked {
+            try ScreenshotMetadataFixture.mark(file)
+        }
         return folder
     }
 
@@ -425,7 +604,7 @@ struct IntegrationTests {
             presentFloatingThumbnailTip: {}
         )
         watcher.clipboardManager = manager
-        watcher.notifyScreenshot = { _ in }
+        watcher.notifyScreenshot = { _, _ in }
         return watcher
     }
 

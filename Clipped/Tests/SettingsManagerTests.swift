@@ -32,6 +32,35 @@ struct SettingsManagerTests {
         }
     }
 
+    @Test("Capturing screenshots does not opt into clipboard replacement", .bug(id: 113))
+    func screenshotCopyDefaultsOff() throws {
+        try withSettings { settings, defaults in
+            settings.captureScreenshots = true
+            let reloaded = SettingsManager(
+                defaults: defaults,
+                loginItem: MockLoginItem(status: .notRegistered),
+                repairsLoginItem: false
+            )
+            #expect(reloaded.captureScreenshots)
+            #expect(!reloaded.copyScreenshotsToClipboard)
+        }
+    }
+
+    @Test("The screenshot clipboard preference survives enabling and disabling", .bug(id: 113))
+    func screenshotCopyPreferencePersists() throws {
+        try withSettings { settings, defaults in
+            for enabled in [true, false] {
+                settings.copyScreenshotsToClipboard = enabled
+                let reloaded = SettingsManager(
+                    defaults: defaults,
+                    loginItem: MockLoginItem(status: .notRegistered),
+                    repairsLoginItem: false
+                )
+                #expect(reloaded.copyScreenshotsToClipboard == enabled)
+            }
+        }
+    }
+
     @Test("Keeps password-manager items for two minutes by default")
     func defaultSecureTimeout() throws {
         try withSettings { settings, _ in

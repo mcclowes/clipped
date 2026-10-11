@@ -391,6 +391,10 @@ final class ClipboardManager {
         }
     }
 
+    func awaitPendingEnrichment(for itemID: UUID) async {
+        await enrichmentTasks[itemID]?.value
+    }
+
     private func scheduleLinkMetadataFetch(for url: URL, itemID: UUID) {
         // Respect the user's privacy preference — when previews are disabled we never
         // reach out to the remote origin.

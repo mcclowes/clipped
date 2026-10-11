@@ -2,6 +2,7 @@ import AppKit
 import Carbon
 @testable import Clipped
 import CryptoKit
+import Darwin
 import Foundation
 import ImageIO
 import class LinkPresentation.LPLinkMetadata
@@ -212,6 +213,39 @@ enum TestImageFactory {
     // swiftlint:enable force_unwrapping
 }
 
+enum ScreenshotMetadataFixture {
+    enum InvalidValue: CaseIterable, Sendable {
+        case falseFlag, number, text, malformed, oversized
+
+        func data() throws -> Data {
+            let value: Any
+            switch self {
+            case .falseFlag: value = false
+            case .number: value = 1
+            case .text: value = "true"
+            case .malformed: return Data("not a property list".utf8)
+            case .oversized: return Data(repeating: 0, count: 5000)
+            }
+            return try PropertyListSerialization.data(fromPropertyList: value, format: .binary, options: 0)
+        }
+    }
+
+    static func mark(_ url: URL) throws {
+        let data = try PropertyListSerialization.data(fromPropertyList: true, format: .binary, options: 0)
+        try write(data, to: url)
+    }
+
+    static func write(_ data: Data, to url: URL) throws {
+        let result = url.withUnsafeFileSystemRepresentation { path -> Int32 in
+            guard let path else { return -1 }
+            return data.withUnsafeBytes { buffer in
+                setxattr(path, "com.apple.metadata:kMDItemIsScreenCapture", buffer.baseAddress, buffer.count, 0, 0)
+            }
+        }
+        guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EINVAL) }
+    }
+}
+
 /// In-memory pasteboard that records writes and can simulate external writes from other apps.
 /// Matches `NSPasteboard`'s surface via `PasteboardProtocol` so both `PasteboardMonitor`
 /// and `ClipboardManager` write paths can be unit-tested without touching the real clipboard.
@@ -380,6 +414,7 @@ final class MockSettingsManager: SettingsManaging, MutationRulesProviding {
     var secretHandling: SecretHandling = .maskOnly
     var playSoundOnCopy = false
     var captureScreenshots = false
+    var copyScreenshotsToClipboard = false
     var fetchLinkPreviews = true
     var hideFromScreenSharing = true
     var launchAtLogin = false

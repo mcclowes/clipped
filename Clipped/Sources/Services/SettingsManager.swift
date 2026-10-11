@@ -76,6 +76,7 @@ protocol SettingsManaging: AnyObject {
     var secretHandling: SecretHandling { get }
     var playSoundOnCopy: Bool { get }
     var captureScreenshots: Bool { get }
+    var copyScreenshotsToClipboard: Bool { get }
     var fetchLinkPreviews: Bool { get set }
     var hideFromScreenSharing: Bool { get set }
     var launchAtLogin: Bool { get set }
@@ -125,6 +126,10 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
 
     var captureScreenshots: Bool {
         didSet { defaults.set(captureScreenshots, forKey: "captureScreenshots") }
+    }
+
+    var copyScreenshotsToClipboard: Bool {
+        didSet { defaults.set(copyScreenshotsToClipboard, forKey: "copyScreenshotsToClipboard") }
     }
 
     var fetchLinkPreviews: Bool {
@@ -282,6 +287,7 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             ? true
             : defaults.bool(forKey: "playSoundOnCopy")
         captureScreenshots = defaults.bool(forKey: "captureScreenshots")
+        copyScreenshotsToClipboard = defaults.bool(forKey: "copyScreenshotsToClipboard")
         fetchLinkPreviews = defaults.object(forKey: "fetchLinkPreviews") == nil
             ? true
             : defaults.bool(forKey: "fetchLinkPreviews")

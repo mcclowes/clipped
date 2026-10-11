@@ -7,6 +7,8 @@ import UserNotifications
 /// Image file extensions treated as screenshots. File-scoped so the nonisolated static
 /// `imageFiles(in:)` scanner can read it without actor-isolation gymnastics.
 private let screenshotImageExtensions: Set<String> = ["png", "jpg", "jpeg", "heic"]
+private let screenCaptureMetadataKey = "com.apple.metadata:kMDItemIsScreenCapture"
+private let maxScreenCaptureMetadataBytes = 4096
 
 /// Abstraction over the screenshot directory watcher so tests and alternative
 /// implementations can stand in. Mirrors `SettingsManaging` and
@@ -44,7 +46,9 @@ final class ScreenshotWatcher: ScreenshotWatching {
     var clipboardManager: ClipboardManager?
 
     @ObservationIgnored
-    var notifyScreenshot: (String) -> Void = { ScreenshotWatcher.sendScreenshotNotification(fileName: $0) }
+    var notifyScreenshot: (String, Bool) -> Void = { fileName, copied in
+        ScreenshotWatcher.sendScreenshotNotification(fileName: fileName, copied: copied)
+    }
 
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let floatingThumbnailEnabled: @MainActor () -> Bool
@@ -204,11 +208,13 @@ final class ScreenshotWatcher: ScreenshotWatching {
     }
 
     func ingestScreenshot(fileName: String, in folder: URL) async {
+        let originalChangeCount = clipboardManager?.monitor.pasteboard.changeCount
         let fileURL = folder.appendingPathComponent(fileName)
         // Read + decode off the main actor so a multi-MB screenshot doesn't stall the UI.
         let decoded = await Task.detached(priority: .utility) { () -> (Data, CGSize)? in
             guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
                   size <= PasteboardMonitor.maxImageBytes,
+                  Self.hasScreenCaptureMetadata(fileURL),
                   let data = try? Data(contentsOf: fileURL),
                   data.count <= PasteboardMonitor.maxImageBytes else { return nil }
             guard let size = ImageProcessor.pixelSize(of: data) ?? NSImage(data: data)?.size else { return nil }
@@ -235,10 +241,21 @@ final class ScreenshotWatcher: ScreenshotWatching {
             hasConcealedType: false
         )) else { return }
 
-        // Copy screenshot to system clipboard so user can paste immediately.
-        clipboardManager.copyToClipboard(item)
-
-        notifyScreenshot(fileName)
+        var shouldCopy = clipboardManager.settingsManager?.copyScreenshotsToClipboard == true
+        if shouldCopy {
+            await clipboardManager.awaitPendingEnrichment(for: item.id)
+            shouldCopy = clipboardManager.settingsManager?.copyScreenshotsToClipboard == true
+                && clipboardManager.monitor.pasteboard.changeCount == originalChangeCount
+                && !item.isAwaitingImageText
+                && (clipboardManager.items + clipboardManager.pinnedItems).contains { $0.id == item.id }
+        }
+        if shouldCopy {
+            clipboardManager.copyToClipboard(item) { [weak self] in
+                self?.notifyScreenshot(fileName, true)
+            }
+        } else {
+            notifyScreenshot(fileName, false)
+        }
         offerFloatingThumbnailTipIfNeeded()
     }
 
@@ -274,10 +291,10 @@ final class ScreenshotWatcher: ScreenshotWatching {
         NSWorkspace.shared.openApplication(at: screenshotApp, configuration: .init())
     }
 
-    private static func sendScreenshotNotification(fileName: String) {
+    private static func sendScreenshotNotification(fileName: String, copied: Bool) {
         let content = UNMutableNotificationContent()
         content.title = "Screenshot captured"
-        content.body = "Copied to clipboard — ready to paste"
+        content.body = copied ? "Copied to clipboard, ready to paste" : "Added to clipboard history"
 
         let request = UNNotificationRequest(
             identifier: "screenshot-\(fileName)",
@@ -285,6 +302,23 @@ final class ScreenshotWatcher: ScreenshotWatching {
             trigger: nil
         )
         UNUserNotificationCenter.current().add(request)
+    }
+
+    // swiftformat:disable:next modifierOrder
+    nonisolated private static func hasScreenCaptureMetadata(_ url: URL) -> Bool {
+        var data = Data(count: maxScreenCaptureMetadataBytes)
+        let count = url.withUnsafeFileSystemRepresentation { path -> Int in
+            guard let path else { return -1 }
+            return data.withUnsafeMutableBytes { buffer in
+                getxattr(path, screenCaptureMetadataKey, buffer.baseAddress, buffer.count, 0, 0)
+            }
+        }
+        guard count > 0 else { return false }
+        data.count = count
+        guard let value = try? PropertyListSerialization.propertyList(from: data, options: [], format: nil),
+              let flag = value as? NSNumber,
+              CFGetTypeID(flag) == CFBooleanGetTypeID() else { return false }
+        return flag.boolValue
     }
 
     nonisolated static func imageFiles(in folder: URL) -> [String] {

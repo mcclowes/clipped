@@ -123,6 +123,12 @@ private struct GeneralSettingsTab: View {
                         }
                     }
 
+                Toggle("Copy captured screenshots to clipboard", isOn: $settings.copyScreenshotsToClipboard)
+                    .disabled(!settings.captureScreenshots)
+                Text("Otherwise, screenshots are added to history without changing your clipboard.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if settings.captureScreenshots, let folder = screenshotWatcher.watchedFolder {
                     HStack {
                         Text(folder.lastPathComponent)
