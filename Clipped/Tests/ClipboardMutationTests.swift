@@ -125,6 +125,25 @@ struct ClipboardMutationTests {
         #expect(result === item)
     }
 
+    @Test("Type rules and mutation tracking survive rich-text conversion")
+    func richTextConversionKeepsTypeRules() {
+        let rules = MockSettingsManager()
+        rules.mutationRules["stripToPlainText:Rich Text"] = true
+        rules.mutationRules["trimWhitespace:Rich Text"] = true
+        rules.mutationRules["trimWhitespace:Text"] = false
+        let service = ClipboardMutationService(mutations: [StripToPlainTextMutation(), TrimWhitespaceMutation()])
+        service.rulesProvider = rules
+        let original = ClipboardContent.richText(Data(), "  hello  ")
+        let item = ClipboardItem(content: original, contentType: .richText)
+
+        let result = service.apply(to: item)
+
+        #expect(result.content == .text("hello"))
+        #expect(result.contentType == .richText)
+        #expect(result.originalContent == original)
+        #expect(result.mutationsApplied == ["Stripped to plain text", "Trimmed whitespace"])
+    }
+
     // MARK: - Mutation tracking (originalContent + mutationsApplied)
 
     @Test("Mutated items track original content")
@@ -227,6 +246,22 @@ struct ClipboardMutationTests {
 
         #expect(result !== item) // Was mutated because app override enabled it
         #expect(result.wasMutated)
+    }
+
+    @Test("App overrides take precedence over either type-rule value", arguments: [false, true], [nil, false, true])
+    func mutationRulePrecedence(typeEnabled: Bool, override: Bool?) {
+        let rules = MockSettingsManager()
+        rules.mutationRules["trimWhitespace:Text"] = typeEnabled
+        rules.mutationAppOverrides["trimWhitespace:com.example.Editor"] = override
+        let service = ClipboardMutationService(mutations: [TrimWhitespaceMutation()])
+        service.rulesProvider = rules
+        let item = ClipboardItem(content: .text("  hello  "), contentType: .plainText)
+
+        let result = service.apply(to: item, sourceAppBundleID: "com.example.Editor")
+
+        let enabled = override ?? typeEnabled
+        #expect(result.plainText == (enabled ? "hello" : "  hello  "))
+        #expect((result !== item) == enabled)
     }
 
     @Test("Mutation preserves item metadata")

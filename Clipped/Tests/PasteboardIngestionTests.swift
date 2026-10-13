@@ -167,6 +167,68 @@ struct PasteboardIngestionTests {
         #expect(captured?.availableRepresentations == [.html, .richText, .plainText, .markdown])
     }
 
+    @Test("Monitor prefers RTF over a raster fallback", arguments: [NSPasteboard.PasteboardType.png, .tiff])
+    func richTextPrecedesRaster(rasterType: NSPasteboard.PasteboardType) throws {
+        let mock = MockPasteboard()
+        let monitor = PasteboardMonitor(pasteboard: mock)
+        let rtf = Data("RTF payload".utf8)
+        var captured: ClipboardItem?
+        monitor.onNewItem = { captured = $0.item }
+        mock.stageExternalWrite(
+            types: [.rtf, rasterType, .string],
+            strings: [.string: "Formatted text"],
+            data: [.rtf: rtf, rasterType: TestImageFactory.data(width: 1, height: 1)]
+        )
+
+        monitor.check()
+
+        let item = try #require(captured)
+        #expect(item.content == .richText(rtf, "Formatted text"))
+    }
+
+    @Test("Monitor reads the URL representation instead of visible anchor text")
+    func urlPrecedesAnchorText() throws {
+        let mock = MockPasteboard()
+        let monitor = PasteboardMonitor(pasteboard: mock)
+        let url = try #require(URL(string: "https://example.com/article"))
+        var captured: ClipboardItem?
+        monitor.onNewItem = { captured = $0.item }
+        mock.stageExternalWrite(
+            types: [.URL, .string],
+            strings: [.URL: url.absoluteString, .string: "Read the article"]
+        )
+
+        monitor.check()
+
+        let item = try #require(captured)
+        #expect(item.content == .url(url))
+    }
+
+    @Test("Oversized HTML falls back to text or retained RTF", arguments: [false, true])
+    func oversizedHTMLFallback(hasRTF: Bool) throws {
+        let mock = MockPasteboard()
+        let monitor = PasteboardMonitor(pasteboard: mock)
+        let htmlType = NSPasteboard.PasteboardType("public.html")
+        let rtf = Data("RTF payload".utf8)
+        var payloads = [htmlType: Data(repeating: 0x20, count: 256 * 1024 + 1)]
+        if hasRTF {
+            payloads[.rtf] = rtf
+        }
+        var captured: ClipboardItem?
+        monitor.onNewItem = { captured = $0.item }
+        mock.stageExternalWrite(
+            types: [.string] + Array(payloads.keys),
+            strings: [.string: "Fallback text"],
+            data: payloads
+        )
+
+        monitor.check()
+
+        let item = try #require(captured)
+        #expect(item.content == (hasRTF ? .richText(rtf, "Fallback text") : .text("Fallback text")))
+        #expect(item.htmlData == nil)
+    }
+
     // MARK: - End-to-end through ClipboardManager
 
     @Test("Dedup: copying the same text twice produces one entry at the top")

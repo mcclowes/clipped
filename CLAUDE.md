@@ -20,7 +20,8 @@ All Swift code lives under `Clipped/`. Run `find Clipped/Sources Clipped/Tests -
 authoritative listing — do not hand-maintain a tree here (it rots). Notable services:
 
 - `Sources/Services/ClipboardManager.swift` — orchestrator for ingestion, policy, history persistence scheduling
-- `Sources/Services/PasteboardMonitor.swift` — polls `NSPasteboard.changeCount`
+- `Sources/Services/PasteboardMonitor.swift` — polls `NSPasteboard.changeCount` and suppresses our own writes
+- `Sources/Services/PasteboardReader.swift` — decodes prioritized clipboard representations with bounded payloads
 - `Sources/Services/ClipboardHistory.swift` — in-memory history + debounced save
 - `Sources/Services/HistoryStore.swift` + `HistoryCrypto.swift` + `KeychainKeyStore.swift` — encrypted persistence
 - `Sources/Models/StoredEntry.swift` — Codable history snapshots and clipboard-content conversion

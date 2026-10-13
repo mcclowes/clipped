@@ -130,23 +130,7 @@ final class ClipboardMutationService: ClipboardMutating {
         var applied: [String] = []
 
         for mutation in mutations {
-            // Check content type rule
-            let enabledForType: Bool = if let rules = rulesProvider {
-                rules.isEnabled(mutation.id, for: item.contentType)
-            } else {
-                mutation.id.defaultContentTypes.contains(item.contentType)
-                    && mutation.id.enabledByDefault
-            }
-
-            // Check source app override (if any)
-            var enabled = enabledForType
-            if let bundleID = sourceAppBundleID, let rules = rulesProvider,
-               let override = rules.isOverridden(mutation.id, for: bundleID)
-            {
-                enabled = override
-            }
-
-            guard enabled else { continue }
+            guard isEnabled(mutation.id, for: item.contentType, sourceAppBundleID: sourceAppBundleID) else { continue }
 
             let previous = result
             result = mutation.mutate(result)
@@ -162,6 +146,18 @@ final class ClipboardMutationService: ClipboardMutating {
         }
 
         return result
+    }
+
+    private func isEnabled(_ mutationID: MutationID, for contentType: ContentType, sourceAppBundleID: String?) -> Bool {
+        guard let rules = rulesProvider else {
+            return mutationID.defaultContentTypes.contains(contentType) && mutationID.enabledByDefault
+        }
+
+        let enabledForType = rules.isEnabled(mutationID, for: contentType)
+        guard let bundleID = sourceAppBundleID,
+              let override = rules.isOverridden(mutationID, for: bundleID)
+        else { return enabledForType }
+        return override
     }
 
     static func defaultMutations() -> [any ClipboardMutation] {
