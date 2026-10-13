@@ -143,9 +143,6 @@ final class ClipboardItem: Identifiable {
         }
     }
 
-    /// App-specific pretty preview (e.g. "Logic Pro region — Guitar") when the item was
-    /// captured from a known app with a custom pasteboard format. Falls back to `nil`
-    /// so callers can use the default `preview`.
     var appSpecificPreview: String? {
         guard let profile = AppPasteboardProfiles.profile(for: sourceAppBundleID),
               case let .text(string) = content

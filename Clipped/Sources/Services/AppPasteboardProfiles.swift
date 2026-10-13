@@ -9,9 +9,6 @@ struct AppPasteboardProfile {
     let bundleIDs: Set<String>
     let displayAppName: String
     let kindLabel: String
-    /// Build a human-legible preview from the raw plain-text representation the app
-    /// wrote to the pasteboard. Returns `nil` if the string doesn't look like content
-    /// from this app after all.
     let prettyPreview: @Sendable (String) -> String?
 }
 
@@ -42,10 +39,6 @@ enum AppPasteboardProfiles {
         return all.first { $0.bundleIDs.contains(bundleID) }
     }
 
-    /// Extract the first contiguous run of non-numeric tokens from a whitespace-separated
-    /// string. Tokens that are purely digits (with optional trailing dot) are treated as
-    /// position/length markers and skipped; the first non-numeric token starts the name
-    /// and subsequent non-numeric tokens extend it until a numeric token breaks the run.
     static func extractTrackName(_ raw: String) -> String {
         let tokens = raw.split(whereSeparator: \.isWhitespace)
         var collected: [Substring] = []

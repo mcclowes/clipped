@@ -45,16 +45,16 @@ enum SourceAppCategory: String, CaseIterable, Identifiable, Codable {
                 "com.tinyspeck.slackmacgap", // Slack
                 "com.apple.iChat", // Messages
                 "com.apple.MobileSMS", // Messages (newer bundle)
-                "com.apple.mail", // Mail
+                "com.apple.mail",
                 "com.microsoft.teams", // Teams v1
                 "com.microsoft.teams2", // Teams v2
-                "com.microsoft.Outlook", // Outlook
+                "com.microsoft.Outlook",
                 "com.readdle.smartemail-Mac", // Spark
-                "com.hnc.Discord", // Discord
-                "net.whatsapp.WhatsApp", // WhatsApp
-                "ru.keepcoder.Telegram", // Telegram
-                "com.tdesktop.Telegram", // Telegram Desktop
-                "com.apple.FaceTime", // FaceTime
+                "com.hnc.Discord",
+                "net.whatsapp.WhatsApp",
+                "ru.keepcoder.Telegram",
+                "com.tdesktop.Telegram",
+                "com.apple.FaceTime",
                 "us.zoom.xos", // Zoom
             ]
         case .browser:
