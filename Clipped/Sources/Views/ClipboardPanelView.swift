@@ -5,9 +5,6 @@ struct ClipboardPanelView: View {
     /// The full history is reachable via the "See more" button which opens `HistoryWindowView`.
     static let quickAccessLimit = 50
 
-    /// Sentinel row used to reset the cached scroll position when the panel opens.
-    private static let topAnchorID = "clipped.panel.top"
-
     @Environment(ClipboardManager.self) private var manager
     @Environment(SettingsManager.self) private var settings
 
@@ -23,6 +20,7 @@ struct ClipboardPanelView: View {
     /// Selection is tracked by stable identity, not array position, so ingesting or deleting an
     /// item while the panel is open can't silently point the highlight at a different row.
     @State private var selectedItemID: ClipboardItem.ID?
+    @State private var scrollPosition = ScrollPosition(edge: .top)
     @State private var showQuickMenu = false
     @State private var showCopiedToast = false
     @State private var copiedToastToken = 0
@@ -196,10 +194,6 @@ struct ClipboardPanelView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(spacing: 2) {
-                            Color.clear
-                                .frame(height: 0)
-                                .id(Self.topAnchorID)
-
                             if !pinnedItems.isEmpty {
                                 Section {
                                     ForEach(pinnedItems) { item in
@@ -239,11 +233,12 @@ struct ClipboardPanelView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                     }
+                    .scrollPosition($scrollPosition)
                     .onChange(of: selectedItemID) { _, newID in
                         scrollToSelected(proxy: proxy, id: newID)
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .clippedPanelDidShow)) { _ in
-                        proxy.scrollTo(Self.topAnchorID, anchor: .top)
+                        scrollPosition.scrollTo(edge: .top)
                     }
                 }
             }
