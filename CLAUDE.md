@@ -23,6 +23,7 @@ authoritative listing — do not hand-maintain a tree here (it rots). Notable se
 - `Sources/Services/PasteboardMonitor.swift` — polls `NSPasteboard.changeCount`
 - `Sources/Services/ClipboardHistory.swift` — in-memory history + debounced save
 - `Sources/Services/HistoryStore.swift` + `HistoryCrypto.swift` + `KeychainKeyStore.swift` — encrypted persistence
+- `Sources/Models/StoredEntry.swift` — Codable history snapshots and clipboard-content conversion
 - `Sources/Services/LinkMetadataFetcher.swift` — `LPMetadataProvider` cache with SSRF filtering
 - `Sources/Services/ScreenshotWatcher.swift` — dispatch-source watch on `~/Desktop` screenshots
 - `Sources/Services/HotkeyManager.swift` — Carbon global hotkey
