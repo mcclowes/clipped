@@ -9,6 +9,7 @@ struct ClipboardItemRow: View {
 
     @State private var isHovered = false
     @State private var isRevealed = false
+    @State private var isDetectedTextExpanded = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -244,22 +245,34 @@ struct ClipboardItemRow: View {
         } else {
             switch item.content {
             case let .image(data, _):
-                // Downsampled + cached by item id so scrolling doesn't re-decode the full image.
-                if let nsImage = ThumbnailCache.shared.thumbnail(for: item.id, data: data, maxPixel: 96) {
-                    HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
+                    // Keep larger previews sharp on Retina displays without decoding the original.
+                    if let nsImage = ThumbnailCache.shared.thumbnail(for: item.id, data: data, maxPixel: 640) {
                         Image(nsImage: nsImage)
                             .resizable()
                             .scaledToFit()
-                            .frame(maxHeight: 48)
+                            .frame(maxWidth: .infinity, maxHeight: 160, alignment: .leading)
                             .clipShape(.rect(cornerRadius: 4))
-                        if let text = item.extractedText {
+                    }
+                    if let text = item.extractedText, !text.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Detected text")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
                             Text(text)
                                 .font(.caption)
-                                .lineLimit(2)
-                                .foregroundStyle(.secondary)
+                                .lineLimit(isDetectedTextExpanded ? nil : 4)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button(isDetectedTextExpanded ? "Show less" : "Show all text") {
+                                isDetectedTextExpanded.toggle()
+                            }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
                         }
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             case let .svg(data, _):
                 if let nsImage = NSImage(data: data) {
                     HStack(spacing: 8) {
