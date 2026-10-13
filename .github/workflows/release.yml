@@ -99,8 +99,23 @@ jobs:
         id: artifact
         run: |
           BUILD_DIR=$(xcodebuild -project Clipped/Clipped.xcodeproj -scheme Clipped -configuration Release -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $NF}')
-          echo "zip_path=${BUILD_DIR}/Clipped.zip" >> "$GITHUB_OUTPUT"
-          echo "sha256=$(shasum -a 256 "${BUILD_DIR}/Clipped.zip" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          release_architectures=$(lipo -archs "${BUILD_DIR}/Clipped.app/Contents/MacOS/Clipped")
+          cask_arches=""
+          for release_arch in $release_architectures; do
+            case "$release_arch" in
+              arm64|x86_64) cask_arches="${cask_arches:+$cask_arches, }:$release_arch" ;;
+              *) echo "Unsupported release architecture: $release_arch" >&2; exit 1 ;;
+            esac
+          done
+          if [ -z "$cask_arches" ]; then
+            echo "Release binary contains no supported architectures" >&2
+            exit 1
+          fi
+          {
+            echo "cask_arches=$cask_arches"
+            echo "zip_path=${BUILD_DIR}/Clipped.zip"
+            echo "sha256=$(shasum -a 256 "${BUILD_DIR}/Clipped.zip" | awk '{print $1}')"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -128,11 +143,13 @@ jobs:
           cask "clipped" do
             version "${{ github.ref_name }}"
             sha256 "${{ steps.artifact.outputs.sha256 }}"
+
             url "https://github.com/mcclowes/clipped/releases/download/${{ github.ref_name }}/Clipped.zip"
             name "Clipped"
-            desc "Native macOS clipboard manager"
+            desc "Clipboard manager"
             homepage "https://github.com/mcclowes/clipped"
 
+            depends_on arch: [${{ steps.artifact.outputs.cask_arches }}]
             depends_on macos: :sequoia
 
             app "Clipped.app"
@@ -163,4 +180,4 @@ jobs:
 
       - name: Clean up keychain
         if: always()
-        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
