@@ -5,7 +5,7 @@ import CryptoKit
 import Darwin
 import Foundation
 import ImageIO
-import class LinkPresentation.LPLinkMetadata
+@preconcurrency import class LinkPresentation.LPLinkMetadata
 import LocalAuthentication
 import ServiceManagement
 import UniformTypeIdentifiers
