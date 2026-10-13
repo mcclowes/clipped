@@ -152,13 +152,19 @@ actor MockLinkMetadataProvider: LinkMetadataProviding {
         return resolvesPublicly
     }
 
-    func fetchMetadata(for url: URL) -> sending LPLinkMetadata {
-        requestedURLs.append(url)
+    /// Nonisolated so the fresh `LPLinkMetadata` leaves in its own region: Xcode 16's checker
+    /// rejects a `sending` result that was assembled inside an actor-isolated method.
+    nonisolated func fetchMetadata(for url: URL) async -> sending LPLinkMetadata {
+        await recordRequest(url)
         let metadata = LPLinkMetadata()
         metadata.title = title
         metadata.iconProvider = favicon.map(Self.imageProvider)
         metadata.imageProvider = image.map(Self.imageProvider)
         return metadata
+    }
+
+    private func recordRequest(_ url: URL) {
+        requestedURLs.append(url)
     }
 
     private static func imageProvider(_ data: Data) -> NSItemProvider {
