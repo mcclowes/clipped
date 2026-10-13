@@ -179,7 +179,6 @@ enum SourceAppCategory: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// Filter options for the clipboard panel, including content types and the developer meta-filter.
 enum ClipboardFilter: Hashable, Identifiable {
     case contentType(ContentType)
     case text // combines plainText + richText
@@ -217,7 +216,6 @@ enum ClipboardFilter: Hashable, Identifiable {
         }
     }
 
-    /// User-visible description shown in settings next to the toggle.
     var settingsDescription: String {
         switch self {
         case .text:
@@ -261,7 +259,6 @@ enum ClipboardFilter: Hashable, Identifiable {
         ClipboardFilter.sourceApp(.terminal).id,
     ]
 
-    /// Filter tabs that pivot on the clipboard item's native content type.
     static let contentTypeFilters: [ClipboardFilter] = [
         .text,
         .contentType(.url),
@@ -269,10 +266,8 @@ enum ClipboardFilter: Hashable, Identifiable {
         .contentType(.image),
     ]
 
-    /// Filter tabs powered by `ContentCategoryDetector` — free-form content pattern matches.
     static let smartCategoryFilters: [ClipboardFilter] = ContentCategory.allCases.map(ClipboardFilter.category)
 
-    /// Filter tabs powered by `SourceAppCategory` — bucketed by where the item was copied from.
     static let sourceAppFilters: [ClipboardFilter] = SourceAppCategory.allCases.map(ClipboardFilter.sourceApp)
 }
 
@@ -572,9 +567,6 @@ final class ClipboardItem: Identifiable {
     /// source app still works. Keys are pasteboard type identifiers (UTIs).
     var customPasteboardTypes: [String: Data]?
 
-    /// Convenience lookup for the source app's broad category, derived from the
-    /// bundle ID at access time so the classification stays consistent with any
-    /// changes to `SourceAppCategory.bundleIDs`.
     var sourceAppCategory: SourceAppCategory? {
         guard let bundleID = sourceAppBundleID else { return nil }
         return SourceAppCategory.category(for: bundleID)
@@ -688,15 +680,12 @@ enum ClipboardContent: Equatable {
 /// an `<svg>` but starts with other markup will not trigger, which is the behavior
 /// we want — otherwise pasting an article into the clipboard would misclassify it.
 enum SVGDetector {
-    /// Maximum bytes we'll consider when sniffing so we don't walk an enormous string.
     private static let maxSniffBytes = 2048
 
     static func looksLikeSVG(_ text: String) -> Bool {
         let trimmed = text.drop { $0.isWhitespace || $0.isNewline }
-        // Fast rejects: empty or doesn't start with `<`.
         guard let first = trimmed.first, first == "<" else { return false }
 
-        // Walk only the first chunk so giant strings stay cheap.
         let head = String(trimmed.prefix(maxSniffBytes)).lowercased()
 
         // Direct `<svg` (with space, newline, or `>` after).

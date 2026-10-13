@@ -35,8 +35,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             mutationService.rulesProvider = settingsManager
         }
         screenshotWatcher.clipboardManager = clipboardManager
-        // Only ask for notification permission when the screenshot feature is actually enabled,
-        // rather than prompting every user on first launch.
         if settingsManager.captureScreenshots {
             screenshotWatcher.requestNotificationPermission()
             if let folder = screenshotWatcher.resolveBookmark() {
