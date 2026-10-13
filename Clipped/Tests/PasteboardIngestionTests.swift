@@ -261,6 +261,133 @@ struct PasteboardIngestionTests {
         #expect(mock.string(forType: .string) == "Formatted")
     }
 
+    private func makeCopyManager() -> (ClipboardManager, MockPasteboard) {
+        let pasteboard = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: pasteboard)
+        let settings = MockSettingsManager()
+        settings.playSoundOnCopy = false
+        settings.persistAcrossReboots = false
+        manager.settingsManager = settings
+        manager.historyStore = MockHistoryStore()
+        return (manager, pasteboard)
+    }
+
+    @Test("Plain-text copy bypasses captured app payloads", arguments: [false, true])
+    func customPayloadPrecedence(asPlainText: Bool) {
+        let (manager, pasteboard) = makeCopyManager()
+        let customType = NSPasteboard.PasteboardType("com.example.region")
+        let payload = Data([1, 2, 3])
+        let item = ClipboardItem(content: .text("region"), contentType: .plainText)
+        item.customPasteboardTypes = [customType.rawValue: payload]
+        let newest = ClipboardItem(content: .text("newest"), contentType: .plainText)
+        manager.items = [newest, item]
+        pasteboard.stageExternalWrite(types: [.rtf], data: [.rtf: Data([9])])
+        var completed = false
+
+        manager.copyToClipboard(item, asPlainText: asPlainText) { completed = true }
+        manager.monitor.check()
+
+        if asPlainText {
+            #expect(pasteboard.types == [.string])
+            #expect(pasteboard.string(forType: .string) == "region")
+        } else {
+            #expect(pasteboard.types == [customType])
+            #expect(pasteboard.data(forType: customType) == payload)
+        }
+        #expect(manager.items.map(\.id) == [item.id, newest.id])
+        #expect(completed)
+    }
+
+    @Test("Copy as ignores captured app payloads", arguments: ClipboardRepresentation.allCases)
+    func selectedRepresentationBypassesCustomPayload(_ representation: ClipboardRepresentation) {
+        let (manager, pasteboard) = makeCopyManager()
+        let item = ClipboardItem(content: .text("plain"), contentType: .plainText)
+        item.customPasteboardTypes = ["com.example.region": Data([1])]
+
+        manager.copyToClipboard(item, as: representation)
+
+        #expect(pasteboard.types == [.string])
+        #expect(pasteboard.string(forType: .string) == "plain")
+    }
+
+    @Test("Rich text copied as plain text omits rich payloads")
+    func richTextPlainCopy() {
+        let (manager, pasteboard) = makeCopyManager()
+        let item = ClipboardItem(content: .richText(Data([1]), "plain"), contentType: .richText)
+        item.htmlData = Data("<b>plain</b>".utf8)
+
+        manager.copyToClipboard(item, asPlainText: true)
+
+        #expect(pasteboard.types == [.string])
+        #expect(pasteboard.string(forType: .string) == "plain")
+    }
+
+    @Test("HTML copy without retained HTML keeps its plain-text fallback")
+    func missingHTMLFallback() {
+        let (manager, pasteboard) = makeCopyManager()
+        let item = ClipboardItem(content: .richText(Data([1]), "fallback"), contentType: .richText)
+
+        manager.copyToClipboard(item, as: .html)
+
+        #expect(pasteboard.types == [.string])
+        #expect(pasteboard.string(forType: .string) == "fallback")
+    }
+
+    @Test("Markdown copy preserves links and moves history without reingestion")
+    func markdownCopy() throws {
+        let (manager, pasteboard) = makeCopyManager()
+        let attributed = NSAttributedString(
+            string: "Example", attributes: [.link: "https://example.com"]
+        )
+        let rtf = try #require(attributed.rtf(
+            from: NSRange(location: 0, length: attributed.length), documentAttributes: [:]
+        ))
+        let item = ClipboardItem(content: .richText(rtf, "Example"), contentType: .richText)
+        let newest = ClipboardItem(content: .text("newest"), contentType: .plainText)
+        manager.items = [newest, item]
+        var completed = false
+
+        manager.copyToClipboard(item, as: .markdown) { completed = true }
+        manager.monitor.check()
+
+        #expect(pasteboard.types == [.string])
+        #expect(pasteboard.string(forType: .string) == "[Example](https://example.com)")
+        #expect(manager.items.map(\.id) == [item.id, newest.id])
+        #expect(completed)
+    }
+
+    @Test("Markdown copy falls back when conversion is invalid or empty", arguments: [false, true])
+    func markdownFallback(emptyRTF: Bool) throws {
+        let (manager, pasteboard) = makeCopyManager()
+        let attributed = NSAttributedString(string: "")
+        let rtf = try emptyRTF ? #require(attributed.rtf(
+            from: NSRange(location: 0, length: 0), documentAttributes: [:]
+        )) : Data([0, 1, 2])
+        let item = ClipboardItem(content: .richText(rtf, "fallback"), contentType: .richText)
+
+        manager.copyToClipboard(item, as: .markdown)
+
+        #expect(pasteboard.types == [.string])
+        #expect(pasteboard.string(forType: .string) == "fallback")
+    }
+
+    @Test("Image copy preserves PNG and renders other raster formats as TIFF", arguments: RasterImageFormat.allCases)
+    func imageCopyFormat(_ format: RasterImageFormat) throws {
+        let (manager, pasteboard) = makeCopyManager()
+        let data = TestImageFactory.data(width: 4, height: 3, format: format)
+        let item = ClipboardItem(content: .image(data, CGSize(width: 4, height: 3)), contentType: .image)
+
+        manager.copyToClipboard(item)
+
+        let type: NSPasteboard.PasteboardType = format == .png ? .png : .tiff
+        #expect(pasteboard.types == [type])
+        let copiedData = try #require(pasteboard.data(forType: type))
+        #expect(NSImage(data: copiedData) != nil)
+        if format == .png {
+            #expect(copiedData == data)
+        }
+    }
+
     @Test("Ingest flags items that look like API keys as containing a secret")
     func ingestFlagsSecrets() {
         let mock = MockPasteboard()

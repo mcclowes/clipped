@@ -23,13 +23,8 @@ private let passwordManagerBundleIDs: Set<String> = [
     "me.proton.pass.electron", // Proton Pass
 ]
 
-/// Clipboard pipeline coordinator. Glues `PasteboardMonitor` (which produces raw items),
-/// `ClipboardHistory` (which stores filtered/pinned state), and the mutation + link-metadata
-/// services together. Also owns the pasteboard-writing actions (copy, paste, export).
-///
-/// This type used to be a 400-line god object; it is now narrow enough to be explained
-/// in one sentence. View-facing API is kept stable via computed-property forwarding so
-/// consumers of `@Environment(ClipboardManager.self)` do not churn.
+/// Coordinates clipboard ingestion, protected actions, and history updates.
+/// Pasteboard encoding belongs to `ClipboardPasteboardWriter`.
 @MainActor
 @Observable
 final class ClipboardManager {
@@ -468,66 +463,10 @@ final class ClipboardManager {
     }
 
     private func writeToClipboard(_ item: ClipboardItem, asPlainText: Bool = false) {
-        if !asPlainText, let customTypes = item.customPasteboardTypes {
-            replayCustomPasteboardTypes(customTypes, item: item)
-            return
-        }
         monitor.write { pasteboard in
-            pasteboard.clearContents()
-            switch item.content {
-            case let .text(string):
-                pasteboard.setString(string, forType: .string)
-            case let .richText(rtfData, plain):
-                Self.writeRichText(
-                    rtfData: rtfData,
-                    plain: plain,
-                    htmlData: item.htmlData,
-                    asPlainText: asPlainText,
-                    to: pasteboard
-                )
-            case let .url(url):
-                pasteboard.setString(url.absoluteString, forType: .string)
-            case let .image(data, _):
-                Self.writeImageData(data, to: pasteboard)
-            case let .svg(data, _):
-                // Write three representations so paste works everywhere:
-                // 1. The SVG markup as a string — code editors, text fields, terminals.
-                // 2. The vector source under `public.svg-image` — design tools that
-                //    understand SVG will preserve it losslessly.
-                // 3. A rasterized TIFF fallback — Keynote, Slack, Mail, etc.
-                if let markup = String(data: data, encoding: .utf8) {
-                    pasteboard.setString(markup, forType: .string)
-                }
-                pasteboard.setData(data, forType: svgPasteboardType)
-                if let tiff = NSImage(data: data)?.tiffRepresentation {
-                    pasteboard.setData(tiff, forType: .tiff)
-                }
-            }
+            ClipboardPasteboardWriter.write(item, asPlainText: asPlainText, to: pasteboard)
         }
-
-        if settingsManager?.playSoundOnCopy ?? true {
-            NSSound(named: "Pop")?.play()
-        }
-
-        history.moveToTop(item)
-    }
-
-    private static func writeRichText(
-        rtfData: Data,
-        plain: String,
-        htmlData: Data?,
-        asPlainText: Bool,
-        to pasteboard: any PasteboardProtocol
-    ) {
-        guard !asPlainText else {
-            pasteboard.setString(plain, forType: .string)
-            return
-        }
-        pasteboard.setData(rtfData, forType: .rtf)
-        pasteboard.setString(plain, forType: .string)
-        if let htmlData {
-            pasteboard.setData(htmlData, forType: ClipboardRepresentation.html.pasteboardType)
-        }
+        finishCopying(item)
     }
 
     func copyToClipboard(
@@ -542,57 +481,13 @@ final class ClipboardManager {
     }
 
     private func writeToClipboard(_ item: ClipboardItem, as representation: ClipboardRepresentation) {
-        guard case let .richText(rtfData, plain) = item.content else {
-            writeToClipboard(item, asPlainText: true)
-            return
-        }
-
-        let string: String? = switch representation {
-        case .plainText:
-            plain
-        case .markdown:
-            MarkdownConverter.convert(rtfData: rtfData).flatMap { $0.isEmpty ? nil : $0 } ?? plain
-        case .html, .richText:
-            nil
-        }
-
         monitor.write { pasteboard in
-            pasteboard.clearContents()
-            switch representation {
-            case .html:
-                if let htmlData = item.htmlData {
-                    pasteboard.setData(htmlData, forType: representation.pasteboardType)
-                }
-                pasteboard.setString(plain, forType: .string)
-            case .richText:
-                pasteboard.setData(rtfData, forType: representation.pasteboardType)
-                pasteboard.setString(plain, forType: .string)
-            case .plainText, .markdown:
-                if let string {
-                    pasteboard.setString(string, forType: representation.pasteboardType)
-                }
-            }
+            ClipboardPasteboardWriter.write(item, as: representation, to: pasteboard)
         }
-
-        if settingsManager?.playSoundOnCopy ?? true {
-            NSSound(named: "Pop")?.play()
-        }
-        history.moveToTop(item)
+        finishCopying(item)
     }
 
-    /// Replay a captured map of raw pasteboard type → data (Logic Pro regions, etc.)
-    /// so paste into the source app works. Keeps `copyToClipboard` under the project's
-    /// cyclomatic-complexity ceiling by extracting the early-return path.
-    private func replayCustomPasteboardTypes(
-        _ customTypes: [String: Data],
-        item: ClipboardItem
-    ) {
-        monitor.write { pasteboard in
-            pasteboard.clearContents()
-            for (rawType, data) in customTypes {
-                pasteboard.setData(data, forType: NSPasteboard.PasteboardType(rawType))
-            }
-        }
+    private func finishCopying(_ item: ClipboardItem) {
         if settingsManager?.playSoundOnCopy ?? true {
             NSSound(named: "Pop")?.play()
         }
@@ -645,36 +540,6 @@ final class ClipboardManager {
         )
         performProtectedRead(for: [item], reason: "Copy hidden extracted text") { [weak self] in
             self?.writeGeneratedTextItem(item)
-        }
-    }
-
-    private static func isPNGData(_ data: Data) -> Bool {
-        // PNG magic: 89 50 4E 47 0D 0A 1A 0A
-        let magic: [UInt8] = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]
-        guard data.count >= magic.count else { return false }
-        return data.prefix(magic.count).elementsEqual(magic)
-    }
-
-    private static func isTIFFData(_ data: Data) -> Bool {
-        // TIFF magic: "II*\0" (little-endian) or "MM\0*" (big-endian).
-        let little: [UInt8] = [0x49, 0x49, 0x2A, 0x00]
-        let big: [UInt8] = [0x4D, 0x4D, 0x00, 0x2A]
-        guard data.count >= 4 else { return false }
-        let head = data.prefix(4)
-        return head.elementsEqual(little) || head.elementsEqual(big)
-    }
-
-    /// Write image bytes to the pasteboard under a type apps can actually paste.
-    /// PNG and TIFF advertise their native type directly; other formats (JPEG/HEIC
-    /// produced by the image utilities) are handed over as a TIFF rendition so paste
-    /// works everywhere — the compact original still lives in history.
-    private static func writeImageData(_ data: Data, to pasteboard: PasteboardProtocol) {
-        if isPNGData(data) {
-            pasteboard.setData(data, forType: .png)
-        } else if isTIFFData(data) {
-            pasteboard.setData(data, forType: .tiff)
-        } else if let tiff = NSImage(data: data)?.tiffRepresentation {
-            pasteboard.setData(tiff, forType: .tiff)
         }
     }
 
@@ -859,8 +724,7 @@ final class ClipboardManager {
         result.mutationsApplied = [mutation]
 
         monitor.write { pasteboard in
-            pasteboard.clearContents()
-            Self.writeImageData(newData, to: pasteboard)
+            ClipboardPasteboardWriter.write(result, to: pasteboard)
         }
 
         history.insert(result)
