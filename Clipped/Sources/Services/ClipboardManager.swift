@@ -422,11 +422,14 @@ final class ClipboardManager {
         guard case let .image(data, _) = content else { return }
         let extract = extractImageText
         enrichmentTasks[itemID] = Task { [weak self] in
-            await Self.ocrLimiter.acquire()
-            let text = await extract(data)
-            await Self.ocrLimiter.release()
-            guard let self else { return }
-            defer { enrichmentTasks[itemID] = nil }
+            defer { self?.enrichmentTasks[itemID] = nil }
+            let text: String?
+            do {
+                text = try await Self.ocrLimiter.withPermit { await extract(data) }
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
             {
@@ -943,31 +946,63 @@ struct WorkspacePasteBackEnvironment: PasteBackEnvironment {
     }
 }
 
-/// A tiny counting semaphore for structured tasks — bounds how many unstructured enrichment
-/// jobs (e.g. Vision OCR) run at once so a paste-storm can't saturate the CPU.
+/// Bounds concurrent enrichment and keeps each permit scoped to its operation.
 actor TaskLimiter {
+    private struct Waiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, any Error>
+    }
+
     private let limit: Int
     private var running = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [Waiter] = []
 
     init(limit: Int) {
         self.limit = max(1, limit)
     }
 
-    func acquire() async {
+    func withPermit<Result: Sendable>(_ operation: @Sendable () async throws -> Result) async throws -> Result {
+        try await acquire()
+        defer { release() }
+        try Task.checkCancellation()
+        return try await operation()
+    }
+
+    private func acquire() async throws {
+        try Task.checkCancellation()
         if running < limit {
             running += 1
             return
         }
-        await withCheckedContinuation { waiters.append($0) }
-        // Resumed by `release()`, which hands its slot straight to us.
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                guard !Task.isCancelled else {
+                    continuation.resume(throwing: CancellationError())
+                    return
+                }
+                waiters.append(Waiter(id: id, continuation: continuation))
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(id: id) }
+        }
+        // A release may hand us a slot before the cancellation handler reaches the actor.
+        if Task.isCancelled {
+            release()
+            throw CancellationError()
+        }
     }
 
-    func release() {
+    private func cancelWaiter(id: UUID) {
+        guard let index = waiters.firstIndex(where: { $0.id == id }) else { return }
+        waiters.remove(at: index).continuation.resume(throwing: CancellationError())
+    }
+
+    private func release() {
         if waiters.isEmpty {
             running = max(0, running - 1)
         } else {
-            waiters.removeFirst().resume()
+            waiters.removeFirst().continuation.resume()
         }
     }
 }

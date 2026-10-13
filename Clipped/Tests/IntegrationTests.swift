@@ -37,6 +37,120 @@ enum PasteBackBlock: CaseIterable, Sendable {
     }
 }
 
+@Suite(.timeLimit(.minutes(1)))
+struct TaskLimiterTests {
+    @Test("An already canceled task cannot acquire an OCR permit", .bug(id: 122))
+    func canceledAcquisition() async {
+        let limiter = TaskLimiter(limit: 1)
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            do {
+                return try await limiter.withPermit { true }
+            } catch {
+                #expect(error is CancellationError)
+                return false
+            }
+        }
+        #expect(await task.value == false)
+    }
+
+    @Test("Canceling pending OCR work does not consume the next permit", .bug(id: 122))
+    func canceledWaiter() async throws {
+        let limiter = TaskLimiter(limit: 1)
+        let held = AsyncStream<Void>.makeStream()
+        let release = AsyncStream<Void>.makeStream()
+        let attempted = AsyncStream<Void>.makeStream()
+        let holder = Task {
+            try await limiter.withPermit {
+                held.continuation.yield()
+                for await _ in release.stream {
+                    break
+                }
+            }
+        }
+        for await _ in held.stream {
+            break
+        }
+
+        let waiter = Task {
+            attempted.continuation.yield()
+            do {
+                return try await limiter.withPermit { true }
+            } catch {
+                #expect(error is CancellationError)
+                return false
+            }
+        }
+        for await _ in attempted.stream {
+            break
+        }
+        waiter.cancel()
+        let fallback = Task {
+            do {
+                try await Task.sleep(for: .seconds(10))
+                release.continuation.yield()
+                return true
+            } catch {
+                return false
+            }
+        }
+        let acquired = await waiter.value
+        fallback.cancel()
+        let neededHolderRelease = await fallback.value
+        release.continuation.yield()
+        try await holder.value
+        #expect(acquired == false)
+        #expect(neededHolderRelease == false)
+        #expect(try await limiter.withPermit { "next OCR job" } == "next OCR job")
+    }
+
+    private enum ExtractionError: Error { case failed }
+
+    @Test("An extraction failure releases its OCR permit", .bug(id: 122))
+    func failureReleasesPermit() async throws {
+        let limiter = TaskLimiter(limit: 1)
+        await #expect(throws: ExtractionError.self) {
+            try await limiter.withPermit { throw ExtractionError.failed }
+        }
+        #expect(try await limiter.withPermit { 42 } == 42)
+    }
+
+    private actor ConcurrentExtractions {
+        private var running = 0
+        private(set) var peak = 0
+
+        func extract() async -> Int {
+            running += 1
+            peak = max(peak, running)
+            for _ in 0..<10 {
+                await Task.yield()
+            }
+            running -= 1
+            return 42
+        }
+    }
+
+    @Test("An OCR burst stays within the configured limit", .bug(id: 122), arguments: [0, 1, 2, 4])
+    func concurrentLimit(_ limit: Int) async throws {
+        let limiter = TaskLimiter(limit: limit)
+        let extractions = ConcurrentExtractions()
+        let total = try await withThrowingTaskGroup(of: Int.self) { group in
+            for _ in 0..<100 {
+                group.addTask {
+                    try await limiter.withPermit { await extractions.extract() }
+                }
+            }
+            var total = 0
+            for try await value in group {
+                total += value
+            }
+            return total
+        }
+        #expect(total == 4200)
+        #expect(await extractions.peak <= max(1, limit))
+    }
+}
+
 /// Multi-service integration tests. Wires the real `ClipboardManager`,
 /// `PasteboardMonitor`, `ClipboardHistory`, and mutation service together with
 /// `MockPasteboard` + `MockHistoryStore` (so the real disk and clipboard stay
