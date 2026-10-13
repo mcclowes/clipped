@@ -60,6 +60,34 @@ struct SVGHandlingTests {
         #expect(!SVGDetector.looksLikeSVG("<svgnotreally"))
     }
 
+    @Test("Detector preserves root and prolog boundaries", arguments: [
+        ("<svg>", true),
+        ("<SVG />", true),
+        ("<svg\nwidth='10'>", true),
+        ("<svg\twidth='10'>", true),
+        ("<svg/>", true),
+        ("<svg\rwidth='10'>", false),
+        ("<svg-icon>", false),
+        ("<?xml version='1.0'?><!DOCTYPE svg><svg>", true),
+        ("<!DOCTYPE svg> <!-- first --> <!-- second --> <svg/>", true),
+        ("<?XML version='1.0'?> <SVG>", true),
+        ("<!-- comment --> <svg>", false),
+        ("<?xml version='1.0'?> <!-- <svg> --> <rss>", false),
+        ("<?xml version='1.0'", false),
+        ("<!DOCTYPE svg> <!-- unclosed <svg>", false),
+        ("<?xml version='1.0'?>", false),
+    ])
+    func rootBoundaries(text: String, expected: Bool) {
+        #expect(SVGDetector.looksLikeSVG(text) == expected)
+    }
+
+    @Test("Detector only sniffs the initial content window")
+    func boundedSniffing() {
+        let prolog = "<?xml version='1.0'?>"
+        let svgBeyondWindow = prolog + String(repeating: " ", count: 2048) + "<svg>"
+        #expect(!SVGDetector.looksLikeSVG(svgBeyondWindow))
+    }
+
     // MARK: - Pasteboard ingestion
 
     @Test("Monitor ingests SVG markup copied as plain text as a .svg item")

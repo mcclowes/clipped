@@ -39,6 +39,22 @@ struct DeveloperContentDetectorTests {
         #expect(DeveloperContentDetector.isDeveloperContent(#"[{"id": 1}, {"id": 2}]"#))
     }
 
+    @Test("JSON heuristic requires matching delimiters and a separator", arguments: [
+        ("{key:value}", true),
+        ("[1,2]", true),
+        (" \n[1,2]\t", true),
+        ("{a,b}", true),
+        ("{}", false),
+        ("[]", false),
+        ("[42]", false),
+        ("{word}", false),
+        ("[1,2}", false),
+        ("key:value", false),
+    ])
+    func jsonBoundaries(text: String, expected: Bool) {
+        #expect(DeveloperContentDetector.isDeveloperContent(text) == expected)
+    }
+
     @Test("Detects file paths")
     func detectsFilePaths() {
         #expect(DeveloperContentDetector.isDeveloperContent("/usr/local/bin/python"))

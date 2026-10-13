@@ -27,6 +27,10 @@ authoritative listing — do not hand-maintain a tree here (it rots). Notable se
 - `Sources/Services/ScreenshotWatcher.swift` — dispatch-source watch on `~/Desktop` screenshots
 - `Sources/Services/HotkeyManager.swift` — Carbon global hotkey
 - `Sources/Services/AppPasteboardProfiles.swift` — per-app pasteboard type profiles (e.g. Logic Pro)
+- `Sources/Models/ClipboardItem.swift` — observable item state and content types
+- `Sources/Models/ClipboardFilter.swift` + `SourceAppCategory.swift` — filters and source-app classification
+- `Sources/Services/ContentCategoryDetector.swift`, `DeveloperContentDetector.swift`,
+  `SecretDetector.swift`, and `SVGDetector.swift` — content classification and sniffing
 - `Sources/Services/OnboardingSeeder.swift` — first-launch example items
 - `Sources/Services/Signposts.swift` — `OSSignposter` handles for performance instrumentation
 
