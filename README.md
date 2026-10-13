@@ -45,7 +45,7 @@ Requires **macOS 15.0 (Sequoia)** or later.
 
 ## Privacy & security
 
-Watched screenshots go to history without changing your clipboard by default. Enable "Copy captured screenshots to clipboard" under Settings → General → Screenshots to copy them automatically. Detection uses macOS screenshot metadata, so ordinary images in the watched folder are ignored.
+Watched screenshots go to history and onto your clipboard by default, so a capture is ready to paste. Turn off "Copy captured screenshots to clipboard" under Settings → General → Screenshots to keep them in history without changing your clipboard. Detection uses macOS screenshot metadata, so ordinary images in the watched folder are ignored.
 
 Clipboard processing and history storage happen on your Mac. Link previews are enabled by default and make requests to copied websites and their preview-image servers. Turn off "Fetch link previews" in the Privacy section of Settings → General to keep copied URLs local.
 

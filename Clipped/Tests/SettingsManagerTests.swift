@@ -32,8 +32,8 @@ struct SettingsManagerTests {
         }
     }
 
-    @Test("Capturing screenshots does not opt into clipboard replacement", .bug(id: 113))
-    func screenshotCopyDefaultsOff() throws {
+    @Test("Capturing screenshots copies them to the clipboard unless switched off", .bug(id: 113))
+    func screenshotCopyDefaultsOn() throws {
         try withSettings { settings, defaults in
             settings.captureScreenshots = true
             let reloaded = SettingsManager(
@@ -42,7 +42,7 @@ struct SettingsManagerTests {
                 repairsLoginItem: false
             )
             #expect(reloaded.captureScreenshots)
-            #expect(!reloaded.copyScreenshotsToClipboard)
+            #expect(reloaded.copyScreenshotsToClipboard)
         }
     }
 

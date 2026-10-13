@@ -287,7 +287,10 @@ final class SettingsManager: SettingsManaging, MutationRulesProviding {
             ? true
             : defaults.bool(forKey: "playSoundOnCopy")
         captureScreenshots = defaults.bool(forKey: "captureScreenshots")
-        copyScreenshotsToClipboard = defaults.bool(forKey: "copyScreenshotsToClipboard")
+        // Only meaningful while capture is on; default to copying so a capture is ready to paste.
+        copyScreenshotsToClipboard = defaults.object(forKey: "copyScreenshotsToClipboard") == nil
+            ? true
+            : defaults.bool(forKey: "copyScreenshotsToClipboard")
         fetchLinkPreviews = defaults.object(forKey: "fetchLinkPreviews") == nil
             ? true
             : defaults.bool(forKey: "fetchLinkPreviews")
