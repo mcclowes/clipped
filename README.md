@@ -74,5 +74,7 @@ Requires Xcode 16+ and Swift 6. See [CLAUDE.md](CLAUDE.md) for project structure
 
 Local launch and packaging preserve build paths containing spaces. They use
 Debug and Release settings respectively and stop if the build or settings lookup
-fails. `make test-build-paths` checks this behavior with temporary fixtures and
+fails. Packaging validates and hashes a staged ZIP before replacing the previous
+package, so failures preserve the last archive. `make test-build-paths` checks
+these behaviors with temporary fixtures and
 real archive tools, without building, signing, or launching Clipped.

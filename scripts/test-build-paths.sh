@@ -12,6 +12,13 @@ export CLIPPED_PATH_TEST_PROJECT=Clipped/Clipped.xcodeproj
 export CLIPPED_PATH_TEST_SCHEME=Clipped
 export CLIPPED_PATH_TEST_MODE=''
 export CLIPPED_PATH_TEST_LOOKUPS="$clipped_test_temp/lookups"
+export CLIPPED_PATH_TEST_DITTO
+CLIPPED_PATH_TEST_DITTO=$(command -v ditto)
+export CLIPPED_PATH_TEST_SHASUM
+CLIPPED_PATH_TEST_SHASUM=$(command -v shasum)
+export CLIPPED_PATH_TEST_MV
+CLIPPED_PATH_TEST_MV=$(command -v mv)
+export CLIPPED_PATH_TEST_TOOLS="$clipped_test_temp/tools"
 mkdir -p "$clipped_test_project/scripts" "$clipped_test_temp/bin"
 cp "$clipped_test_source/Makefile" "$clipped_test_project/Makefile"
 cp "$clipped_test_source/scripts/build-products-dir.sh" "$clipped_test_project/scripts/"
@@ -140,4 +147,97 @@ if bash "$clipped_test_project/scripts/build-products-dir.sh" > "$clipped_test_t
     exit 1
 fi
 test ! -e "$CLIPPED_PATH_TEST_LOOKUPS"
-echo 'Passed 14 build-path scenarios; no real builds, signing, or app launch ran.'
+mkdir -p "$CLIPPED_PATH_TEST_OUTPUT/Clipped.app/Contents/MacOS"
+printf 'fixture executable\n' > "$CLIPPED_PATH_TEST_OUTPUT/Clipped.app/Contents/MacOS/Clipped"
+chmod +x "$CLIPPED_PATH_TEST_OUTPUT/Clipped.app/Contents/MacOS/Clipped"
+ln -s current.txt "$CLIPPED_PATH_TEST_OUTPUT/Clipped.app/Contents/Resources/linked.txt"
+make -s -C "$clipped_test_project" package > "$clipped_test_temp/package.log" 2>&1
+ditto -x -k "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip" "$clipped_test_temp/extracted"
+test -x "$clipped_test_temp/extracted/Clipped.app/Contents/MacOS/Clipped"
+test -L "$clipped_test_temp/extracted/Clipped.app/Contents/Resources/linked.txt"
+test "$(readlink "$clipped_test_temp/extracted/Clipped.app/Contents/Resources/linked.txt")" = current.txt
+cp "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip" "$clipped_test_temp/original.zip"
+cat > "$clipped_test_temp/bin/ditto" <<'STUB'
+#!/usr/bin/env bash
+set -eu
+printf 'archive\n' >> "$CLIPPED_PATH_TEST_TOOLS"
+case "$CLIPPED_PATH_TEST_MODE" in
+    archive-failure|corrupt-archive)
+        printf 'partial archive\n' > "${!#}"
+        if [ "$CLIPPED_PATH_TEST_MODE" = archive-failure ]; then exit 73; fi
+        exit 0
+        ;;
+esac
+exec "$CLIPPED_PATH_TEST_DITTO" "$@"
+STUB
+cat > "$clipped_test_temp/bin/shasum" <<'STUB'
+#!/usr/bin/env bash
+set -eu
+printf 'hash\n' >> "$CLIPPED_PATH_TEST_TOOLS"
+if [ "$CLIPPED_PATH_TEST_MODE" = hash-failure ]; then
+    printf 'partial hash output\n'
+    exit 75
+fi
+exec "$CLIPPED_PATH_TEST_SHASUM" "$@"
+STUB
+cat > "$clipped_test_temp/bin/mv" <<'STUB'
+#!/usr/bin/env bash
+set -eu
+printf 'publish\n' >> "$CLIPPED_PATH_TEST_TOOLS"
+if [ "$CLIPPED_PATH_TEST_MODE" = publish-failure ]; then exit 74; fi
+exec "$CLIPPED_PATH_TEST_MV" "$@"
+STUB
+chmod +x "$clipped_test_temp/bin/ditto" "$clipped_test_temp/bin/shasum" "$clipped_test_temp/bin/mv"
+
+assert_no_staging() {
+    if [ -n "$(find "$CLIPPED_PATH_TEST_OUTPUT" -name '.clipped-package.*' -print)" ]; then
+        echo 'Packaging left temporary archive staging behind.' >&2
+        exit 1
+    fi
+}
+
+for CLIPPED_PATH_TEST_MODE in archive-failure corrupt-archive hash-failure publish-failure \
+    build-failure settings-failure missing-directory package-lookup-failure; do
+    : > "$CLIPPED_PATH_TEST_LOOKUPS"
+    : > "$CLIPPED_PATH_TEST_TOOLS"
+    if make -s -C "$clipped_test_project" package > "$clipped_test_temp/failure.log" 2>&1; then
+        echo "Packaging succeeded in failure fixture: $CLIPPED_PATH_TEST_MODE" >&2
+        exit 1
+    fi
+    cmp -s "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip" "$clipped_test_temp/original.zip"
+    if grep -Eq 'Package ready:|SHA256:' "$clipped_test_temp/failure.log"; then
+        echo "Packaging failure printed success: $CLIPPED_PATH_TEST_MODE" >&2
+        exit 1
+    fi
+    assert_no_staging
+    case "$CLIPPED_PATH_TEST_MODE" in
+        build-failure|settings-failure|missing-directory|package-lookup-failure)
+            test ! -s "$CLIPPED_PATH_TEST_TOOLS"
+            ;;
+        archive-failure|corrupt-archive|hash-failure)
+            if grep -q publish "$CLIPPED_PATH_TEST_TOOLS"; then
+                echo 'Invalid archive reached publication.' >&2
+                exit 1
+            fi
+            ;;
+    esac
+done
+CLIPPED_PATH_TEST_MODE=''
+make -s -C "$clipped_test_project" package > "$clipped_test_temp/package.log" 2>&1
+assert_no_staging
+unzip -tq "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip"
+expected_hash=$("$CLIPPED_PATH_TEST_SHASUM" -a 256 "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip")
+grep -Fx "SHA256: ${expected_hash%% *}" "$clipped_test_temp/package.log"
+mv "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip" "$clipped_test_temp/final.zip"
+mkdir "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip"
+printf 'preserve directory\n' > "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip/sentinel"
+: > "$CLIPPED_PATH_TEST_TOOLS"
+if make -s -C "$clipped_test_project" package > "$clipped_test_temp/failure.log" 2>&1; then
+    echo 'Packaging accepted a directory as the ZIP path.' >&2
+    exit 1
+fi
+test "$(cat "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip/sentinel")" = 'preserve directory'
+test ! -e "$CLIPPED_PATH_TEST_OUTPUT/Clipped.zip/Clipped.zip"
+test ! -s "$CLIPPED_PATH_TEST_TOOLS"
+assert_no_staging
+echo 'Passed 25 build-path and packaging scenarios; no real builds, signing, or app launch ran.'

@@ -51,10 +51,18 @@ release:
 
 package: release
 	@BUILT_DIR=$$(bash scripts/build-products-dir.sh "$(PROJECT_DIR)/Clipped.xcodeproj" "$(SCHEME)" Release) || exit $$?; \
-	cd "$$BUILT_DIR" && \
-	ditto -c -k --keepParent Clipped.app Clipped.zip && \
-	echo "Package ready: $$(pwd)/Clipped.zip" && \
-	echo "SHA256: $$(shasum -a 256 Clipped.zip | awk '{print $$1}')"
+	cd "$$BUILT_DIR" || exit $$?; \
+	test ! -d Clipped.zip || { echo 'The package destination is a directory.' >&2; exit 1; }; \
+	CLIPPED_PACKAGE_STAGING=$$(mktemp -d "$$BUILT_DIR/.clipped-package.XXXXXX") || exit $$?; \
+	trap 'rm -rf "$$CLIPPED_PACKAGE_STAGING"' EXIT; \
+	trap 'exit 130' INT; trap 'exit 143' TERM; \
+	ditto -c -k --keepParent Clipped.app "$$CLIPPED_PACKAGE_STAGING/Clipped.zip" || exit $$?; \
+	unzip -tq "$$CLIPPED_PACKAGE_STAGING/Clipped.zip" >/dev/null || exit $$?; \
+	CLIPPED_PACKAGE_HASH=$$(shasum -a 256 "$$CLIPPED_PACKAGE_STAGING/Clipped.zip") || exit $$?; \
+	CLIPPED_PACKAGE_HASH=$${CLIPPED_PACKAGE_HASH%% *}; \
+	mv -f "$$CLIPPED_PACKAGE_STAGING/Clipped.zip" Clipped.zip || exit $$?; \
+	echo "Package ready: $$(pwd)/Clipped.zip"; \
+	echo "SHA256: $$CLIPPED_PACKAGE_HASH"
 
 clean:
 	xcodebuild -project "$(PROJECT_DIR)/Clipped.xcodeproj" -scheme "$(SCHEME)" clean

@@ -22,7 +22,9 @@ exactly `<major|minor|patch> [--push]`; malformed arguments exit 2 before any ch
 `make test-build-paths` exercises the real Makefile with stubbed Xcode and launch
 tools plus real archive tools. It checks spaced paths and project/scheme names,
 Debug/Release configuration selection, failed builds/settings, and repeated
-packaging. Fixtures do not build, sign, launch, or inspect the keychain.
+packaging. Failed compression, validation, hashing, or publication preserves the
+previous ZIP and removes staging. Fixtures do not build, sign, launch, or inspect
+the keychain.
 
 ## Project structure
 
