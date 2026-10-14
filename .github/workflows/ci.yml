@@ -32,7 +32,13 @@ jobs:
         run: brew untap aws/tap || true
 
       - name: Install tools
-        run: brew install swiftformat swiftlint
+        run: brew install swiftformat swiftlint shellcheck
+
+      - name: Check local build paths
+        run: |
+          bash -n scripts/build-products-dir.sh scripts/test-build-paths.sh
+          shellcheck scripts/build-products-dir.sh scripts/test-build-paths.sh
+          make test-build-paths DEVELOPER_ID_TEAM=
 
       - name: Lint
         run: make lint

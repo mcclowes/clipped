@@ -9,6 +9,7 @@ make generate  # XcodeGen from project.yml
 make build     # Debug build
 make run       # Build + launch
 make test      # Run unit tests
+make test-build-paths DEVELOPER_ID_TEAM= # Check paths without probing local signing identities
 make release   # Release build
 make package   # Release build + zip for distribution
 make clean     # Clean build artifacts
@@ -17,6 +18,11 @@ make clean     # Clean build artifacts
 `node --test scripts/bump-version.test.mjs` runs the version-helper regressions
 with disposable metadata and stubbed Git, also checked by CI. The helper accepts
 exactly `<major|minor|patch> [--push]`; malformed arguments exit 2 before any changes.
+
+`make test-build-paths` exercises the real Makefile with stubbed Xcode and launch
+tools plus real archive tools. It checks spaced paths and project/scheme names,
+Debug/Release configuration selection, failed builds/settings, and repeated
+packaging. Fixtures do not build, sign, launch, or inspect the keychain.
 
 ## Project structure
 

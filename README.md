@@ -67,6 +67,12 @@ make generate  # Generate Xcode project via XcodeGen
 make build     # Build the app
 make run       # Build and launch
 make test      # Run tests
+make test-build-paths DEVELOPER_ID_TEAM= # Check paths without probing local signing identities
 ```
 
 Requires Xcode 16+ and Swift 6. See [CLAUDE.md](CLAUDE.md) for project structure and architecture details.
+
+Local launch and packaging preserve build paths containing spaces. They use
+Debug and Release settings respectively and stop if the build or settings lookup
+fails. `make test-build-paths` checks this behavior with temporary fixtures and
+real archive tools, without building, signing, or launching Clipped.
