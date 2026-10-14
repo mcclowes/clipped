@@ -63,7 +63,7 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          BUILD_DIR=$(xcodebuild -project Clipped/Clipped.xcodeproj -scheme Clipped -configuration Release -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $NF}')
+          BUILD_DIR=$(bash scripts/build-products-dir.sh "Clipped/Clipped.xcodeproj" "Clipped" Release) || exit $?
           APP_PATH="$BUILD_DIR/Clipped.app"
 
           # Create zip for notarization
@@ -98,7 +98,7 @@ jobs:
       - name: Find artifact
         id: artifact
         run: |
-          BUILD_DIR=$(xcodebuild -project Clipped/Clipped.xcodeproj -scheme Clipped -configuration Release -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $NF}')
+          BUILD_DIR=$(bash scripts/build-products-dir.sh "Clipped/Clipped.xcodeproj" "Clipped" Release) || exit $?
           release_architectures=$(lipo -archs "${BUILD_DIR}/Clipped.app/Contents/MacOS/Clipped")
           cask_arches=""
           for release_arch in $release_architectures; do

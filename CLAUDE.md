@@ -19,6 +19,11 @@ make clean     # Clean build artifacts
 with disposable metadata and stubbed Git, also checked by CI. The helper accepts
 exactly `<major|minor|patch> [--push]`; malformed arguments exit 2 before any changes.
 
+`node --test scripts/release-paths.test.mjs` checks the actual release workflow's
+notarization and artifact-directory lookups with fake Xcode output. It verifies
+Release configuration, paths with spaces, and early failure for missing or failed
+settings. It doesn't run signing, notarization, upload, or app launch commands.
+
 `make test-build-paths` exercises the real Makefile with stubbed Xcode and launch
 tools plus real archive tools. It checks spaced paths and project/scheme names,
 Debug/Release configuration selection, failed builds/settings, and repeated

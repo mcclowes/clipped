@@ -22,6 +22,7 @@ jobs:
           node-version: 24
       - run: bash -n scripts/bump-version.sh
       - run: node --test scripts/bump-version.test.mjs
+      - run: node --test scripts/release-paths.test.mjs
 
   lint:
     runs-on: macos-15
