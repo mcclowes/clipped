@@ -8,9 +8,10 @@ BUMP_TYPE="${1:-}"
 PUSH="${2:-}"
 PROJECT_YML="Clipped/project.yml"
 
-if [[ ! "$BUMP_TYPE" =~ ^(major|minor|patch)$ ]]; then
-  echo "Usage: $0 <major|minor|patch> [--push]"
-  exit 1
+if [[ $# -lt 1 || $# -gt 2 || ! "$BUMP_TYPE" =~ ^(major|minor|patch)$ ||
+      ( $# -eq 2 && "$PUSH" != "--push" ) ]]; then
+  echo "Usage: $0 <major|minor|patch> [--push]" >&2
+  exit 2
 fi
 
 # Get current version from project.yml
