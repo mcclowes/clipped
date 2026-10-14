@@ -35,6 +35,16 @@ jobs:
       - name: Generate Xcode project
         run: make generate
 
+      - name: Verify generated Xcode files
+        run: |
+          project_changes="$(git status --porcelain --untracked-files=all -- Clipped/Clipped.xcodeproj Clipped/Resources/Clipped.entitlements)"
+          if [[ -n "$project_changes" ]]; then
+            git status --short -- Clipped/Clipped.xcodeproj Clipped/Resources/Clipped.entitlements
+            git diff HEAD -- Clipped/Clipped.xcodeproj Clipped/Resources/Clipped.entitlements
+            echo "Generated Xcode files are out of sync. Run make generate and commit its generated changes." >&2
+            exit 1
+          fi
+
       - name: Build and test
         run: make test
 
