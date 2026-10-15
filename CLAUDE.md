@@ -24,6 +24,10 @@ notarization and artifact-directory lookups with fake Xcode output. It verifies
 Release configuration, paths with spaces, and early failure for missing or failed
 settings. It doesn't run signing, notarization, upload, or app launch commands.
 
+`node --test scripts/tag-release.test.mjs` checks the real tag-release scripts
+with valid branch-name fixtures and stubbed Git. Branch and tag text must remain
+literal through extraction, tagging, and deletion; no real tag or push is made.
+
 `make test-build-paths` exercises the real Makefile with stubbed Xcode and launch
 tools plus real archive tools. It checks spaced paths and project/scheme names,
 Debug/Release configuration selection, failed builds/settings, and repeated
