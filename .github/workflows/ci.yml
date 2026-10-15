@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   version-helper:
     name: Version helper regressions
@@ -28,7 +31,7 @@ jobs:
   lint:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Remove untrusted runner tap
         run: brew untap aws/tap || true
@@ -48,7 +51,7 @@ jobs:
   test:
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Remove untrusted runner tap
         run: brew untap aws/tap || true
