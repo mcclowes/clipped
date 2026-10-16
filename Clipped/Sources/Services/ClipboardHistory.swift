@@ -24,9 +24,8 @@ final class ClipboardHistory {
     /// Disk-backed store. Overridable for tests.
     var historyStore: any HistoryStoring = HistoryStore.shared
 
-    /// Surfaced to the UI so it can offer a recovery choice when persisted history couldn't
-    /// be read (wrong or locked Keychain key). `nil` means history loaded cleanly. While this
-    /// is non-nil the store refuses to overwrite the unreadable file, so no data is lost.
+    /// The load failure currently presented by the UI. Dismissing it leaves the store's
+    /// save block in place until recovery succeeds or the user starts fresh.
     var loadError: HistoryLoadError?
 
     private var saveDebounceTask: Task<Void, Never>?
@@ -235,6 +234,10 @@ final class ClipboardHistory {
         loadError = await historyStore.lastLoadError()
         hasLoadedFromStore = true
         applyLoaded(entries)
+    }
+
+    func dismissHistoryLoadError() {
+        loadError = nil
     }
 
     /// Retry a load after a transient key failure (e.g. the user unlocked the Keychain).

@@ -74,6 +74,45 @@ struct HistoryPersistenceTests {
         #expect(previews.contains("copied during outage"))
     }
 
+    @Test("Dismissing a failed recovery keeps unreadable history protected and retryable")
+    func dismissingLoadErrorKeepsHistoryProtected() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClippedHistoryDismissTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let keys = InMemoryKeyStore()
+        let original = HistoryStore(keyStore: keys, baseDirectory: directory)
+        await original.save(entries: [storedEntry("recoverable history")])
+        let file = directory.appendingPathComponent("history.enc")
+        let ciphertext = try Data(contentsOf: file)
+
+        let unreadable = HistoryStore(keyStore: InMemoryKeyStore(), baseDirectory: directory)
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = true
+        let history = ClipboardHistory()
+        history.settingsManager = settings
+        history.historyStore = unreadable
+        await history.loadPersistedHistory()
+        #expect(history.loadError == .decryptionFailed)
+
+        history.dismissHistoryLoadError()
+        #expect(history.loadError == nil)
+        history.insert(textItem("copied while locked"))
+        await history.flushPendingSaves()
+        #expect(try Data(contentsOf: file) == ciphertext)
+        #expect(await unreadable.lastLoadError() == .decryptionFailed)
+
+        await history.retryHistoryLoad()
+        #expect(history.loadError == .decryptionFailed)
+        history.dismissHistoryLoadError()
+        #expect(history.loadError == nil)
+        #expect(try Data(contentsOf: file) == ciphertext)
+
+        history.historyStore = HistoryStore(keyStore: keys, baseDirectory: directory)
+        await history.retryHistoryLoad()
+        #expect(history.loadError == nil)
+        #expect(Set(history.items.map(\.preview)) == ["recoverable history", "copied while locked"])
+    }
+
     @Test("Clearing history erases the stored copy even when persistence is off")
     func clearErasesStoredHistory() async {
         let rig = await makeRig(persist: false, stored: [storedEntry("from an earlier session")])

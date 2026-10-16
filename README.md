@@ -54,6 +54,8 @@ Clipboard processing and history storage happen on your Mac. Link previews are e
 - **Secure mode** — Entries from password managers can be automatically skipped or expired.
 - **No telemetry, no sync** — Clipped has no telemetry or cloud-sync component. Link previews still make the requests described above.
 
+If saved history can't be opened, choose **Later** to keep using Clipped for the current session. Saving stays paused until **Retry** succeeds or you choose **Start fresh**, which discards the saved history.
+
 ### Upgrading from plaintext storage
 
 When persisted history is loaded, Clipped migrates older `history.json` files and plaintext image caches to encrypted storage. Existing Time Machine snapshots and other backups taken before the upgrade may still contain plaintext; the upgrade cannot rewrite those copies. If `history.json` cannot be migrated, Clipped keeps it for recovery. Failed image migrations keep the original plaintext images usable and retry on later loads or saves; those originals are deleted only after their encrypted replacements are written successfully.
