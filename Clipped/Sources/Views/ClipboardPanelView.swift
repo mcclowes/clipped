@@ -14,7 +14,6 @@ struct ClipboardPanelView: View {
     let onClosePanel: () -> Void
     let onCaptureScreenshot: (ScreenshotCaptureMode) -> Void
 
-    @State private var showClearConfirmation = false
     @State private var clearedSnapshot: ClipboardManager.ClearedSnapshot?
     @State private var clearedCleanupTask: Task<Void, Never>?
     /// Selection is tracked by stable identity, not array position, so ingesting or deleting an
@@ -113,7 +112,8 @@ struct ClipboardPanelView: View {
                     title: "Clear history",
                     icon: "trash",
                     action: {
-                        manager.clearAll()
+                        showQuickMenu = false
+                        performClearAll()
                     }
                 )
 

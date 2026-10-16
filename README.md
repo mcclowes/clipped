@@ -28,6 +28,7 @@ Requires **macOS 15.0 (Sequoia)** or later.
 ## Features
 
 - **Clipboard history** — Automatically tracks what you copy, with configurable history size
+- **Undo clear** — Clearing history from the panel or quick menu offers Undo for three seconds. Pinned items stay in history.
 - **Format preservation** — Rich text, URLs, images, and code snippets retain their formatting
 - **Global hotkey** — Press `⌥C` (Option+C) to open Clipped from any app
 - **Search & filter** — Find past items by text or filter by content type (text, images, links, etc.)
