@@ -84,7 +84,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
     private static let settleDelay: Duration = .milliseconds(250)
 
     var hasStoredFolder: Bool {
-        UserDefaults.standard.data(forKey: Self.bookmarkKey) != nil
+        defaults.data(forKey: Self.bookmarkKey) != nil
     }
 
     func promptForFolder() -> URL? {
@@ -102,14 +102,14 @@ final class ScreenshotWatcher: ScreenshotWatching {
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         ) {
-            UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
+            defaults.set(bookmark, forKey: Self.bookmarkKey)
         }
 
         return url
     }
 
     func resolveBookmark() -> URL? {
-        guard let data = UserDefaults.standard.data(forKey: Self.bookmarkKey) else { return nil }
+        guard let data = defaults.data(forKey: Self.bookmarkKey) else { return nil }
         var isStale = false
         guard let url = try? URL(
             resolvingBookmarkData: data,
@@ -124,7 +124,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             ) {
-                UserDefaults.standard.set(newBookmark, forKey: Self.bookmarkKey)
+                defaults.set(newBookmark, forKey: Self.bookmarkKey)
             }
         }
 
@@ -184,7 +184,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
     }
 
     func clearStoredFolder() {
-        UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
+        defaults.removeObject(forKey: Self.bookmarkKey)
     }
 
     private func handleDirectoryChange() {
