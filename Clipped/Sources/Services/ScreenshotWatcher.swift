@@ -38,6 +38,8 @@ final class ScreenshotWatcher: ScreenshotWatching {
     private(set) var isWatching = false
     private(set) var watchedFolder: URL?
     private var knownFiles: Set<String> = []
+    @ObservationIgnored private var watchGeneration = UUID()
+    @ObservationIgnored private var pendingCaptures: [String: Task<Void, Never>] = [:]
     /// Not observable (an implementation detail); `nonisolated(unsafe)` lets the nonisolated
     /// `deinit` cancel it. Only ever mutated on the main actor, and by deinit no other reference
     /// to this watcher survives, so the access is race-free.
@@ -82,6 +84,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
     /// Short settle delay after a directory change before reading new files, so `screencapture`
     /// has time to flush its write when it creates the file entry before writing the image bytes.
     private static let settleDelay: Duration = .milliseconds(250)
+    private static let readAttempts = 12
 
     var hasStoredFolder: Bool {
         defaults.data(forKey: Self.bookmarkKey) != nil
@@ -175,6 +178,11 @@ final class ScreenshotWatcher: ScreenshotWatching {
     }
 
     func stopWatching() {
+        watchGeneration = UUID()
+        for task in pendingCaptures.values {
+            task.cancel()
+        }
+        pendingCaptures = [:]
         dispatchSource?.cancel()
         dispatchSource = nil
         isWatching = false
@@ -189,20 +197,30 @@ final class ScreenshotWatcher: ScreenshotWatching {
 
     private func handleDirectoryChange() {
         guard let folder = watchedFolder else { return }
+        let generation = watchGeneration
 
         Task { [weak self] in
             guard let self else { return }
             // Enumerate the directory off the main actor — it scales with folder size.
             let currentFiles = await Self.imageFilesAsync(in: folder)
+            guard watchGeneration == generation else { return }
             let newlyAppeared = currentFiles.subtracting(knownFiles)
             knownFiles = currentFiles
-            guard !newlyAppeared.isEmpty else { return }
-
-            // Give `screencapture` time to flush the file's bytes before we read it.
-            try? await Task.sleep(for: Self.settleDelay)
-            guard watchedFolder == folder else { return }
-            for fileName in newlyAppeared {
-                await ingestScreenshot(fileName: fileName, in: folder)
+            for fileName in newlyAppeared where pendingCaptures[fileName] == nil {
+                pendingCaptures[fileName] = Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: Self.settleDelay)
+                    } catch {
+                        return
+                    }
+                    guard let self, watchGeneration == generation else { return }
+                    defer {
+                        if watchGeneration == generation {
+                            pendingCaptures[fileName] = nil
+                        }
+                    }
+                    await ingestScreenshot(fileName: fileName, in: folder)
+                }
             }
         }
     }
@@ -210,20 +228,11 @@ final class ScreenshotWatcher: ScreenshotWatching {
     func ingestScreenshot(fileName: String, in folder: URL) async {
         let originalChangeCount = clipboardManager?.monitor.pasteboard.changeCount
         let fileURL = folder.appendingPathComponent(fileName)
-        // Read + decode off the main actor so a multi-MB screenshot doesn't stall the UI.
-        let decoded = await Task.detached(priority: .utility) { () -> (Data, CGSize)? in
-            guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-                  size <= PasteboardMonitor.maxImageBytes,
-                  Self.hasScreenCaptureMetadata(fileURL),
-                  let data = try? Data(contentsOf: fileURL),
-                  data.count <= PasteboardMonitor.maxImageBytes else { return nil }
-            guard let size = ImageProcessor.pixelSize(of: data) ?? NSImage(data: data)?.size else { return nil }
-            return (data, size)
-        }.value
+        let decoded = await Self.readScreenshot(at: fileURL)
+        guard !Task.isCancelled else { return }
 
         guard let (imageData, size) = decoded else {
-            // The bytes weren't ready yet (still flushing). Forget the name so a later write
-            // event re-attempts ingestion instead of dropping the screenshot permanently.
+            // A later directory event can retry files that outlast the bounded readiness window.
             knownFiles.remove(fileName)
             return
         }
@@ -244,6 +253,7 @@ final class ScreenshotWatcher: ScreenshotWatching {
         var shouldCopy = clipboardManager.settingsManager?.copyScreenshotsToClipboard == true
         if shouldCopy {
             await clipboardManager.awaitPendingEnrichment(for: item.id)
+            guard !Task.isCancelled else { return }
             shouldCopy = clipboardManager.settingsManager?.copyScreenshotsToClipboard == true
                 && clipboardManager.monitor.pasteboard.changeCount == originalChangeCount
                 && !item.isAwaitingImageText
@@ -257,6 +267,32 @@ final class ScreenshotWatcher: ScreenshotWatching {
             notifyScreenshot(fileName, false)
         }
         offerFloatingThumbnailTipIfNeeded()
+    }
+
+    private static func readScreenshot(at fileURL: URL) async -> (Data, CGSize)? {
+        // File-content and metadata updates need not generate another directory event.
+        for attempt in 0..<readAttempts {
+            guard !Task.isCancelled else { return nil }
+            let decoded = await Task.detached(priority: .utility) { () -> (Data, CGSize)? in
+                guard let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+                      size <= PasteboardMonitor.maxImageBytes,
+                      Self.hasScreenCaptureMetadata(fileURL),
+                      let data = try? Data(contentsOf: fileURL),
+                      data.count <= PasteboardMonitor.maxImageBytes else { return nil }
+                guard let size = ImageProcessor.pixelSize(of: data) ?? NSImage(data: data)?.size else { return nil }
+                return (data, size)
+            }.value
+            if let decoded {
+                return decoded
+            }
+            guard attempt < readAttempts - 1 else { return nil }
+            do {
+                try await Task.sleep(for: settleDelay)
+            } catch {
+                return nil
+            }
+        }
+        return nil
     }
 
     func offerFloatingThumbnailTipIfNeeded() {
