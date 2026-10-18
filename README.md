@@ -4,7 +4,7 @@
 
 A lightweight, native macOS clipboard manager that lives in your menu bar, fits the platform aesthetic, and gets out of the way.
 
-Clipped keeps a searchable history of everything you copy — text, images, links, code — so you never lose something you copied earlier. No Dock icon, no clutter, just a quiet menu bar panel available whenever you need it.
+Clipped keeps a searchable history of captured text, images, links, and code. No Dock icon, no clutter, just a quiet menu bar panel available whenever you need it.
 
 ## Install
 
@@ -24,6 +24,11 @@ Requires **macOS 15.0 (Sequoia)** or later.
 2. Copy things as you normally would. Clipped automatically tracks your clipboard.
 3. Press **`⌥C` (Option+C)** to open the Clipped panel from anywhere, or click the menu bar icon. You can change the shortcut in Settings.
 4. Click any item to copy it back to your clipboard.
+
+Clipped checks the clipboard roughly every half-second. If you copy several
+items between checks, it may capture only the latest. The change counter can
+detect multiple writes, but it can't recover clipboard contents that have
+already been replaced.
 
 ## Keyboard controls
 
