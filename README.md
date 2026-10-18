@@ -77,6 +77,7 @@ Watched screenshots go to history and onto your clipboard by default, so a captu
 Clipboard processing and history storage happen on your Mac. Link previews are enabled by default and make requests to copied websites and their preview-image servers. Turn off "Fetch link previews" in the Privacy section of Settings → General to keep copied URLs local.
 
 - **Local history** — Persistence is off by default. When enabled, history is saved in `~/Library/Application Support/Clipped/`.
+  If macOS cannot provide an Application Support location, history stays in memory for that session.
 - **Encrypted storage** — When persistence is enabled, `history.enc` and cached clipboard images are encrypted with ChaCha20-Poly1305. The 256-bit key is created when encrypted storage is first used and stored in your login Keychain. Access follows the Keychain's lock state and item permissions; locking the screen does not necessarily lock the login Keychain.
 - **Secure mode** — Entries from password managers can be automatically skipped or expired.
 - **No telemetry, no sync** — Clipped has no telemetry or cloud-sync component. Link previews still make the requests described above.

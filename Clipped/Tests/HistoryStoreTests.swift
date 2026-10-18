@@ -35,6 +35,57 @@ struct HistoryStoreTests {
         return StoredEntry(item: item)
     }
 
+    @Test("Missing Application Support keeps history in memory")
+    func missingApplicationSupport() async throws {
+        let keyStore = InMemoryKeyStore()
+        let store = HistoryStore.makeDefaultStore(applicationSupportDirectory: nil, keyStore: keyStore)
+        #expect(await store.load().isEmpty)
+        let first = makeEntry(text: "session only")
+        let second = makeEntry(text: "pinned session item", isPinned: true)
+        await store.save(entries: [first, second])
+        #expect(await store.load().map(\.id) == [first.id, second.id])
+        #expect(await store.retryLoad().map(\.id) == [first.id, second.id])
+        #expect(await store.lastLoadError() == nil)
+        #expect(try keyStore.loadKey() == nil)
+
+        await store.save(entries: [second])
+        #expect(await store.load().map(\.id) == [second.id])
+        await store.clear()
+        #expect(await store.load().isEmpty)
+        await store.save(entries: [first])
+        await store.startFresh()
+        #expect(await store.load().isEmpty)
+        #expect(try keyStore.loadKey() == nil)
+    }
+
+    @Test("Memory-only history does not survive a new store")
+    func memoryOnlyHistoryIsSessionLocal() async throws {
+        let keyStore = InMemoryKeyStore()
+        let first = HistoryStore.makeDefaultStore(applicationSupportDirectory: nil, keyStore: keyStore)
+        await first.save(entries: [makeEntry(text: "private fixture")])
+        let second = HistoryStore.makeDefaultStore(applicationSupportDirectory: nil, keyStore: keyStore)
+        #expect(await first.load().count == 1)
+        #expect(await second.load().isEmpty)
+        #expect(try keyStore.loadKey() == nil)
+    }
+
+    @Test("Available Application Support retains encrypted persistence")
+    func availableApplicationSupport() async throws {
+        defer { try? FileManager.default.removeItem(at: baseDir) }
+        let keyStore = InMemoryKeyStore()
+        let store = HistoryStore.makeDefaultStore(applicationSupportDirectory: baseDir, keyStore: keyStore)
+        let entry = makeEntry(text: "encrypted fixture")
+        await store.save(entries: [entry])
+        let appDirectory = baseDir.appendingPathComponent("Clipped", isDirectory: true)
+        #expect(FileManager.default.fileExists(atPath: appDirectory.appendingPathComponent("history.enc").path))
+        #expect(!FileManager.default.fileExists(atPath: appDirectory.appendingPathComponent("history.json").path))
+        let attributes = try FileManager.default.attributesOfItem(atPath: appDirectory.path)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
+        let reloaded = HistoryStore.makeDefaultStore(applicationSupportDirectory: baseDir, keyStore: keyStore)
+        #expect(await reloaded.load().map(\.id) == [entry.id])
+        #expect(await reloaded.lastLoadError() == nil)
+    }
+
     @Test("Save and load round-trips items")
     func roundTrip() async {
         let store = makeStore()

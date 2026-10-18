@@ -23,6 +23,34 @@ enum HistoryLoadError: Error, Equatable {
     case corrupted
 }
 
+private actor MemoryOnlyHistoryStore: HistoryStoring {
+    private var entries: [StoredEntry] = []
+
+    func save(entries: [StoredEntry]) {
+        self.entries = entries
+    }
+
+    func load() -> [StoredEntry] {
+        entries
+    }
+
+    func retryLoad() -> [StoredEntry] {
+        load()
+    }
+
+    func clear() {
+        entries.removeAll()
+    }
+
+    func startFresh() {
+        clear()
+    }
+
+    func lastLoadError() -> HistoryLoadError? {
+        nil
+    }
+}
+
 /// Persists clipboard history to disk, encrypted at rest with `ChaChaPoly`.
 ///
 /// Layout under `~/Library/Application Support/Clipped/`:
@@ -37,7 +65,10 @@ enum HistoryLoadError: Error, Equatable {
 /// files are detected and re-encrypted in place, then the plaintext is deleted. Disk I/O
 /// is isolated to this actor so callers on the main actor never block the UI.
 actor HistoryStore: HistoryStoring {
-    static let shared = HistoryStore()
+    static let shared: any HistoryStoring = makeDefaultStore(
+        applicationSupportDirectory: FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
 
     private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "HistoryStore")
 
@@ -53,23 +84,27 @@ actor HistoryStore: HistoryStoring {
     /// can't clobber recoverable ciphertext. Cleared by a successful load or `startFresh()`.
     private var saveBlocked = false
 
+    static func makeDefaultStore(
+        applicationSupportDirectory: URL?,
+        keyStore: any KeychainKeyStoring = KeychainKeyStore()
+    ) -> any HistoryStoring {
+        guard let applicationSupportDirectory else {
+            logger.error("Application Support unavailable; clipboard history will remain in memory")
+            return MemoryOnlyHistoryStore()
+        }
+        return HistoryStore(
+            keyStore: keyStore,
+            baseDirectory: applicationSupportDirectory.appendingPathComponent("Clipped", isDirectory: true)
+        )
+    }
+
     init(
         keyStore: any KeychainKeyStoring = KeychainKeyStore(),
-        baseDirectory: URL? = nil
+        baseDirectory: URL
     ) {
         self.keyStore = keyStore
 
-        let appDir: URL
-        if let baseDirectory {
-            appDir = baseDirectory
-        } else {
-            guard let appSupport = FileManager.default
-                .urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            else {
-                fatalError("Application Support directory not found")
-            }
-            appDir = appSupport.appendingPathComponent("Clipped", isDirectory: true)
-        }
+        let appDir = baseDirectory
         Self.createOwnerOnlyDirectory(at: appDir)
         encryptedFileURL = appDir.appendingPathComponent("history.enc")
         legacyPlaintextFileURL = appDir.appendingPathComponent("history.json")
