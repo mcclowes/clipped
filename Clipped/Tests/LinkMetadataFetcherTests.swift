@@ -1,4 +1,5 @@
 @testable import Clipped
+import Darwin
 import Foundation
 import Testing
 
@@ -57,6 +58,12 @@ struct LinkMetadataFetcherTests {
             "http://[::1]/",
             "http://[fe80::1]/",
             "http://[fc00::1]/",
+            "http://[fec0::]/",
+            "http://[fec0::1]/",
+            "https://[FEC0:0:0:0:0:0:0:1]/",
+            "http://[fed0:1234::7]:8080/path",
+            "http://[feff::1]/",
+            "https://[feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/",
             // Byte-canonical parsing closes these representation-level bypasses:
             "http://[::ffff:127.0.0.1]/", // IPv4-mapped loopback
             "http://[::ffff:169.254.169.254]/", // IPv4-mapped cloud metadata
@@ -100,6 +107,48 @@ struct LinkMetadataFetcherTests {
         #expect(IPLiteral("::ffff:8.8.8.8")?.isPrivateOrReserved == false)
         #expect(IPLiteral("127.0.0.1")?.isPrivateOrReserved == true)
         #expect(IPLiteral("8.8.8.8")?.isPrivateOrReserved == false)
+    }
+
+    @Test(
+        "Rejects deprecated site-local IPv6 literals and resolved addresses",
+        arguments: [
+            "fec0::",
+            "fec0::1",
+            "FEC0:0:0:0:0:0:0:1",
+            "fed0:1234::7",
+            "feff::1",
+            "feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+        ]
+    )
+    func rejectsSiteLocalAddresses(_ address: String) throws {
+        let literal = try #require(IPLiteral(address))
+        #expect(literal.isPrivateOrReserved)
+
+        var resolved = sockaddr_in6()
+        resolved.sin6_family = sa_family_t(AF_INET6)
+        let status = address.withCString { inet_pton(AF_INET6, $0, &resolved.sin6_addr) }
+        try #require(status == 1)
+        let resolvedLiteral = withUnsafeMutablePointer(to: &resolved) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { IPLiteral(sockaddr: $0) }
+        }
+        #expect(resolvedLiteral?.isPrivateOrReserved == true)
+    }
+
+    @Test(
+        "Keeps adjacent IPv6 classification boundaries intact",
+        arguments: [
+            ("fe7f:ffff:ffff:ffff:ffff:ffff:ffff:ffff", false),
+            ("fe80::", true),
+            ("febf:ffff:ffff:ffff:ffff:ffff:ffff:ffff", true),
+            ("fec0::", true),
+            ("feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff", true),
+            ("ff00::", true),
+            ("2606:4700:4700::1111", false),
+        ]
+    )
+    func preservesIPv6Boundaries(_ address: String, reserved: Bool) throws {
+        let literal = try #require(IPLiteral(address))
+        #expect(literal.isPrivateOrReserved == reserved)
     }
 
     @Test("Fetches favicon data")

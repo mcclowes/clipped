@@ -354,6 +354,9 @@ struct IPLiteral {
         if b[0] == 0xFE, (b[1] & 0xC0) == 0x80 {
             return true
         } // fe80::/10 link-local
+        if b[0] == 0xFE, (b[1] & 0xC0) == 0xC0 {
+            return true
+        } // fec0::/10 deprecated site-local
         if (b[0] & 0xFE) == 0xFC {
             return true
         } // fc00::/7 unique-local
