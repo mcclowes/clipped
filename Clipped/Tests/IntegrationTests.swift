@@ -158,15 +158,19 @@ struct TaskLimiterTests {
 /// these exercise the wiring between collaborators.
 @MainActor
 struct IntegrationTests {
-    @Test("The test host skips normal app startup and clipboard monitoring", .bug(id: 131))
+    @Test("The test host skips live services during startup and termination", .bug(id: 127))
     func skipsAppStartupInTests() throws {
+        #expect(ProcessInfo.processInfo.environment["CLIPPED_TEST_HOST"] == "1")
         try #require(AppDelegate.isTestHost)
-        let delegate = AppDelegate()
+        var serviceConstructions = 0
+        let delegate = AppDelegate(servicesFactory: {
+            serviceConstructions += 1
+            return AppDelegate.Services()
+        })
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
-        #expect(delegate.clipboardManager.settingsManager == nil)
-        #expect(!delegate.clipboardManager.isMonitoring)
-        #expect(!delegate.screenshotWatcher.isWatching)
+        #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
+        #expect(serviceConstructions == 0)
     }
 
     // swiftlint:disable large_tuple

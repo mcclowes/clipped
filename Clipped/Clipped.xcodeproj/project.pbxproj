@@ -553,7 +553,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.5;
+				MARKETING_VERSION = 1.7.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mcclowes.clipped;
 				SDKROOT = macosx;
 			};
@@ -728,7 +728,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.5;
+				MARKETING_VERSION = 1.7.6;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mcclowes.clipped;
 				SDKROOT = macosx;
 			};

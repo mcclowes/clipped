@@ -48,3 +48,15 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.clipped.tests
         GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  Clipped:
+    build:
+      targets:
+        Clipped: all
+    test:
+      targets:
+        - name: ClippedTests
+          parallelizable: true
+      environmentVariables:
+        CLIPPED_TEST_HOST: "1"

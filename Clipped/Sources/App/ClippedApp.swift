@@ -9,20 +9,54 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     static var isTestHost: Bool {
-        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
+        ProcessInfo.processInfo.environment["CLIPPED_TEST_HOST"] == "1" ||
+            ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil ||
             NSClassFromString("XCTestCase") != nil
     }
 
-    let clipboardManager = ClipboardManager()
-    let settingsManager = SettingsManager()
-    let screenshotWatcher = ScreenshotWatcher()
+    @MainActor
+    struct Services {
+        let clipboardManager: ClipboardManager
+        let settingsManager: SettingsManager
+        let screenshotWatcher: ScreenshotWatcher
+        let statusBarController: StatusBarController
 
-    let statusBarController: StatusBarController
+        init() {
+            precondition(!AppDelegate.isTestHost, "Live app services must not be created in a test host")
+            clipboardManager = ClipboardManager()
+            settingsManager = SettingsManager()
+            screenshotWatcher = ScreenshotWatcher()
+            statusBarController = StatusBarController()
+            statusBarController.clipboardManager = clipboardManager
+        }
+    }
 
-    override init() {
-        statusBarController = StatusBarController()
+    private let servicesFactory: @MainActor () -> Services
+    private lazy var services = servicesFactory()
+
+    var clipboardManager: ClipboardManager {
+        services.clipboardManager
+    }
+
+    var settingsManager: SettingsManager {
+        services.settingsManager
+    }
+
+    var screenshotWatcher: ScreenshotWatcher {
+        services.screenshotWatcher
+    }
+
+    var statusBarController: StatusBarController {
+        services.statusBarController
+    }
+
+    override convenience init() {
+        self.init(servicesFactory: { Services() })
+    }
+
+    init(servicesFactory: @escaping @MainActor () -> Services) {
+        self.servicesFactory = servicesFactory
         super.init()
-        statusBarController.clipboardManager = clipboardManager
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -123,6 +157,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Drain the debounced history save before the process exits, so the last thing the user
     /// copied (and any just-fetched link title / OCR text) actually reaches disk.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !Self.isTestHost else { return .terminateNow }
+
         Task { @MainActor in
             await clipboardManager.flushPendingSaves()
             NSApp.reply(toApplicationShouldTerminate: true)
@@ -151,7 +187,7 @@ struct ClippedApp: App {
 
     var body: some Scene {
         WindowGroup("Sticky Note", for: UUID.self) { $itemID in
-            if let itemID {
+            if !AppDelegate.isTestHost, let itemID {
                 StickyNoteView(itemID: itemID)
                     .environment(appDelegate.clipboardManager)
                     .environment(appDelegate.settingsManager)
@@ -160,12 +196,18 @@ struct ClippedApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
         .defaultSize(width: 300, height: 200)
+        .defaultLaunchBehavior(AppDelegate.isTestHost ? .suppressed : .automatic)
+        .restorationBehavior(AppDelegate.isTestHost ? .disabled : .automatic)
 
         Settings {
-            SettingsView()
-                .environment(appDelegate.clipboardManager)
-                .environment(appDelegate.settingsManager)
-                .environment(appDelegate.screenshotWatcher)
+            if !AppDelegate.isTestHost {
+                SettingsView()
+                    .environment(appDelegate.clipboardManager)
+                    .environment(appDelegate.settingsManager)
+                    .environment(appDelegate.screenshotWatcher)
+            }
         }
+        .defaultLaunchBehavior(AppDelegate.isTestHost ? .suppressed : .automatic)
+        .restorationBehavior(AppDelegate.isTestHost ? .disabled : .automatic)
     }
 }

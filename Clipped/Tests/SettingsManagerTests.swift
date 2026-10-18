@@ -160,80 +160,84 @@ struct SettingsManagerTests {
 
 @MainActor
 struct LaunchAtLoginTests {
-    private func makeSettings(
+    private func withSettings(
         loginItem: MockLoginItem,
-        repairsLoginItem: Bool = true
-    ) -> SettingsManager {
-        SettingsManager(loginItem: loginItem, repairsLoginItem: repairsLoginItem)
+        repairsLoginItem: Bool = true,
+        _ body: (SettingsManager) -> Void
+    ) throws {
+        let suiteName = "LaunchAtLoginTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        body(SettingsManager(defaults: defaults, loginItem: loginItem, repairsLoginItem: repairsLoginItem))
     }
 
     @Test("Re-registers an enabled login item on launch so a stale bundle path is repaired")
-    func repairsStaleRegistration() {
+    func repairsStaleRegistration() throws {
         let loginItem = MockLoginItem(status: .enabled)
-        let settings = makeSettings(loginItem: loginItem)
+        try withSettings(loginItem: loginItem) { settings in
+            #expect(settings.launchAtLogin == true)
+            #expect(loginItem.registerCount == 0)
 
-        #expect(settings.launchAtLogin == true)
-        #expect(loginItem.registerCount == 0)
-
-        settings.repairLoginItemRegistration()
-        #expect(loginItem.registerCount == 1)
+            settings.repairLoginItemRegistration()
+            #expect(loginItem.registerCount == 1)
+        }
     }
 
     @Test("Leaves a disabled login item alone on launch")
-    func skipsRepairWhenDisabled() {
+    func skipsRepairWhenDisabled() throws {
         let loginItem = MockLoginItem(status: .notRegistered)
-        let settings = makeSettings(loginItem: loginItem)
-
-        settings.repairLoginItemRegistration()
-        #expect(settings.launchAtLogin == false)
-        #expect(loginItem.registerCount == 0)
+        try withSettings(loginItem: loginItem) { settings in
+            settings.repairLoginItemRegistration()
+            #expect(settings.launchAtLogin == false)
+            #expect(loginItem.registerCount == 0)
+        }
     }
 
     @Test("Never repairs from a build that does not own the login item")
-    func skipsRepairWhenNotOwning() {
+    func skipsRepairWhenNotOwning() throws {
         let loginItem = MockLoginItem(status: .enabled)
-        let settings = makeSettings(loginItem: loginItem, repairsLoginItem: false)
-
-        settings.repairLoginItemRegistration()
-        #expect(loginItem.registerCount == 0)
+        try withSettings(loginItem: loginItem, repairsLoginItem: false) { settings in
+            settings.repairLoginItemRegistration()
+            #expect(loginItem.registerCount == 0)
+        }
     }
 
     @Test("Surfaces an explanation when the login item is switched off in System Settings")
-    func explainsRequiresApproval() {
-        let settings = makeSettings(loginItem: MockLoginItem(status: .requiresApproval))
-
-        #expect(settings.launchAtLogin == false)
-        #expect(settings.launchAtLoginError?.contains("System Settings") == true)
+    func explainsRequiresApproval() throws {
+        try withSettings(loginItem: MockLoginItem(status: .requiresApproval)) { settings in
+            #expect(settings.launchAtLogin == false)
+            #expect(settings.launchAtLoginError?.contains("System Settings") == true)
+        }
     }
 
     @Test("Reverts the toggle and reports the error when registration fails")
-    func revertsOnRegistrationFailure() {
+    func revertsOnRegistrationFailure() throws {
         let loginItem = MockLoginItem(status: .notRegistered, registerError: MockLoginItem.Failure.denied)
-        let settings = makeSettings(loginItem: loginItem)
+        try withSettings(loginItem: loginItem) { settings in
+            settings.launchAtLogin = true
 
-        settings.launchAtLogin = true
-
-        #expect(settings.launchAtLogin == false)
-        #expect(settings.launchAtLoginError != nil)
+            #expect(settings.launchAtLogin == false)
+            #expect(settings.launchAtLoginError != nil)
+        }
     }
 
     @Test("Turning the toggle off unregisters the login item")
-    func unregistersWhenTurnedOff() {
+    func unregistersWhenTurnedOff() throws {
         let loginItem = MockLoginItem(status: .enabled)
-        let settings = makeSettings(loginItem: loginItem)
-
-        settings.launchAtLogin = false
-        #expect(loginItem.unregisterCount == 1)
-        #expect(settings.launchAtLoginError == nil)
+        try withSettings(loginItem: loginItem) { settings in
+            settings.launchAtLogin = false
+            #expect(loginItem.unregisterCount == 1)
+            #expect(settings.launchAtLoginError == nil)
+        }
     }
 
     @Test("A failed repair reports the error without flipping the toggle")
-    func reportsRepairFailure() {
+    func reportsRepairFailure() throws {
         let loginItem = MockLoginItem(status: .enabled, registerError: MockLoginItem.Failure.denied)
-        let settings = makeSettings(loginItem: loginItem)
-
-        settings.repairLoginItemRegistration()
-        #expect(settings.launchAtLogin == true)
-        #expect(settings.launchAtLoginError != nil)
+        try withSettings(loginItem: loginItem) { settings in
+            settings.repairLoginItemRegistration()
+            #expect(settings.launchAtLogin == true)
+            #expect(settings.launchAtLoginError != nil)
+        }
     }
 }
