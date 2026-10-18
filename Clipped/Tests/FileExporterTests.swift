@@ -1,8 +1,39 @@
 import AppKit
 @testable import Clipped
+import Darwin
 import Foundation
 import Testing
 import UniformTypeIdentifiers
+
+private let writableFilenameCases: [(String, String)] = {
+    let oversized = "a" + String(repeating: "\u{301}", count: 200)
+    let underByteLimit = "a" + String(repeating: "\u{301}", count: 120)
+    let validCombining = "a" + String(repeating: "\u{301}", count: 31)
+    let invalidCombining = "a" + String(repeating: "\u{301}", count: 32)
+    let validComposed = "á" + String(repeating: "\u{301}", count: 30)
+    let invalidComposed = "á" + String(repeating: "\u{301}", count: 31)
+    let validUncomposed = "x" + String(repeating: "\u{301}", count: 31)
+    let invalidUncomposed = "x" + String(repeating: "\u{301}", count: 32)
+    let validExpanded = "ắ" + String(repeating: "\u{301}", count: 29)
+    let invalidExpanded = "ắ" + String(repeating: "\u{301}", count: 30)
+    let combiningStem = String(repeating: "a" + String(repeating: "\u{301}", count: 30), count: 4)
+    let hangulStem = String(repeating: "\u{1100}", count: 80)
+    return [
+        (oversized, "clipping"),
+        ("prefix " + oversized, "prefix-"),
+        (underByteLimit + "bcdefghijklmno", "clipping"),
+        (validCombining, validCombining),
+        (invalidCombining, "clipping"),
+        (validComposed, validComposed),
+        (invalidComposed, "clipping"),
+        (validUncomposed, validUncomposed),
+        (invalidUncomposed, "clipping"),
+        (validExpanded, validExpanded),
+        (invalidExpanded, "clipping"),
+        (combiningStem + "bcdefghijklmno", combiningStem + "bcdefg"),
+        (hangulStem + "bcdefghijklmno", hangulStem + "bcdefghijk"),
+    ]
+}()
 
 @MainActor
 struct FileExporterTests {
@@ -80,6 +111,69 @@ struct FileExporterTests {
     func suggestedNameEmpty() {
         let item = ClipboardItem(content: .text("   "), contentType: .plainText)
         #expect(FileExporter.suggestedBaseName(for: item) == "clipping")
+    }
+
+    @Test("Filename suggestions remove punctuation and preserve Unicode words", arguments: zip(
+        [
+            " Hello, World! ",
+            "one/two\\three:four",
+            " \tAlpha\n Beta\r\n Gamma  ",
+            "... /// ???",
+            "Café déjà vu",
+            "東京 中文",
+            "👩‍💻 notes 😀",
+        ],
+        ["hello-world", "onetwothreefour", "alpha-beta-gamma", "clipping", "café-déjà-vu", "東京-中文", "notes"]
+    ))
+    func filenameWords(source: String, expected: String) {
+        let item = ClipboardItem(content: .text(source), contentType: .plainText)
+        #expect(FileExporter.suggestedBaseName(for: item) == expected)
+    }
+
+    @Test("Filename suggestions retain the character and word limits", arguments: zip(
+        [String(repeating: "A", count: 65), "one two three four five six seven"],
+        [String(repeating: "a", count: 60), "one-two-three-four-five-six"]
+    ))
+    func filenameLengthAndWords(source: String, expected: String) {
+        let item = ClipboardItem(content: .text(source), contentType: .plainText)
+        #expect(FileExporter.suggestedBaseName(for: item) == expected)
+    }
+
+    @Test("Filename byte limits retain complete characters or use the fallback", arguments: zip(
+        [1, 2, 83, 84],
+        [true, true, true, false]
+    ))
+    func filenameByteBoundary(scalars: Int, fits: Bool) {
+        let source = String(repeating: "\u{1100}", count: scalars)
+        #expect(source.count == 1)
+        let item = ClipboardItem(content: .text(source), contentType: .plainText)
+        let stem = FileExporter.suggestedBaseName(for: item)
+        #expect(stem == (fits ? source : "clipping"))
+        for format in ExportFormat.allCases {
+            #expect("\(stem).\(format.fileExtension)".utf8.count <= Int(NAME_MAX))
+        }
+    }
+
+    @Test(
+        "Suggested Unicode filenames can be written without changing exported data",
+        arguments: writableFilenameCases
+    )
+    func unicodeFilenameIsWritable(source: String, expected: String) throws {
+        let item = ClipboardItem(content: .text(source), contentType: .plainText)
+        let stem = FileExporter.suggestedBaseName(for: item)
+        #expect(stem == expected)
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClippedExport-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory
+            .appendingPathComponent(stem)
+            .appendingPathExtension(ExportFormat.plainText.fileExtension)
+        let data = try FileExporter.data(for: item, format: .plainText)
+
+        try data.write(to: url)
+
+        #expect(try Data(contentsOf: url) == Data(source.utf8))
     }
 
     @Test("Image previews are materialized as temporary PNG files")

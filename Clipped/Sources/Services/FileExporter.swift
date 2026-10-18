@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import UniformTypeIdentifiers
 
@@ -66,6 +67,14 @@ enum ExportFormat: String, CaseIterable {
 /// `@MainActor` because it reads `ClipboardItem`, which is main-actor isolated.
 @MainActor
 enum FileExporter {
+    /// The #167 filesystem regression rejects decomposed combining runs above 31.
+    private static let maxFilenameNonStarters = 31
+
+    private static let maxBaseNameBytes: Int = {
+        let extensionBytes = ExportFormat.allCases.map(\.fileExtension.utf8.count).max() ?? 0
+        return Int(NAME_MAX) - ".".utf8.count - extensionBytes
+    }()
+
     enum ExportError: Error {
         case unsupportedFormat
         case encodingFailed
@@ -187,8 +196,8 @@ enum FileExporter {
         return data
     }
 
-    /// Lowercase, hyphen-joined slug from the first words of `source`, capped so
-    /// filenames stay short.
+    /// Lowercase, hyphen-joined slug bounded by characters and UTF-8 bytes,
+    /// leaving room for any supported export extension.
     private static func slug(from source: String) -> String {
         let firstLine = source
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -200,6 +209,27 @@ enum FileExporter {
             .map { $0.unicodeScalars.filter { allowed.contains($0) }.map(String.init).joined() }
             .filter { !$0.isEmpty }
             .prefix(6)
-        return words.joined(separator: "-")
+        var byteCount = 0
+        return String(words.joined(separator: "-").prefix { character in
+            let nextCount = byteCount + String(character).utf8.count
+            guard nextCount <= maxBaseNameBytes, hasSupportedCombiningSequence(character) else { return false }
+            byteCount = nextCount
+            return true
+        })
+    }
+
+    private static func hasSupportedCombiningSequence(_ character: Character) -> Bool {
+        var nonStarters = 0
+        for scalar in String(character).decomposedStringWithCanonicalMapping.unicodeScalars {
+            if scalar.properties.canonicalCombiningClass == .notReordered {
+                nonStarters = 0
+            } else {
+                nonStarters += 1
+                if nonStarters > maxFilenameNonStarters {
+                    return false
+                }
+            }
+        }
+        return true
     }
 }
