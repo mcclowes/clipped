@@ -20,6 +20,11 @@ jobs:
           node-version: 24
       - name: Check signing selection
         run: node --test scripts/signing-selection.test.mjs
+      - name: Check shell syntax
+        run: |
+          for script in scripts/*.sh; do
+            bash -n "$script" || exit
+          done
 
   lint:
     runs-on: macos-15
