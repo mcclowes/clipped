@@ -20,6 +20,8 @@ jobs:
           node-version: 24
       - name: Check signing selection
         run: node --test scripts/signing-selection.test.mjs
+      - name: Check tag release scripts
+        run: node --test scripts/tag-release.test.mjs
       - name: Check shell syntax
         run: |
           for script in scripts/*.sh; do
