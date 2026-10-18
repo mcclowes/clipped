@@ -28,9 +28,9 @@ final class ClipboardHistory {
     @ObservationIgnored
     private let historyStoreFactory: @MainActor () -> any HistoryStoring
 
-    /// Surfaced to the UI so it can offer a recovery choice when persisted history couldn't
-    /// be read (wrong or locked Keychain key). `nil` means history loaded cleanly. While this
-    /// is non-nil the store refuses to overwrite the unreadable file, so no data is lost.
+    /// Surfaces history envelope/key failures so the UI can offer recovery. Individual
+    /// entries that cannot be decoded are skipped and counted in the error log. While
+    /// this is non-nil the store refuses to overwrite the unreadable file.
     var loadError: HistoryLoadError?
 
     private var saveDebounceTask: Task<Void, Never>?
@@ -273,6 +273,10 @@ final class ClipboardHistory {
             } else {
                 loaded.append(item)
             }
+        }
+        let skippedCount = entries.count - loaded.count - pinned.count
+        if skippedCount > 0 {
+            Self.logger.error("Could not restore \(skippedCount, privacy: .public) saved clipboard entries")
         }
         items = merging(loaded, into: items)
         pinnedItems = merging(pinned, into: pinnedItems)
