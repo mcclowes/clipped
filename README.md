@@ -25,6 +25,28 @@ Requires **macOS 15.0 (Sequoia)** or later.
 3. Press **`⌥C` (Option+C)** to open the Clipped panel from anywhere, or click the menu bar icon. You can change the shortcut in Settings.
 4. Click any item to copy it back to your clipboard.
 
+## Keyboard controls
+
+The two global shortcuts work from any app. Customize them in **Settings →
+General → Keyboard shortcuts**; the defaults are:
+
+| Shortcut                | Where                             | Action                                                                                                            |
+| ----------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `⌥C` (Option+C)         | Anywhere                          | Toggle the clipboard panel.                                                                                       |
+| `⌥⇧C` (Option+Shift+C)  | Anywhere                          | Open the full history window.                                                                                     |
+| `↓` / `↑`               | Clipboard panel, including search | Select the next or previous visible item. With no selection, Down selects the first item and Up selects the last. |
+| `Tab` / `Shift+Tab`     | Clipboard panel, including search | Move forward or backward through the same item selection.                                                         |
+| `Return`                | Clipboard panel, including search | Copy the selected item. Does nothing if no item is selected.                                                      |
+| `⌘1`–`⌘9` (Command+1–9) | Clipboard panel                   | Copy the corresponding item among the first nine visible items. Plain numbers still type into search.             |
+| `Escape`                | Clipboard panel, including search | Clear the selection first, then clear a nonempty search, then close the panel on the next press.                  |
+| `⌘C` (Command+C)        | Full history item details         | Copy the selected item's content.                                                                                 |
+
+Panel selection and numbered shortcuts follow the current search and filter,
+with pinned items before recent items. Navigation stops at the first or last
+visible item without wrapping. The panel shows up to 50 recent items plus pins;
+use **See full history** or its global shortcut for older items. Changing the
+search clears the panel selection.
+
 ## Features
 
 - **Clipboard history** — Automatically tracks what you copy, with configurable history size
