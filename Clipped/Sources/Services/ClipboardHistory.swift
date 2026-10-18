@@ -21,8 +21,12 @@ final class ClipboardHistory {
 
     /// Settings source for persistence gating and max-history cap.
     var settingsManager: (any SettingsManaging)?
-    /// Disk-backed store. Overridable for tests.
-    var historyStore: any HistoryStoring = HistoryStore.shared
+    /// Resolve only when used, so replacing the store does not first prepare production storage.
+    @ObservationIgnored
+    lazy var historyStore: any HistoryStoring = historyStoreFactory()
+
+    @ObservationIgnored
+    private let historyStoreFactory: @MainActor () -> any HistoryStoring
 
     /// Surfaced to the UI so it can offer a recovery choice when persisted history couldn't
     /// be read (wrong or locked Keychain key). `nil` means history loaded cleanly. While this
@@ -38,7 +42,9 @@ final class ClipboardHistory {
     private var hasLoadedFromStore = false
     private var loadTask: Task<Void, Never>?
 
-    init() {}
+    init(historyStoreFactory: @escaping @MainActor () -> any HistoryStoring = { HistoryStore.shared }) {
+        self.historyStoreFactory = historyStoreFactory
+    }
 
     // MARK: - Filtering
 

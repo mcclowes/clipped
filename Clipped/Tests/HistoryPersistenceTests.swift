@@ -33,6 +33,62 @@ struct HistoryPersistenceTests {
         ClipboardItem(content: .text(text), contentType: .plainText)
     }
 
+    @Test("The history store is constructed only when persistence needs it")
+    func defersStoreConstruction() async {
+        var constructions = 0
+        let store = MockHistoryStore()
+        let history = ClipboardHistory(historyStoreFactory: {
+            constructions += 1
+            return store
+        })
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = false
+        history.settingsManager = settings
+
+        await history.loadPersistedHistory()
+        history.insert(textItem("in memory"))
+        history.saveHistory()
+        await history.flushPendingSaves()
+        #expect(constructions == 0)
+
+        settings.persistAcrossReboots = true
+        await history.loadPersistedHistory()
+        #expect(constructions == 1)
+        #expect(history.historyStore as? MockHistoryStore === store)
+
+        await history.loadPersistedHistory()
+        history.saveHistory()
+        await history.flushPendingSaves()
+        #expect(constructions == 1)
+        #expect(await store.savedEntries.compactMap(\.textContent) == ["in memory"])
+    }
+
+    @Test("Overriding the history store does not construct the default store")
+    func storeOverrideSkipsFactory() async {
+        var constructions = 0
+        let unusedStore = MockHistoryStore()
+        let history = ClipboardHistory(historyStoreFactory: {
+            constructions += 1
+            return unusedStore
+        })
+        let override = MockHistoryStore()
+        await override.setLoadResult([storedEntry("from the override")])
+        history.historyStore = override
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = true
+        history.settingsManager = settings
+
+        await history.loadPersistedHistory()
+        history.saveHistory()
+        await history.flushPendingSaves()
+
+        #expect(constructions == 0)
+        #expect(history.historyStore as? MockHistoryStore === override)
+        #expect(history.items.map(\.preview) == ["from the override"])
+        #expect(await override.savedEntries.compactMap(\.textContent) == ["from the override"])
+        #expect(await unusedStore.saveCallCount == 0)
+    }
+
     @Test("Enabling persistence mid-session reads the store before it writes over it")
     func enablingPersistenceLoadsBeforeSaving() async {
         let rig = await makeRig(persist: false, stored: [storedEntry("persisted")])
