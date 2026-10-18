@@ -23,13 +23,6 @@ final class StatusBarItemController {
         }
     }
 
-    func updateIcon(hasItems: Bool) {
-        statusItem?.button?.image = NSImage(
-            systemSymbolName: hasItems ? "clipboard.fill" : "clipboard",
-            accessibilityDescription: "Clipped"
-        )
-    }
-
     var button: NSStatusBarButton? {
         statusItem?.button
     }

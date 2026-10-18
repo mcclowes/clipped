@@ -63,12 +63,6 @@ final class StatusBarController {
         panel.setup(contentView: contentView)
     }
 
-    // MARK: - Icon
-
-    func updateIcon(hasItems: Bool) {
-        statusBarItem.updateIcon(hasItems: hasItems)
-    }
-
     // MARK: - Panel presentation
 
     func show() {
