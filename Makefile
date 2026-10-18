@@ -11,8 +11,10 @@ BUILD_DIR = $(shell xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme
 # requirement identity-based and therefore stable across rebuilds.
 #
 # CI has no certificate, so this expands to nothing there and Xcode falls back to ad-hoc.
+ifneq ($(origin DEVELOPER_ID_TEAM),command line)
 DEVELOPER_ID_TEAM := $(shell security find-identity -v -p codesigning 2>/dev/null | \
 	sed -n 's/.*Developer ID Application: .*(\([A-Z0-9]*\))".*/\1/p' | head -1)
+endif
 SIGN_ARGS := $(if $(DEVELOPER_ID_TEAM),CODE_SIGN_IDENTITY="Developer ID Application" CODE_SIGN_STYLE=Manual \
 	DEVELOPMENT_TEAM=$(DEVELOPER_ID_TEAM) PROVISIONING_PROFILE_SPECIFIER="" CODE_SIGNING_ALLOWED=YES,)
 
