@@ -6,6 +6,54 @@ import Testing
 
 @MainActor
 struct HotkeyManagerTests {
+    @Test("Default shortcuts have the documented labels", arguments: zip(
+        [UInt32(optionKey), UInt32(optionKey | shiftKey)],
+        ["⌥C", "⌥⇧C"]
+    ))
+    func defaultShortcutLabels(modifiers: UInt32, expected: String) {
+        #expect(HotkeyManager.formatShortcut(keyCode: UInt32(kVK_ANSI_C), modifiers: modifiers) == expected)
+    }
+
+    @Test("Shortcut formatting keeps modifier order and identifiable key names")
+    func modifierOrderAndKeyNames() {
+        #expect(HotkeyManager.formatShortcut(
+            keyCode: UInt32(kVK_F12),
+            modifiers: UInt32(controlKey | optionKey | shiftKey | cmdKey)
+        ) == "⌃⌥⇧⌘F12")
+        #expect(HotkeyManager.formatShortcut(keyCode: UInt32(kVK_F1), modifiers: 0) == "F1")
+        #expect(HotkeyManager.keyName(for: UInt32(kVK_F12)) == "F12")
+        #expect(HotkeyManager.keyName(for: 65535) == "Key(65535)")
+    }
+
+    @Test("Displayed labels follow registration and unregistering for each slot")
+    func displayLabelsFollowRegistration() throws {
+        var refs = try [
+            #require(EventHotKeyRef(bitPattern: 4)),
+            #require(EventHotKeyRef(bitPattern: 5)),
+        ]
+        let manager = HotkeyManager(registrationSystem: .init(
+            register: { _, _, _ in (noErr, refs.removeFirst()) },
+            unregister: { _ in noErr }
+        ))
+
+        #expect(manager.displayString(for: .panel).isEmpty)
+        #expect(manager.displayString(for: .historyWindow).isEmpty)
+        #expect(manager.register(id: .panel, keyCode: UInt32(kVK_ANSI_C), modifiers: UInt32(optionKey)) {})
+        #expect(manager.displayString(for: .panel) == "⌥C")
+        #expect(manager.register(
+            id: .historyWindow,
+            keyCode: UInt32(kVK_ANSI_C),
+            modifiers: UInt32(optionKey | shiftKey)
+        ) {})
+        #expect(manager.displayString(for: .historyWindow) == "⌥⇧C")
+
+        manager.unregister(id: .panel)
+        #expect(manager.displayString(for: .panel).isEmpty)
+        #expect(manager.displayString(for: .historyWindow) == "⌥⇧C")
+        manager.unregister(id: .historyWindow)
+        #expect(manager.displayString(for: .historyWindow).isEmpty)
+    }
+
     @Test("A failed rebind keeps the previous hotkey and allows another retry")
     func failedRebindKeepsPreviousRegistration() throws {
         let firstRef = try #require(EventHotKeyRef(bitPattern: 1))
@@ -24,15 +72,20 @@ struct HotkeyManagerTests {
             }
         ))
 
+        #expect(manager.displayString(for: .panel).isEmpty)
         #expect(manager.register(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)) {})
+        #expect(manager.displayString(for: .panel) == "⌥C")
         #expect(manager.reregister(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)))
+        #expect(manager.displayString(for: .panel) == "⌥C")
         #expect(results.count == 2)
         #expect(!manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
         #expect(manager.keyCode(for: .panel) == 8)
+        #expect(manager.displayString(for: .panel) == "⌥C")
         #expect(unregistered.isEmpty)
 
-        #expect(manager.reregister(id: .panel, keyCode: 10, modifiers: UInt32(optionKey)))
-        #expect(manager.keyCode(for: .panel) == 10)
+        #expect(manager.reregister(id: .panel, keyCode: UInt32(kVK_ANSI_B), modifiers: UInt32(optionKey)))
+        #expect(manager.keyCode(for: .panel) == UInt32(kVK_ANSI_B))
+        #expect(manager.displayString(for: .panel) == "⌥B")
         #expect(unregistered == [firstRef])
         #expect(manager.lastRegistrationError == nil)
     }
@@ -50,8 +103,10 @@ struct HotkeyManagerTests {
         ))
 
         #expect(!manager.register(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)) {})
+        #expect(manager.displayString(for: .panel).isEmpty)
         #expect(manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
         #expect(manager.keyCode(for: .panel) == 9)
+        #expect(manager.displayString(for: .panel) == "⌥V")
     }
 }
 
