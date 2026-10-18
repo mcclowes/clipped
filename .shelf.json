@@ -1,0 +1,8 @@
+{
+  "related": [
+    {
+      "repo": "mcclowes/homebrew-clipped",
+      "relation": "Homebrew distribution tap; Clipped's release workflow updates Casks/clipped.rb."
+    }
+  ]
+}
