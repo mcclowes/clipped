@@ -20,7 +20,7 @@ jobs:
   bump:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
@@ -70,10 +70,12 @@ jobs:
 
       - name: Summary
         run: |
-          echo "### Version bump PR created :rocket:" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Bump type:** ${{ inputs.bump }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **New version:** ${{ steps.bump.outputs.new_version }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Branch:** \`bump/v${{ steps.bump.outputs.new_version }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Merge the PR to trigger the release." >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Version bump PR created :rocket:"
+            echo ""
+            echo "- **Bump type:** ${{ inputs.bump }}"
+            echo "- **New version:** ${{ steps.bump.outputs.new_version }}"
+            echo "- **Branch:** \`bump/v${{ steps.bump.outputs.new_version }}\`"
+            echo ""
+            echo "Merge the PR to trigger the release."
+          } >> "$GITHUB_STEP_SUMMARY"
