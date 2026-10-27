@@ -1,7 +1,9 @@
 import AppKit
 import Carbon
 @testable import Clipped
+import Observation
 import SwiftUI
+import Synchronization
 import Testing
 
 @MainActor
@@ -87,7 +89,7 @@ struct HotkeyManagerTests {
         #expect(manager.keyCode(for: .panel) == UInt32(kVK_ANSI_B))
         #expect(manager.displayString(for: .panel) == "⌥B")
         #expect(unregistered == [firstRef])
-        #expect(manager.lastRegistrationError == nil)
+        #expect(manager.registrationError(for: .panel) == nil)
     }
 
     @Test("An initial registration failure retains the callback for retry")
@@ -107,6 +109,101 @@ struct HotkeyManagerTests {
         #expect(manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
         #expect(manager.keyCode(for: .panel) == 9)
         #expect(manager.displayString(for: .panel) == "⌥V")
+    }
+
+    @Test("Startup errors stay with their shortcut until that shortcut recovers")
+    func startupErrorsStayWithTheirShortcut() throws {
+        let ref = try #require(EventHotKeyRef(bitPattern: 6))
+        var failure = OSStatus(eventHotKeyExistsErr)
+        let manager = HotkeyManager(registrationSystem: .init(
+            register: { _, _, _ in (failure, failure == noErr ? ref : nil) },
+            unregister: { _ in noErr }
+        ))
+
+        #expect(!manager.register(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)) {})
+        let panelError = try #require(manager.registrationError(for: .panel))
+        failure = OSStatus(paramErr)
+        #expect(!manager.register(id: .historyWindow, keyCode: 8, modifiers: UInt32(optionKey | shiftKey)) {})
+        let historyError = try #require(manager.registrationError(for: .historyWindow))
+        #expect(panelError != historyError)
+        #expect(manager.registrationError(for: .panel) == panelError)
+
+        failure = noErr
+        #expect(manager.reregister(id: .historyWindow, keyCode: 9, modifiers: UInt32(optionKey | shiftKey)))
+        #expect(manager.registrationError(for: .historyWindow) == nil)
+        #expect(manager.registrationError(for: .panel) == panelError)
+        #expect(manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
+        #expect(manager.registrationError(for: .panel) == nil)
+    }
+
+    @Test("Settings can observe startup errors and same-shortcut recovery")
+    func registrationErrorsAreObservable() throws {
+        let ref = try #require(EventHotKeyRef(bitPattern: 7))
+        var failure: OSStatus = noErr
+        let manager = HotkeyManager(registrationSystem: .init(
+            register: { _, _, _ in (failure, failure == noErr ? ref : nil) },
+            unregister: { _ in noErr }
+        ))
+        #expect(manager.register(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)) {})
+        let changes = Mutex(0)
+        withObservationTracking {
+            #expect(manager.registrationError(for: .panel) == nil)
+        } onChange: {
+            changes.withLock { $0 += 1 }
+        }
+        failure = OSStatus(eventHotKeyExistsErr)
+        #expect(!manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
+        #expect(changes.withLock { $0 } == 1)
+        #expect(manager.registrationError(for: .panel) != nil)
+
+        #expect(manager.reregister(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)))
+        #expect(manager.registrationError(for: .panel) == nil)
+        #expect(!manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
+        manager.unregister(id: .panel)
+        #expect(manager.registrationError(for: .panel) == nil)
+    }
+
+    @Test("Handler failures stop registration and remain visible until a successful retry")
+    func handlerFailureStaysVisibleUntilRetry() throws {
+        let handlerRef = try #require(EventHandlerRef(bitPattern: 8))
+        let hotkeyRef = try #require(EventHotKeyRef(bitPattern: 9))
+        var installationStatus = OSStatus(paramErr)
+        var installations = 0
+        var registrations = 0
+        let manager = HotkeyManager(registrationSystem: .init(
+            register: { _, _, _ in
+                registrations += 1
+                return (noErr, hotkeyRef)
+            },
+            unregister: { _ in noErr },
+            installHandler: { _, ref in
+                installations += 1
+                if installationStatus == noErr {
+                    ref = handlerRef
+                }
+                return installationStatus
+            }
+        ))
+
+        #expect(!manager.register(id: .panel, keyCode: 8, modifiers: UInt32(optionKey)) {})
+        let failure = try #require(manager.registrationError(for: .panel))
+        #expect(failure.contains("Global shortcuts could not start"))
+        #expect(manager.registrationError(for: .historyWindow) == failure)
+        #expect(registrations == 0)
+        #expect(installations == 1)
+        #expect(!manager.register(id: .historyWindow, keyCode: 8, modifiers: UInt32(optionKey | shiftKey)) {})
+        #expect(registrations == 0)
+        #expect(installations == 2)
+
+        installationStatus = noErr
+        #expect(manager.reregister(id: .panel, keyCode: 9, modifiers: UInt32(optionKey)))
+        #expect(manager.registrationError(for: .panel) == nil)
+        #expect(manager.registrationError(for: .historyWindow) == failure)
+        #expect(registrations == 1)
+        #expect(installations == 3)
+        #expect(manager.reregister(id: .historyWindow, keyCode: 8, modifiers: UInt32(optionKey | shiftKey)))
+        #expect(manager.registrationError(for: .historyWindow) == nil)
+        #expect(installations == 3)
     }
 }
 

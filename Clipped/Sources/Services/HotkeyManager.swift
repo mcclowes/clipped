@@ -1,8 +1,10 @@
 import Carbon
 import Cocoa
+import Observation
 import os
 
 @MainActor
+@Observable
 final class HotkeyManager {
     /// Identifies a distinct global hotkey slot. `rawValue` is sent through
     /// Carbon's `EventHotKeyID` so incoming events can be routed back to the
@@ -26,6 +28,7 @@ final class HotkeyManager {
     struct RegistrationSystem {
         var register: (UInt32, UInt32, EventHotKeyID) -> (OSStatus, EventHotKeyRef?)
         var unregister: (EventHotKeyRef) -> OSStatus
+        var installHandler: (EventHandlerUPP, inout EventHandlerRef?) -> OSStatus = { _, _ in noErr }
 
         static let live = RegistrationSystem(
             register: { keyCode, modifiers, hotkeyID in
@@ -40,7 +43,21 @@ final class HotkeyManager {
                 )
                 return (status, hotkeyRef)
             },
-            unregister: UnregisterEventHotKey
+            unregister: UnregisterEventHotKey,
+            installHandler: { handler, handlerRef in
+                var eventType = EventTypeSpec(
+                    eventClass: OSType(kEventClassKeyboard),
+                    eventKind: UInt32(kEventHotKeyPressed)
+                )
+                return InstallEventHandler(
+                    GetApplicationEventTarget(),
+                    handler,
+                    1,
+                    &eventType,
+                    nil,
+                    &handlerRef
+                )
+            }
         )
     }
 
@@ -48,22 +65,23 @@ final class HotkeyManager {
     private var registrations: [HotkeyID: Registration] = [:]
     private var callbacks: [HotkeyID: @MainActor @Sendable () -> Void] = [:]
     private let registrationSystem: RegistrationSystem
-    private let installsEventHandler: Bool
 
-    /// The most recent registration error, if any, so the settings UI can surface it.
-    private(set) var lastRegistrationError: String?
+    private var registrationErrors: [HotkeyID: String] = [:]
+    private var eventHandlerError: String?
 
     private init() {
         registrationSystem = .live
-        installsEventHandler = true
     }
 
     init(registrationSystem: RegistrationSystem) {
         self.registrationSystem = registrationSystem
-        installsEventHandler = false
     }
 
     // MARK: - Introspection
+
+    func registrationError(for id: HotkeyID) -> String? {
+        eventHandlerError ?? registrationErrors[id]
+    }
 
     func keyCode(for id: HotkeyID) -> UInt32 {
         registrations[id]?.keyCode ?? 0
@@ -89,7 +107,13 @@ final class HotkeyManager {
     ) -> Bool {
         Self.logger.debug("Registering global hotkey \(id.rawValue)")
 
-        installEventHandlerIfNeeded()
+        guard installEventHandlerIfNeeded() else {
+            registrationErrors[id] = eventHandlerError
+            if callbacks[id] == nil {
+                callbacks[id] = callback
+            }
+            return false
+        }
 
         let hotkeyID = EventHotKeyID(signature: 0x434C_4950, id: id.rawValue) // "CLIP"
         let (registerStatus, hotkeyRef) = registrationSystem.register(keyCode, modifiers, hotkeyID)
@@ -99,7 +123,7 @@ final class HotkeyManager {
             let message = "Shortcut is unavailable or already in use. Choose a different shortcut. " +
                 "OSStatus \(registerStatus)."
             Self.logger.error("\(message)")
-            lastRegistrationError = message
+            registrationErrors[id] = message
             if callbacks[id] == nil {
                 callbacks[id] = callback
             }
@@ -116,7 +140,7 @@ final class HotkeyManager {
             modifiers: modifiers
         )
         callbacks[id] = callback
-        lastRegistrationError = nil
+        registrationErrors[id] = nil
         return true
     }
 
@@ -124,7 +148,7 @@ final class HotkeyManager {
     func reregister(id: HotkeyID, keyCode: UInt32, modifiers: UInt32) -> Bool {
         guard let callback = callbacks[id] else { return false }
         if registrations[id]?.keyCode == keyCode, registrations[id]?.modifiers == modifiers {
-            lastRegistrationError = nil
+            registrationErrors[id] = nil
             return true
         }
         return register(id: id, keyCode: keyCode, modifiers: modifiers, callback: callback)
@@ -136,6 +160,7 @@ final class HotkeyManager {
         }
         registrations[id] = nil
         callbacks[id] = nil
+        registrationErrors[id] = nil
     }
 
     private func fire(rawID: UInt32) {
@@ -143,14 +168,8 @@ final class HotkeyManager {
         callbacks[id]?()
     }
 
-    private func installEventHandlerIfNeeded() {
-        guard installsEventHandler else { return }
-        guard eventHandler == nil else { return }
-
-        var eventType = EventTypeSpec(
-            eventClass: OSType(kEventClassKeyboard),
-            eventKind: UInt32(kEventHotKeyPressed)
-        )
+    private func installEventHandlerIfNeeded() -> Bool {
+        guard eventHandler == nil else { return true }
 
         let handlerBlock: EventHandlerUPP = { _, event, _ -> OSStatus in
             var hkID = EventHotKeyID()
@@ -171,20 +190,17 @@ final class HotkeyManager {
             return noErr
         }
 
-        let installStatus = InstallEventHandler(
-            GetApplicationEventTarget(),
-            handlerBlock,
-            1,
-            &eventType,
-            nil,
-            &eventHandler
-        )
+        let installStatus = registrationSystem.installHandler(handlerBlock, &eventHandler)
 
         if installStatus != noErr {
-            let message = "InstallEventHandler failed (OSStatus \(installStatus))"
+            let message = "Global shortcuts could not start. Choose a shortcut again to retry. " +
+                "OSStatus \(installStatus)."
             Self.logger.error("\(message)")
-            lastRegistrationError = message
+            eventHandlerError = message
+            return false
         }
+        eventHandlerError = nil
+        return true
     }
 
     // MARK: - Display formatting

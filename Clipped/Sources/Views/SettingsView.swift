@@ -66,8 +66,6 @@ private struct GeneralSettingsTab: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(ScreenshotWatcher.self) private var screenshotWatcher
     @Environment(ClipboardManager.self) private var clipboardManager
-    @State private var panelHotkeyError: String?
-    @State private var historyWindowHotkeyError: String?
 
     var body: some View {
         @Bindable var settings = settings
@@ -230,7 +228,7 @@ private struct GeneralSettingsTab: View {
                     title: "Open clipboard panel",
                     keyCode: $settings.hotkeyKeyCode,
                     modifiers: $settings.hotkeyModifiers,
-                    error: panelHotkeyError
+                    error: HotkeyManager.shared.registrationError(for: .panel)
                 ) {
                     updatePanelHotkey()
                 }
@@ -239,7 +237,7 @@ private struct GeneralSettingsTab: View {
                     title: "Open full history window",
                     keyCode: $settings.historyWindowHotkeyKeyCode,
                     modifiers: $settings.historyWindowHotkeyModifiers,
-                    error: historyWindowHotkeyError
+                    error: HotkeyManager.shared.registrationError(for: .historyWindow)
                 ) {
                     updateHistoryWindowHotkey()
                 }
@@ -297,21 +295,19 @@ private struct GeneralSettingsTab: View {
     }
 
     private func updatePanelHotkey() {
-        let succeeded = HotkeyManager.shared.reregister(
+        HotkeyManager.shared.reregister(
             id: .panel,
             keyCode: settings.hotkeyKeyCode,
             modifiers: settings.hotkeyModifiers
         )
-        panelHotkeyError = succeeded ? nil : HotkeyManager.shared.lastRegistrationError
     }
 
     private func updateHistoryWindowHotkey() {
-        let succeeded = HotkeyManager.shared.reregister(
+        HotkeyManager.shared.reregister(
             id: .historyWindow,
             keyCode: settings.historyWindowHotkeyKeyCode,
             modifiers: settings.historyWindowHotkeyModifiers
         )
-        historyWindowHotkeyError = succeeded ? nil : HotkeyManager.shared.lastRegistrationError
     }
 
     private static var appVersion: String {
