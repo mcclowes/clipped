@@ -1,0 +1,32 @@
+{
+  "channel": "homebrew",
+  "inputs": [
+    "Sources",
+    "Tests",
+    "Package.swift",
+    "Package.resolved",
+    "package.json",
+    "package-lock.json",
+    "scripts",
+    ".github",
+    "Vendor",
+    "ThirdParty",
+    ".swiftformat",
+    ".swiftlint.yml",
+    ".saggar-kit-ref",
+    "Fixtures",
+    "Clipped",
+    "project.yml",
+    "Makefile",
+    "Resources"
+  ],
+  "managedVersion": true,
+  "recipes": [
+    {
+      "kind": "cask",
+      "stable": "clipped",
+      "nightly": "clipped@nightly",
+      "artifact": ".build/Clipped-*.zip"
+    }
+  ]
+}
