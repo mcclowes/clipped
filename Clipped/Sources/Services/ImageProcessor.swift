@@ -78,14 +78,20 @@ enum RasterImageFormat: String, CaseIterable {
 /// stateless so it stays trivially unit-testable; no network, no third-party
 /// service — every operation happens locally.
 enum ImageProcessor {
-    /// Pixel dimensions of an encoded image without fully decoding it.
+    /// Prefer ImageIO metadata, then fall back to AppKit's fixed pixel dimensions.
     static func pixelSize(of data: Data) -> CGSize? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-              let width = props[kCGImagePropertyPixelWidth] as? Int,
-              let height = props[kCGImagePropertyPixelHeight] as? Int
+        if let source = CGImageSourceCreateWithData(data as CFData, nil),
+           let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           let width = props[kCGImagePropertyPixelWidth] as? Int,
+           let height = props[kCGImagePropertyPixelHeight] as? Int,
+           width > 0, height > 0
+        {
+            return CGSize(width: width, height: height)
+        }
+        guard let image = NSImage(data: data),
+              let representation = image.representations.first(where: { $0.pixelsWide > 0 && $0.pixelsHigh > 0 })
         else { return nil }
-        return CGSize(width: width, height: height)
+        return CGSize(width: representation.pixelsWide, height: representation.pixelsHigh)
     }
 
     /// Best-effort detection of an encoded image's format, used to preserve the

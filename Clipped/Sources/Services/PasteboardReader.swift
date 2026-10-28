@@ -66,7 +66,7 @@ struct PasteboardReader {
                 Self.logger.debug("Skipping oversized image copy (\(imageData.count) bytes)")
                 return nil
             }
-            guard let size = ImageProcessor.pixelSize(of: imageData) ?? NSImage(data: imageData)?.size else {
+            guard let size = ImageProcessor.pixelSize(of: imageData) else {
                 return nil
             }
             return ClipboardItem(
