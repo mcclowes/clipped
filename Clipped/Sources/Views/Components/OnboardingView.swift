@@ -12,6 +12,7 @@ enum OnboardingStep: Int, CaseIterable {
 struct OnboardingView: View {
     @Environment(SettingsManager.self) private var settings
     @State private var step: OnboardingStep = .welcome
+    @State private var stepScrollPosition = ScrollPosition(edge: .top)
     @ScaledMetric private var heroIconSize: CGFloat = 48
     var onComplete: () -> Void
 
@@ -28,24 +29,29 @@ struct OnboardingView: View {
             .padding(.top, 24)
             .padding(.bottom, 8)
 
-            Spacer()
-
             // Step content
-            Group {
-                switch step {
-                case .welcome: welcomeStep
-                case .shortcut: shortcutStep
-                case .transformations: transformationsStep
-                case .launchAtLogin: launchStep
-                case .ready: readyStep
+            ScrollView {
+                Group {
+                    switch step {
+                    case .welcome: welcomeStep
+                    case .shortcut: shortcutStep
+                    case .transformations: transformationsStep
+                    case .launchAtLogin: launchStep
+                    case .ready: readyStep
+                    }
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
-
-            Spacer()
+            .defaultScrollAnchor(.center, for: .alignment)
+            .scrollPosition($stepScrollPosition)
+            .onChange(of: step) {
+                stepScrollPosition.scrollTo(edge: .top)
+            }
 
             // Navigation
             HStack {
