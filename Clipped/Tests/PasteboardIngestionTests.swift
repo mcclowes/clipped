@@ -7,6 +7,56 @@ import Testing
 struct PasteboardIngestionTests {
     // MARK: - PasteboardMonitor
 
+    @Test("Queued automatic polls do not read after monitoring stops", arguments: [false, true])
+    func queuedPollAfterStop(wasMonitoring: Bool) async {
+        let pasteboard = RecordingPollPasteboard()
+        let monitor = PasteboardMonitor(pasteboard: pasteboard)
+        let initialReads = pasteboard.reads
+        var emissions = 0
+        monitor.onNewItem = { _ in emissions += 1 }
+        if wasMonitoring {
+            monitor.startMonitoring()
+        }
+        pasteboard.contents.stageExternalWrite(types: [.string], strings: [.string: "Stopped copy"])
+        let queuedPoll = Task { @MainActor in monitor.checkIfMonitoring() }
+
+        monitor.stopMonitoring()
+        await queuedPoll.value
+
+        #expect(monitor.isMonitoring == false)
+        #expect(pasteboard.reads == initialReads)
+        #expect(emissions == 0)
+    }
+
+    @Test("Automatic polls capture while active and resume after a stop")
+    func automaticPollLifecycle() {
+        let pasteboard = RecordingPollPasteboard()
+        let monitor = PasteboardMonitor(pasteboard: pasteboard)
+        defer { monitor.stopMonitoring() }
+        var copies: [String] = []
+        monitor.onNewItem = {
+            if let text = $0.item.plainText {
+                copies.append(text)
+            }
+        }
+        monitor.startMonitoring()
+        pasteboard.contents.stageExternalWrite(types: [.string], strings: [.string: "First copy"])
+        monitor.checkIfMonitoring()
+        #expect(copies == ["First copy"])
+
+        monitor.stopMonitoring()
+        let readsAfterStop = pasteboard.reads
+        pasteboard.contents.stageExternalWrite(types: [.string], strings: [.string: "Second copy"])
+        monitor.checkIfMonitoring()
+        #expect(pasteboard.reads == readsAfterStop)
+        #expect(copies == ["First copy"])
+
+        monitor.startMonitoring()
+        monitor.checkIfMonitoring()
+        monitor.checkIfMonitoring()
+        #expect(copies == ["First copy", "Second copy"])
+    }
+
     @Test("Monitor fires onNewItem when changeCount advances")
     func monitorFiresOnChange() {
         let mock = MockPasteboard()
@@ -488,5 +538,43 @@ struct PasteboardIngestionTests {
         manager.monitor.check()
 
         #expect(manager.items.first?.containsSecret == false)
+    }
+}
+
+@MainActor
+private final class RecordingPollPasteboard: PasteboardProtocol {
+    let contents = MockPasteboard()
+    private(set) var reads = 0
+
+    var changeCount: Int {
+        reads += 1
+        return contents.changeCount
+    }
+
+    var types: [NSPasteboard.PasteboardType]? {
+        reads += 1
+        return contents.types
+    }
+
+    func data(forType type: NSPasteboard.PasteboardType) -> Data? {
+        reads += 1
+        return contents.data(forType: type)
+    }
+
+    func string(forType type: NSPasteboard.PasteboardType) -> String? {
+        reads += 1
+        return contents.string(forType: type)
+    }
+
+    func clearContents() -> Int {
+        contents.clearContents()
+    }
+
+    func setString(_ string: String, forType type: NSPasteboard.PasteboardType) -> Bool {
+        contents.setString(string, forType: type)
+    }
+
+    func setData(_ data: Data?, forType type: NSPasteboard.PasteboardType) -> Bool {
+        contents.setData(data, forType: type)
     }
 }

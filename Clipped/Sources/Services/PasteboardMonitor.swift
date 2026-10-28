@@ -69,7 +69,7 @@ final class PasteboardMonitor {
         // tolerance lets the scheduler coalesce the 2 Hz wakeups to cut energy impact.
         let timer = Timer(timeInterval: Self.pollInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.check()
+                self?.checkIfMonitoring()
             }
         }
         timer.tolerance = Self.pollInterval * 0.5
@@ -98,6 +98,12 @@ final class PasteboardMonitor {
     }
 
     // MARK: - Polling
+
+    /// A timer's queued actor hop can outlive stopMonitoring().
+    func checkIfMonitoring() {
+        guard isMonitoring else { return }
+        check()
+    }
 
     /// Run one poll cycle. Exposed as `internal` so tests can drive the monitor deterministically
     /// without waiting for the `Timer`.
