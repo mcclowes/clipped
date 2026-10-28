@@ -49,7 +49,6 @@ jobs:
 
       - name: Check local build paths
         run: |
-          bash -n scripts/build-products-dir.sh scripts/test-build-paths.sh
           shellcheck scripts/build-products-dir.sh scripts/test-build-paths.sh
           make test-build-paths DEVELOPER_ID_TEAM=
 
