@@ -37,9 +37,7 @@ final class PasteboardMonitor {
 
     let pasteboard: PasteboardProtocol
     private let reader: PasteboardReader
-    /// Not observable (an implementation detail); `nonisolated(unsafe)` lets the nonisolated
-    /// `deinit` invalidate it. Only ever mutated on the main actor, and by deinit no other
-    /// reference to this monitor survives, so the access is race-free.
+    /// Main-actor access until exclusive deinit, which transfers only the timer back for cleanup.
     @ObservationIgnored nonisolated(unsafe) var pollTimer: Timer?
     private var lastChangeCount: Int
 
@@ -53,9 +51,14 @@ final class PasteboardMonitor {
     }
 
     deinit {
-        // The run loop retains a repeating Timer, so without this the timer outlives the monitor
-        // and keeps firing (against a nil `self`) for the rest of the process.
-        pollTimer?.invalidate()
+        guard let timer = pollTimer else { return }
+        if Thread.isMainThread {
+            timer.invalidate()
+        } else {
+            DispatchQueue.main.async {
+                timer.invalidate()
+            }
+        }
     }
 
     // MARK: - Lifecycle

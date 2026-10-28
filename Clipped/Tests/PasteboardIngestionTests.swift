@@ -7,6 +7,36 @@ import Testing
 struct PasteboardIngestionTests {
     // MARK: - PasteboardMonitor
 
+    @Test(
+        "Monitor destruction invalidates its main-run-loop timer on the main thread",
+        .bug(id: 122),
+        .timeLimit(.minutes(1)),
+        arguments: [false, true]
+    )
+    func timerCleanupThread(releaseOnMain: Bool) async throws {
+        let signal = AsyncStream<Bool>.makeStream()
+        var monitor: PasteboardMonitor? = PasteboardMonitor(pasteboard: MockPasteboard())
+        let reference = WeakMonitorReference(monitor)
+        let timer = try makeInvalidationTimer(signal: signal.continuation)
+        try #require(timer.isValid)
+        monitor?.pollTimer = timer
+        let holder = MonitorReleaseHolder(monitor: releaseOnMain ? nil : monitor)
+        monitor = nil
+
+        if releaseOnMain {
+            #expect(timer.isValid == false)
+        } else {
+            let releasedOnMain = await Task.detached { await holder.release() }.value
+            try #require(releasedOnMain == false)
+        }
+        var events = signal.stream.makeAsyncIterator()
+        let invalidatedOnMain = await events.next()
+
+        #expect(reference.value == nil)
+        #expect(invalidatedOnMain == true)
+        #expect(timer.isValid == false)
+    }
+
     @Test("Queued automatic polls do not read after monitoring stops", arguments: [false, true])
     func queuedPollAfterStop(wasMonitoring: Bool) async {
         let pasteboard = RecordingPollPasteboard()
@@ -576,5 +606,62 @@ private final class RecordingPollPasteboard: PasteboardProtocol {
 
     func setData(_ data: Data?, forType type: NSPasteboard.PasteboardType) -> Bool {
         contents.setData(data, forType: type)
+    }
+}
+
+private actor MonitorReleaseHolder {
+    private var monitor: PasteboardMonitor?
+
+    init(monitor: PasteboardMonitor?) {
+        self.monitor = monitor
+    }
+
+    func release() -> Bool {
+        let onMain = Thread.isMainThread
+        monitor = nil
+        return onMain
+    }
+}
+
+@MainActor
+private final class WeakMonitorReference {
+    weak var value: PasteboardMonitor?
+
+    init(_ value: PasteboardMonitor?) {
+        self.value = value
+    }
+}
+
+@MainActor
+private func makeInvalidationTimer(signal: AsyncStream<Bool>.Continuation) throws -> Timer {
+    try #require(Thread.isMainThread)
+    let timer = autoreleasepool {
+        Timer(
+            fireAt: .distantFuture,
+            interval: 60,
+            target: InvalidationTimerTarget(),
+            selector: #selector(InvalidationTimerTarget.tick),
+            userInfo: InvalidationThreadWitness(signal: signal),
+            repeats: true
+        )
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    return timer
+}
+
+private final class InvalidationTimerTarget: NSObject {
+    @objc func tick() {}
+}
+
+private final class InvalidationThreadWitness {
+    let signal: AsyncStream<Bool>.Continuation
+
+    init(signal: AsyncStream<Bool>.Continuation) {
+        self.signal = signal
+    }
+
+    deinit {
+        signal.yield(Thread.isMainThread)
+        signal.finish()
     }
 }
