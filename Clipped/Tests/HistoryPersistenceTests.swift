@@ -108,6 +108,27 @@ struct HistoryPersistenceTests {
         #expect(texts.contains("copied this session"))
     }
 
+    @Test("Disabling persistence skips a queued save and re-enabling still saves normally")
+    func disablingPersistenceSkipsQueuedSave() async {
+        let rig = await makeRig(persist: true, stored: [storedEntry("persisted")])
+        await rig.history.loadPersistedHistory()
+        rig.history.insert(textItem("copied this session"))
+        rig.history.saveHistory()
+        rig.settings.persistAcrossReboots = false
+        await rig.history.flushPendingSaves()
+
+        #expect(await rig.store.saveCallCount == 0)
+        #expect(await rig.store.savedEntries.isEmpty)
+        #expect(await rig.store.load().compactMap(\.textContent) == ["persisted"])
+        #expect(rig.history.items.map(\.preview) == ["copied this session", "persisted"])
+
+        rig.settings.persistAcrossReboots = true
+        rig.history.saveHistory()
+        await rig.history.flushPendingSaves()
+        #expect(await rig.store.saveCallCount == 1)
+        #expect(await rig.store.savedEntries.compactMap(\.textContent) == ["copied this session", "persisted"])
+    }
+
     @Test("Retrying an unreadable load keeps both the recovered and the newly copied items")
     func retryMergesRecoveredHistory() async {
         let rig = await makeRig(persist: true)
@@ -140,6 +161,26 @@ struct HistoryPersistenceTests {
 
         let survivingOnDisk = await rig.store.load()
         #expect(survivingOnDisk.isEmpty, "cleared history must not come back on the next launch")
+    }
+
+    @Test("Disabling persistence keeps a queued clear but skips writing its pinned survivors")
+    func disablingPersistenceSkipsClearSurvivorSave() async {
+        let rig = await makeRig(persist: true)
+        await rig.history.loadPersistedHistory()
+        let pinned = textItem("keep in memory")
+        pinned.isPinned = true
+        rig.history.pinnedItems = [pinned]
+        rig.history.insert(textItem("drop me"))
+
+        rig.history.clearAll()
+        rig.settings.persistAcrossReboots = false
+        await rig.history.flushPendingSaves()
+
+        #expect(await rig.store.clearCallCount == 1)
+        #expect(await rig.store.saveCallCount == 0)
+        #expect(await rig.store.savedEntries.isEmpty)
+        #expect(rig.history.items.isEmpty)
+        #expect(rig.history.pinnedItems.map(\.id) == [pinned.id])
     }
 
     @Test("Clearing keeps pinned items on disk when persistence is on")

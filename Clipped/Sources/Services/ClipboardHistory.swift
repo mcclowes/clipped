@@ -194,9 +194,9 @@ final class ClipboardHistory {
             .filter { !$0.isSensitive && !$0.isAwaitingImageText }
             .map { StoredEntry(item: $0) }
 
-        saveDebounceTask = Task { [survivors] in
+        saveDebounceTask = Task { [weak self, survivors] in
             await store.clear()
-            if shouldPersist, !survivors.isEmpty {
+            if shouldPersist, self?.settingsManager?.persistAcrossReboots == true, !survivors.isEmpty {
                 await store.save(entries: survivors)
             }
         }
@@ -325,10 +325,10 @@ final class ClipboardHistory {
         // interval via the `defer`, so begin/end stay balanced.
         let signposter = Signposts.history
         let signpost = signposter.beginInterval("SaveHistory")
-        saveDebounceTask = Task { [entries] in
+        saveDebounceTask = Task { [weak self, entries] in
             defer { signposter.endInterval("SaveHistory", signpost) }
             try? await Task.sleep(for: Self.saveDebounceDelay)
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, self?.settingsManager?.persistAcrossReboots == true else { return }
             await store.save(entries: entries)
         }
     }
