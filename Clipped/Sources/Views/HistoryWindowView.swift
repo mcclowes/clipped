@@ -310,121 +310,18 @@ struct HistoryWindowView: View {
         items(for: category).count
     }
 
-    private func items(for category: HistoryCategory) -> [ClipboardItem] {
-        let merged = manager.pinnedItems + manager.items
-        switch category {
-        case .all:
-            return merged
-        case .pinned:
-            return manager.pinnedItems
-        case .text:
-            return merged.filter { $0.contentType == .plainText || $0.contentType == .richText }
-        case .urls:
-            return merged.filter { $0.contentType == .url }
-        case .images:
-            return merged.filter { $0.contentType == .image }
-        case .developer:
-            return merged.filter(\.isDeveloperContent)
-        case let .app(name):
-            return merged.filter { $0.sourceAppName == name }
-        }
+    private func items(for category: HistoryCategory, query: String = "") -> [ClipboardItem] {
+        let source = category == .pinned ? manager.pinnedItems : manager.pinnedItems + manager.items
+        return ClipboardFilter.apply(to: source, query: query, matching: category.includes)
     }
 
     private var displayedItems: [ClipboardItem] {
-        let base = items(for: selectedCategory)
-        guard !searchQuery.isEmpty else { return base }
-        return base.filter { item in
-            item.searchableText.localizedCaseInsensitiveContains(searchQuery)
-                || (!item.isSensitive && !item.containsSecret
-                    && (item.extractedText?.localizedCaseInsensitiveContains(searchQuery) ?? false))
-        }
+        items(for: selectedCategory, query: searchQuery)
     }
 
     private var selectedItem: ClipboardItem? {
         guard let id = selectedItemID else { return nil }
         return (manager.pinnedItems + manager.items).first { $0.id == id }
-    }
-}
-
-// MARK: - Category enum
-
-enum HistoryCategory: Hashable, Identifiable {
-    case all
-    case pinned
-    case text
-    case urls
-    case images
-    case developer
-    /// Items copied from a specific source app, keyed by its display name.
-    case app(String)
-
-    var id: String {
-        switch self {
-        case .all: "all"
-        case .pinned: "pinned"
-        case .text: "text"
-        case .urls: "urls"
-        case .images: "images"
-        case .developer: "developer"
-        case let .app(name): "app:\(name)"
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .all: "All Items"
-        case .pinned: "Pinned"
-        case .text: "Text"
-        case .urls: "Links"
-        case .images: "Images"
-        case .developer: "Developer"
-        case let .app(name): name
-        }
-    }
-}
-
-// MARK: - Source app grouping
-
-/// One source app present in the clipboard history, with how many items came from it.
-/// Drives the "Applications" section of the history sidebar.
-struct SourceAppGroup: Identifiable, Hashable {
-    let name: String
-    let bundleID: String?
-    let count: Int
-
-    var id: String {
-        name
-    }
-}
-
-extension HistoryCategory {
-    /// Buckets `items` by their source app, ordered by item count descending then name
-    /// so the busiest apps surface first. Items without a `sourceAppName` are skipped.
-    @MainActor
-    static func sourceAppGroups(from items: [ClipboardItem]) -> [SourceAppGroup] {
-        var counts: [String: Int] = [:]
-        var bundleIDs: [String: String] = [:]
-        var order: [String] = []
-
-        for item in items {
-            guard let name = item.sourceAppName, !name.isEmpty else { continue }
-            if counts[name] == nil {
-                order.append(name)
-            }
-            counts[name, default: 0] += 1
-            // Keep the first non-nil bundle ID seen for the app.
-            if bundleIDs[name] == nil, let bundleID = item.sourceAppBundleID {
-                bundleIDs[name] = bundleID
-            }
-        }
-
-        return order
-            .map { SourceAppGroup(name: $0, bundleID: bundleIDs[$0], count: counts[$0] ?? 0) }
-            .sorted { lhs, rhs in
-                lhs.count == rhs.count
-                    ? lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
-                    : lhs.count > rhs.count
-            }
     }
 }
 

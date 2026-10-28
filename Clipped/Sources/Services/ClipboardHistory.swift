@@ -69,38 +69,9 @@ final class ClipboardHistory {
     }
 
     private func applyFilters(to source: [ClipboardItem]) -> [ClipboardItem] {
-        var result = source
-        switch selectedFilter {
-        case let .contentType(type):
-            result = result.filter { $0.contentType == type }
-        case .text:
-            result = result.filter { $0.contentType == .plainText || $0.contentType == .richText }
-        case .developer:
-            result = result.filter(\.isDeveloperContent)
-        case let .category(category):
-            result = result.filter { $0.detectedCategories.contains(category) }
-        case let .sourceApp(sourceCategory):
-            result = result.filter { $0.sourceAppCategory == sourceCategory }
-        case nil:
-            break
+        ClipboardFilter.apply(to: source, query: searchQuery) { item in
+            selectedFilter?.includes(item) ?? true
         }
-        if !searchQuery.isEmpty {
-            result = result.filter { item in
-                if item.searchableText.localizedCaseInsensitiveContains(searchQuery) {
-                    return true
-                }
-                // Don't leak OCR'd secret text through typeahead — only match `extractedText`
-                // on items that aren't masked as sensitive.
-                if !item.isSensitive, !item.containsSecret,
-                   let extracted = item.extractedText,
-                   extracted.localizedCaseInsensitiveContains(searchQuery)
-                {
-                    return true
-                }
-                return false
-            }
-        }
-        return result
     }
 
     // MARK: - Mutation

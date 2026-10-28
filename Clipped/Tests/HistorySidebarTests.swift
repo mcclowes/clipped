@@ -77,4 +77,89 @@ struct HistorySidebarTests {
         #expect(category.id == "app:Visual Studio Code")
         #expect(category.label == "Visual Studio Code")
     }
+
+    @Test("Panel search matches full text and masks flagged OCR", arguments: [false, true], [false, true])
+    func panelSearchPrivacy(sensitive: Bool, secret: Bool) {
+        let history = ClipboardHistory()
+        let image = ClipboardItem(
+            content: .image(Data([1]), CGSize(width: 1, height: 1)), contentType: .image,
+            isSensitive: sensitive, containsSecret: secret
+        )
+        image.extractedText = "Needle in OCR"
+        let text = ClipboardItem(
+            content: .text(String(repeating: "x", count: 250) + "needle"), contentType: .plainText
+        )
+        history.items = [image, text]
+        history.searchQuery = "nEeDlE"
+
+        let expected = sensitive || secret ? [text.id] : [image.id, text.id]
+        #expect(history.filteredItems.map(\.id) == expected)
+        let library = ClipboardFilter.apply(
+            to: history.items,
+            query: history.searchQuery,
+            matching: HistoryCategory.all.includes
+        )
+        #expect(library.map(\.id) == expected)
+        history.searchQuery = ""
+        #expect(history.filteredItems.map(\.id) == [image.id, text.id])
+    }
+
+    @Test("Panel criteria retain their content, tag, and source distinctions")
+    func panelFilterCriteria() throws {
+        let history = ClipboardHistory()
+        let plain = ClipboardItem(
+            content: .text("mail"), contentType: .plainText, sourceAppBundleID: "com.apple.Safari",
+            detectedCategories: [.email]
+        )
+        let rich = ClipboardItem(content: .richText(Data([1]), "formatted"), contentType: .richText)
+        let link = try ClipboardItem(content: .url(#require(URL(string: "https://example.invalid"))), contentType: .url)
+        let svg = ClipboardItem(content: .svg(Data("<svg/>".utf8), .zero), contentType: .image)
+        svg.isDeveloperContent = true
+        history.items = [plain, rich, link, svg]
+        let cases: [(ClipboardFilter?, [UUID])] = [
+            (nil, [plain.id, rich.id, link.id, svg.id]),
+            (.text, [plain.id, rich.id]),
+            (.contentType(.plainText), [plain.id]),
+            (.contentType(.url), [link.id]),
+            (.contentType(.image), [svg.id]),
+            (.developer, [svg.id]),
+            (.category(.email), [plain.id]),
+            (.sourceApp(.browser), [plain.id]),
+        ]
+        for (filter, expected) in cases {
+            history.selectedFilter = filter
+            #expect(history.filteredItems.map(\.id) == expected)
+        }
+    }
+
+    @Test("Library criteria preserve app names, SVG images, and result order")
+    func libraryFilterCriteria() throws {
+        let plain = ClipboardItem(content: .text("needle"), contentType: .plainText, sourceAppName: "Safari")
+        let rich = ClipboardItem(
+            content: .richText(Data([1]), "needle"),
+            contentType: .richText,
+            sourceAppName: "Xcode"
+        )
+        let link = try ClipboardItem(
+            content: .url(#require(URL(string: "https://example.invalid/needle"))), contentType: .url,
+            sourceAppName: "Safari"
+        )
+        let svg = ClipboardItem(content: .svg(Data("<svg>needle</svg>".utf8), .zero), contentType: .image)
+        svg.isDeveloperContent = true
+        let source = [plain, rich, link, svg]
+        let cases: [(HistoryCategory, [UUID])] = [
+            (.all, source.map(\.id)),
+            (.pinned, source.map(\.id)),
+            (.text, [plain.id, rich.id]),
+            (.urls, [link.id]),
+            (.images, [svg.id]),
+            (.developer, [svg.id]),
+            (.app("Safari"), [plain.id, link.id]),
+            (.app("safari"), []),
+        ]
+        for (category, expected) in cases {
+            let result = ClipboardFilter.apply(to: source, query: "NEEDLE", matching: category.includes)
+            #expect(result.map(\.id) == expected)
+        }
+    }
 }
