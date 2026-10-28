@@ -90,12 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let statusBar = statusBarController
         let panelContent = ClipboardPanelView(
             onOpenSettings: { [weak self] in
-                guard let self else { return }
-                let settingsContent = SettingsView()
-                    .environment(clipboardManager)
-                    .environment(settingsManager)
-                    .environment(screenshotWatcher)
-                statusBar.openSettings(contentView: settingsContent)
+                self?.openSettings()
             },
             onOpenHistoryWindow: { [weak self] in
                 guard let self else { return }
@@ -154,6 +149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .environment(settingsManager)
             statusBarController.openHistoryWindow(contentView: historyContent)
         }
+    }
+
+    func openSettings() {
+        guard !Self.isTestHost else { return }
+        let settingsContent = SettingsView()
+            .environment(clipboardManager)
+            .environment(settingsManager)
+            .environment(screenshotWatcher)
+        statusBarController.openSettings(contentView: settingsContent)
     }
 
     /// Stop capture and give the final history save a bounded chance to finish.
@@ -260,15 +264,15 @@ struct ClippedApp: App {
         .defaultLaunchBehavior(AppDelegate.isTestHost ? .suppressed : .automatic)
         .restorationBehavior(AppDelegate.isTestHost ? .disabled : .automatic)
 
-        Settings {
-            if !AppDelegate.isTestHost {
-                SettingsView()
-                    .environment(appDelegate.clipboardManager)
-                    .environment(appDelegate.settingsManager)
-                    .environment(appDelegate.screenshotWatcher)
+        .commands {
+            CommandGroup(replacing: .appSettings) {
+                if !AppDelegate.isTestHost {
+                    Button("Settings…") {
+                        appDelegate.openSettings()
+                    }
+                    .keyboardShortcut(",", modifiers: .command)
+                }
             }
         }
-        .defaultLaunchBehavior(AppDelegate.isTestHost ? .suppressed : .automatic)
-        .restorationBehavior(AppDelegate.isTestHost ? .disabled : .automatic)
     }
 }

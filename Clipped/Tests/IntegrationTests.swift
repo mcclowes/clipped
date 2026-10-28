@@ -158,7 +158,7 @@ struct TaskLimiterTests {
 /// these exercise the wiring between collaborators.
 @MainActor
 struct IntegrationTests {
-    @Test("The test host skips live services during startup and termination", .bug(id: 127))
+    @Test("The test host skips live services during startup, settings, and termination", .bug(id: 127))
     func skipsAppStartupInTests() throws {
         #expect(ProcessInfo.processInfo.environment["CLIPPED_TEST_HOST"] == "1")
         try #require(AppDelegate.isTestHost)
@@ -167,6 +167,7 @@ struct IntegrationTests {
             serviceConstructions += 1
             return AppDelegate.Services()
         })
+        delegate.openSettings()
         delegate.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
 
         #expect(delegate.applicationShouldTerminate(NSApplication.shared) == .terminateNow)
