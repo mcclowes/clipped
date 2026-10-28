@@ -376,7 +376,7 @@ private struct HistoryItemRow: View {
                 }
 
                 HStack(spacing: 6) {
-                    Text(relativeTimeString(for: item.timestamp))
+                    Text(item.timestamp, style: .relative)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
 
@@ -625,13 +625,13 @@ private struct HistoryDetailView: View {
     private var metadataBar: some View {
         HStack(spacing: 16) {
             if let app = item.sourceAppName {
-                metadataItem(icon: "app", label: app)
+                metadataItem(icon: "app", label: Text(app))
             }
-            metadataItem(icon: "clock", label: relativeTimeString(for: item.timestamp))
+            metadataItem(icon: "clock", label: Text(item.timestamp, style: .relative))
             if item.wasMutated {
                 metadataItem(
                     icon: "wand.and.stars",
-                    label: item.mutationsApplied.joined(separator: ", ")
+                    label: Text(item.mutationsApplied.joined(separator: ", "))
                 )
             }
 
@@ -659,26 +659,10 @@ private struct HistoryDetailView: View {
         .foregroundStyle(.secondary)
     }
 
-    private func metadataItem(icon: String, label: String) -> some View {
+    private func metadataItem(icon: String, label: Text) -> some View {
         HStack(spacing: 4) {
             Image(systemName: icon)
-            Text(label).lineLimit(1)
+            label.lineLimit(1)
         }
     }
-}
-
-// MARK: - Shared formatter helper
-
-/// A single `@MainActor`-isolated formatter reused across rows. `RelativeDateTimeFormatter`
-/// isn't `Sendable`, but MainActor isolation makes a shared instance safe — and it avoids
-/// re-allocating a formatter in every row body on every list re-render.
-@MainActor private let sharedRelativeFormatter: RelativeDateTimeFormatter = {
-    let formatter = RelativeDateTimeFormatter()
-    formatter.unitsStyle = .abbreviated
-    return formatter
-}()
-
-@MainActor
-private func relativeTimeString(for date: Date) -> String {
-    sharedRelativeFormatter.localizedString(for: date, relativeTo: Date())
 }
