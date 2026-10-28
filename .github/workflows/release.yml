@@ -41,7 +41,7 @@ jobs:
       NIGHTLY_VERSION: ${{ inputs.nightly_version }}
       NIGHTLY_TAP_PATH: ${{ github.workspace }}/nightly-tap
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.candidate || github.sha }}
 
@@ -158,7 +158,7 @@ jobs:
 
       - name: Create GitHub Release
         if: ${{ !inputs.nightly }}
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
