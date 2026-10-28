@@ -35,5 +35,6 @@ struct ContentTypeFilterBar: View {
                 .fixedSize()
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(selection == filter ? .isSelected : [])
     }
 }
