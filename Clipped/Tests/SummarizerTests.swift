@@ -62,6 +62,61 @@ struct SummarizerTests {
         #expect(!Summarizer.canSummarize(item))
     }
 
+    @Test("Long SVG markup is eligible through its text representation")
+    func longSVGEligible() throws {
+        let markup = "<svg><title>" + String(repeating: "a", count: 500) + "</title></svg>"
+        let item = ClipboardItem(
+            content: .svg(Data(markup.utf8), CGSize(width: 10, height: 10)),
+            contentType: .image
+        )
+        try #require(item.plainText == markup)
+        try #require(markup.count >= SummarizerConstants.minimumInputLength)
+        try #require(item.isSensitive == false && item.containsSecret == false)
+        #expect(Summarizer.canSummarize(item))
+    }
+
+    @Test("SVG uses the decoded character-count boundary", arguments: [-1, 0, 1])
+    func svgLengthBoundary(offset: Int) throws {
+        let length = SummarizerConstants.minimumInputLength + offset
+        let markup = "<svg>" + String(repeating: "é", count: length - 11) + "</svg>"
+        let item = ClipboardItem(
+            content: .svg(Data(markup.utf8), CGSize(width: 10, height: 10)),
+            contentType: .image
+        )
+        try #require(item.plainText?.count == length)
+        #expect(Summarizer.canSummarize(item) == (offset >= 0))
+    }
+
+    @Test("SVG respects both privacy flags", arguments: [false, true], [false, true])
+    func svgPrivacy(sensitive: Bool, secret: Bool) {
+        let markup = "<svg><title>" + String(repeating: "a", count: 500) + "</title></svg>"
+        let item = ClipboardItem(
+            content: .svg(Data(markup.utf8), CGSize(width: 10, height: 10)),
+            contentType: .image,
+            isSensitive: sensitive,
+            containsSecret: secret
+        )
+        #expect(Summarizer.canSummarize(item) == (!sensitive && !secret))
+    }
+
+    @Test("Undecodable SVG markup is not summarizable")
+    func invalidSVGIneligible() throws {
+        let item = ClipboardItem(
+            content: .svg(Data(repeating: 0xFF, count: 500), CGSize(width: 10, height: 10)),
+            contentType: .image
+        )
+        try #require(item.plainText == nil)
+        #expect(Summarizer.canSummarize(item) == false)
+    }
+
+    @Test("Long URLs remain ineligible despite their text representation")
+    func urlIneligible() throws {
+        let url = try #require(URL(string: "https://example.invalid/" + String(repeating: "a", count: 500)))
+        let item = ClipboardItem(content: .url(url), contentType: .url)
+        try #require((item.plainText?.count ?? 0) >= SummarizerConstants.minimumInputLength)
+        #expect(Summarizer.canSummarize(item) == false)
+    }
+
     @Test("Non-text content is not summarizable")
     func imageIneligible() {
         let item = ClipboardItem(

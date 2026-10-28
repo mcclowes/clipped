@@ -70,7 +70,9 @@ enum Summarizer {
             return string.count >= SummarizerConstants.minimumInputLength
         case let .richText(_, plain):
             return plain.count >= SummarizerConstants.minimumInputLength
-        default:
+        case .svg:
+            return (item.plainText?.count ?? 0) >= SummarizerConstants.minimumInputLength
+        case .url, .image:
             return false
         }
     }
