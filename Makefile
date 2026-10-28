@@ -1,6 +1,5 @@
 SCHEME = Clipped
 PROJECT_DIR = Clipped
-BUILD_DIR = $(shell xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $$NF}')
 
 # Sign local builds with the Developer ID when the certificate is on this machine.
 #
@@ -18,13 +17,14 @@ endif
 SIGN_ARGS := $(if $(DEVELOPER_ID_TEAM),CODE_SIGN_IDENTITY="Developer ID Application" CODE_SIGN_STYLE=Manual \
 	DEVELOPMENT_TEAM=$(DEVELOPER_ID_TEAM) PROVISIONING_PROFILE_SPECIFIER="" CODE_SIGNING_ALLOWED=YES,)
 
-.PHONY: build run test release package clean generate format lint setup help
+.PHONY: build run test test-build-paths release package clean generate format lint setup help
 
 help:
 	@echo "Available targets:"
 	@echo "  build     - Debug build"
 	@echo "  run       - Build and launch"
 	@echo "  test      - Run unit tests"
+	@echo "  test-build-paths - Check local build paths with stubbed Xcode and launch tools"
 	@echo "  release   - Release build with local signing when available"
 	@echo "  package   - Release build + zip for distribution"
 	@echo "  clean     - Clean build artifacts"
@@ -33,30 +33,44 @@ help:
 	@echo "  lint      - Check code style (swiftformat + swiftlint)"
 
 build:
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug build $(SIGN_ARGS)
+	xcodebuild -project "$(PROJECT_DIR)/Clipped.xcodeproj" -scheme "$(SCHEME)" -configuration Debug build $(SIGN_ARGS)
 
 run: build
-	open "$(BUILD_DIR)/Clipped.app"
+	@BUILT_DIR=$$(bash scripts/build-products-dir.sh "$(PROJECT_DIR)/Clipped.xcodeproj" "$(SCHEME)" Debug) || exit $$?; \
+	open "$$BUILT_DIR/Clipped.app"
 
 test:
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Debug test $(SIGN_ARGS)
+	xcodebuild -project "$(PROJECT_DIR)/Clipped.xcodeproj" -scheme "$(SCHEME)" -configuration Debug test $(SIGN_ARGS)
+
+test-build-paths:
+	bash scripts/test-build-paths.sh
 
 release:
 	@echo "Note: For distributable builds, use the CI release workflow which handles Developer ID signing + notarization."
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Release build $(SIGN_ARGS)
-	@echo "Built to: $(BUILD_DIR)/../Release/Clipped.app"
+	xcodebuild -project "$(PROJECT_DIR)/Clipped.xcodeproj" -scheme "$(SCHEME)" -configuration Release build $(SIGN_ARGS)
+	@BUILT_DIR=$$(bash scripts/build-products-dir.sh "$(PROJECT_DIR)/Clipped.xcodeproj" "$(SCHEME)" Release) || exit $$?; \
+	echo "Built to: $$BUILT_DIR/Clipped.app"
 
 package: release
-	cd "$$(xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) -configuration Release -showBuildSettings 2>/dev/null | grep -m1 'BUILT_PRODUCTS_DIR' | awk '{print $$NF}')" && \
-	ditto -c -k --keepParent Clipped.app Clipped.zip && \
-	echo "Package ready: $$(pwd)/Clipped.zip" && \
-	echo "SHA256: $$(shasum -a 256 Clipped.zip | awk '{print $$1}')"
+	@BUILT_DIR=$$(bash scripts/build-products-dir.sh "$(PROJECT_DIR)/Clipped.xcodeproj" "$(SCHEME)" Release) || exit $$?; \
+	cd "$$BUILT_DIR" || exit $$?; \
+	test ! -d Clipped.zip || { echo 'The package destination is a directory.' >&2; exit 1; }; \
+	CLIPPED_PACKAGE_STAGING=$$(mktemp -d "$$BUILT_DIR/.clipped-package.XXXXXX") || exit $$?; \
+	trap 'rm -rf "$$CLIPPED_PACKAGE_STAGING"' EXIT; \
+	trap 'exit 130' INT; trap 'exit 143' TERM; \
+	ditto -c -k --keepParent Clipped.app "$$CLIPPED_PACKAGE_STAGING/Clipped.zip" || exit $$?; \
+	unzip -tq "$$CLIPPED_PACKAGE_STAGING/Clipped.zip" >/dev/null || exit $$?; \
+	CLIPPED_PACKAGE_HASH=$$(shasum -a 256 "$$CLIPPED_PACKAGE_STAGING/Clipped.zip") || exit $$?; \
+	CLIPPED_PACKAGE_HASH=$${CLIPPED_PACKAGE_HASH%% *}; \
+	mv -f "$$CLIPPED_PACKAGE_STAGING/Clipped.zip" Clipped.zip || exit $$?; \
+	echo "Package ready: $$(pwd)/Clipped.zip"; \
+	echo "SHA256: $$CLIPPED_PACKAGE_HASH"
 
 clean:
-	xcodebuild -project $(PROJECT_DIR)/Clipped.xcodeproj -scheme $(SCHEME) clean
+	xcodebuild -project "$(PROJECT_DIR)/Clipped.xcodeproj" -scheme "$(SCHEME)" clean
 
 generate:
-	cd $(PROJECT_DIR) && xcodegen generate
+	cd "$(PROJECT_DIR)" && xcodegen generate
 
 format:
 	swiftformat .

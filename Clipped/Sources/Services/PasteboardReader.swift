@@ -157,9 +157,7 @@ struct PasteboardReader {
         bundleID: String?,
         types: [NSPasteboard.PasteboardType]
     ) -> ClipboardItem? {
-        guard types.contains(Self.htmlType),
-              let htmlData = pasteboard.data(forType: Self.htmlType),
-              htmlData.count <= Self.maxHTMLBytes,
+        guard let htmlData = boundedHTMLData(from: types),
               let attributed = try? NSAttributedString(
                   data: htmlData,
                   options: [
@@ -174,25 +172,25 @@ struct PasteboardReader {
         guard !plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
 
         let fullRange = NSRange(location: 0, length: attributed.length)
-        if let rtfData = try? attributed.data(
+        guard let rtfData = try? attributed.data(
             from: fullRange,
             documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf]
-        ) {
-            let item = ClipboardItem(
-                content: .richText(rtfData, plain),
-                contentType: .richText,
+        ) else {
+            return ClipboardItem(
+                content: .text(plain),
+                contentType: .plainText,
                 sourceAppName: appName,
                 sourceAppBundleID: bundleID
             )
-            item.htmlData = htmlData
-            return item
         }
-        return ClipboardItem(
-            content: .text(plain),
-            contentType: .plainText,
+        let item = ClipboardItem(
+            content: .richText(rtfData, plain),
+            contentType: .richText,
             sourceAppName: appName,
             sourceAppBundleID: bundleID
         )
+        item.htmlData = htmlData
+        return item
     }
 
     private func boundedHTMLData(

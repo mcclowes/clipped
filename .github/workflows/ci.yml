@@ -11,16 +11,21 @@ permissions:
 
 jobs:
   helpers:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
+      - name: Check version helper
+        run: node --test scripts/bump-version.test.mjs
+      - name: Check release paths
+        run: node --test scripts/release-paths.test.mjs
       - name: Check signing selection
         run: node --test scripts/signing-selection.test.mjs
       - name: Check tag release scripts
@@ -40,7 +45,13 @@ jobs:
         run: brew untap aws/tap || true
 
       - name: Install tools
-        run: brew install swiftformat swiftlint
+        run: brew install swiftformat swiftlint shellcheck
+
+      - name: Check local build paths
+        run: |
+          bash -n scripts/build-products-dir.sh scripts/test-build-paths.sh
+          shellcheck scripts/build-products-dir.sh scripts/test-build-paths.sh
+          make test-build-paths DEVELOPER_ID_TEAM=
 
       - name: Lint
         run: make lint
@@ -58,6 +69,16 @@ jobs:
 
       - name: Generate Xcode project
         run: make generate
+
+      - name: Verify generated Xcode files
+        run: |
+          project_changes="$(git status --porcelain --untracked-files=all -- Clipped/Clipped.xcodeproj Clipped/Resources/Clipped.entitlements)"
+          if [[ -n "$project_changes" ]]; then
+            git status --short -- Clipped/Clipped.xcodeproj Clipped/Resources/Clipped.entitlements
+            git diff HEAD -- Clipped/Clipped.xcodeproj Clipped/Resources/Clipped.entitlements
+            echo "Generated Xcode files are out of sync. Run make generate and commit its generated changes." >&2
+            exit 1
+          fi
 
       - name: Build and test
         run: make test

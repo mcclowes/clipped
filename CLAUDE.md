@@ -9,10 +9,31 @@ make generate  # XcodeGen from project.yml
 make build     # Debug build
 make run       # Build + launch
 make test      # Run unit tests
+make test-build-paths DEVELOPER_ID_TEAM= # Check paths without probing local signing identities
 make release   # Release build
 make package   # Release build + zip for distribution
 make clean     # Clean build artifacts
 ```
+
+`node --test scripts/bump-version.test.mjs` runs the version-helper regressions
+with disposable metadata and stubbed Git, also checked by CI. The helper accepts
+exactly `<major|minor|patch> [--push]`; malformed arguments exit 2 before any changes.
+
+`node --test scripts/release-paths.test.mjs` checks the actual release workflow's
+notarization and artifact-directory lookups with fake Xcode output. It verifies
+Release configuration, paths with spaces, and early failure for missing or failed
+settings. It doesn't run signing, notarization, upload, or app launch commands.
+
+`node --test scripts/tag-release.test.mjs` checks the real tag-release scripts
+with valid branch-name fixtures and stubbed Git. Branch and tag text must remain
+literal through extraction, tagging, and deletion; no real tag or push is made.
+
+`make test-build-paths` exercises the real Makefile with stubbed Xcode and launch
+tools plus real archive tools. It checks spaced paths and project/scheme names,
+Debug/Release configuration selection, failed builds/settings, and repeated
+packaging. Failed compression, validation, hashing, or publication preserves the
+previous ZIP and removes staging. Fixtures do not build, sign, launch, or inspect
+the keychain.
 
 ## Project structure
 
@@ -20,7 +41,8 @@ All Swift code lives under `Clipped/`. Run `find Clipped/Sources Clipped/Tests -
 authoritative listing — do not hand-maintain a tree here (it rots). Notable services:
 
 - `Sources/Services/ClipboardManager.swift` — orchestrator for ingestion, policy, history persistence scheduling
-- `Sources/Services/PasteboardMonitor.swift` — polls `NSPasteboard.changeCount`
+- `Sources/Services/PasteboardMonitor.swift` — polls `NSPasteboard.changeCount` and suppresses our own writes
+- `Sources/Services/PasteboardReader.swift` — decodes prioritized clipboard representations with bounded payloads
 - `Sources/Services/ClipboardHistory.swift` — in-memory history + debounced save
 - `Sources/Services/HistoryStore.swift` + `HistoryCrypto.swift` + `KeychainKeyStore.swift` — encrypted persistence
 - `Sources/Models/StoredEntry.swift` — Codable history snapshots and clipboard-content conversion

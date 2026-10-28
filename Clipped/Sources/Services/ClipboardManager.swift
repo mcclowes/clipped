@@ -218,9 +218,13 @@ final class ClipboardManager {
         await history.flushPendingSaves()
     }
 
-    /// Non-nil when persisted history couldn't be read at launch, so the UI can offer recovery.
+    /// The history-load failure currently presented to the user.
     var historyLoadError: HistoryLoadError? {
         history.loadError
+    }
+
+    func dismissHistoryLoadError() {
+        history.dismissHistoryLoadError()
     }
 
     func retryHistoryLoad() async {

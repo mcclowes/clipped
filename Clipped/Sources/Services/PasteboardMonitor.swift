@@ -16,9 +16,8 @@ private let skippableNSPasteboardTypes: Set<NSPasteboard.PasteboardType> = [
     legacyTransientType,
 ]
 
-/// Polls `NSPasteboard.general` for new content and emits raw `ClipboardItem`s via its
-/// `onNewItem` callback. Knows nothing about history, mutation, persistence, or UI —
-/// its sole job is "something changed on the pasteboard; here's a structured item."
+/// Polls for external pasteboard changes and emits items decoded by `PasteboardReader`.
+/// Owns the polling lifecycle and change-count baseline used to suppress our own writes.
 @MainActor
 @Observable
 final class PasteboardMonitor {

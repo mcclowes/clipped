@@ -14,7 +14,6 @@ struct ClipboardPanelView: View {
     let onClosePanel: () -> Void
     let onCaptureScreenshot: (ScreenshotCaptureMode) -> Void
 
-    @State private var showClearConfirmation = false
     @State private var clearedSnapshot: ClipboardManager.ClearedSnapshot?
     @State private var clearedCleanupTask: Task<Void, Never>?
     /// Selection is tracked by stable identity, not array position, so ingesting or deleting an
@@ -113,7 +112,8 @@ struct ClipboardPanelView: View {
                     title: "Clear history",
                     icon: "trash",
                     action: {
-                        manager.clearAll()
+                        showQuickMenu = false
+                        performClearAll()
                     }
                 )
 
@@ -288,9 +288,17 @@ struct ClipboardPanelView: View {
         }
         .alert(
             "Clipboard history couldn't be opened",
-            isPresented: Binding(get: { manager.historyLoadError != nil }, set: { _ in })
+            isPresented: Binding(
+                get: { manager.historyLoadError != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        manager.dismissHistoryLoadError()
+                    }
+                }
+            )
         ) {
             Button("Retry") { Task { await manager.retryHistoryLoad() } }
+            Button("Later", role: .cancel) { manager.dismissHistoryLoadError() }
             Button("Start fresh", role: .destructive) {
                 Task { await manager.discardUnreadableHistory() }
             }
@@ -298,8 +306,9 @@ struct ClipboardPanelView: View {
             Text(
                 "Your saved history is encrypted with a key that isn't available right now "
                     + "(e.g. the keychain is locked or was restored from another Mac). Retry after "
-                    + "unlocking your keychain, or start fresh to discard it. Nothing is overwritten "
-                    + "until you choose Start fresh."
+                    + "unlocking your keychain, choose Later to keep using Clipped without saving "
+                    + "history, or start fresh to discard it. Saved history stays protected until "
+                    + "recovery succeeds or you choose Start fresh."
             )
         }
         .overlay {

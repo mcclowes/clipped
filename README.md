@@ -68,6 +68,7 @@ search clears the panel selection.
 ## Features
 
 - **Clipboard history** — Automatically tracks what you copy, with configurable history size
+- **Undo clear** — Clearing history from the panel or quick menu offers Undo for three seconds. Pinned items stay in history.
 - **Format preservation** — Rich text, URLs, images, and code snippets retain their formatting
 - **Global hotkey** — Press `⌥C` (Option+C) to open Clipped from any app
 - **Search & filter** — Find past items by text or filter by content type (text, images, links, etc.)
@@ -95,6 +96,8 @@ Clipboard processing and history storage happen on your Mac. Link previews are e
 - **Secure mode** — Entries from password managers can be automatically skipped or expired.
 - **No telemetry, no sync** — Clipped has no telemetry or cloud-sync component. Link previews still make the requests described above.
 
+If saved history can't be opened, choose **Later** to keep using Clipped for the current session. Saving stays paused until **Retry** succeeds or you choose **Start fresh**, which discards the saved history.
+
 ### Upgrading from plaintext storage
 
 When persisted history is loaded, Clipped migrates older `history.json` files and plaintext image caches to encrypted storage. Existing Time Machine snapshots and other backups taken before the upgrade may still contain plaintext; the upgrade cannot rewrite those copies. If `history.json` cannot be migrated, Clipped keeps it for recovery. Failed image migrations keep the original plaintext images usable and retry on later loads or saves; those originals are deleted only after their encrypted replacements are written successfully.
@@ -108,6 +111,14 @@ make generate  # Generate Xcode project via XcodeGen
 make build     # Build the app
 make run       # Build and launch
 make test      # Run tests
+make test-build-paths DEVELOPER_ID_TEAM= # Check paths without probing local signing identities
 ```
 
 Requires Xcode 16+ and Swift 6. See [CLAUDE.md](CLAUDE.md) for project structure and architecture details.
+
+Local launch and packaging preserve build paths containing spaces. They use
+Debug and Release settings respectively and stop if the build or settings lookup
+fails. Packaging validates and hashes a staged ZIP before replacing the previous
+package, so failures preserve the last archive. `make test-build-paths` checks
+these behaviors with temporary fixtures and
+real archive tools, without building, signing, or launching Clipped.

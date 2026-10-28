@@ -28,9 +28,8 @@ final class ClipboardHistory {
     @ObservationIgnored
     private let historyStoreFactory: @MainActor () -> any HistoryStoring
 
-    /// Surfaces history envelope/key failures so the UI can offer recovery. Individual
-    /// entries that cannot be decoded are skipped and counted in the error log. While
-    /// this is non-nil the store refuses to overwrite the unreadable file.
+    /// The load failure currently presented by the UI. Dismissing it leaves the store's
+    /// save block in place until recovery succeeds or the user starts fresh.
     var loadError: HistoryLoadError?
 
     private var saveDebounceTask: Task<Void, Never>?
@@ -236,6 +235,10 @@ final class ClipboardHistory {
         loadError = await historyStore.lastLoadError()
         hasLoadedFromStore = true
         applyLoaded(entries)
+    }
+
+    func dismissHistoryLoadError() {
+        loadError = nil
     }
 
     /// Retry a load after a transient key failure (e.g. the user unlocked the Keychain).

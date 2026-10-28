@@ -17,6 +17,11 @@ function signingFixture(t, { identities = "", securityExit = 0 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "clipped signing selection-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   copyFileSync(new URL("../Makefile", import.meta.url), join(root, "Makefile"));
+  mkdirSync(join(root, "scripts"));
+  copyFileSync(
+    new URL("./build-products-dir.sh", import.meta.url),
+    join(root, "scripts/build-products-dir.sh"),
+  );
   const bin = join(root, "bin");
   mkdirSync(bin);
   const probe = join(root, "security.txt");
