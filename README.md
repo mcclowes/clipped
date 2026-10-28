@@ -93,7 +93,7 @@ Clipboard processing and history storage happen on your Mac. Link previews are e
 - **Local history** — Persistence is off by default. When enabled, history is saved in `~/Library/Application Support/Clipped/`.
   If macOS cannot provide an Application Support location, history stays in memory for that session.
 - **Encrypted storage** — When persistence is enabled, `history.enc` and cached clipboard images are encrypted with ChaCha20-Poly1305. The 256-bit key is created when encrypted storage is first used and stored in your login Keychain. Access follows the Keychain's lock state and item permissions; locking the screen does not necessarily lock the login Keychain.
-- **Secure mode** — Entries from password managers can be automatically skipped or expired.
+- **Secure mode** — Adds timed removal for recognized password-manager entries. These entries stay in memory and are excluded from saved history, even when Secure mode is off.
 - **No telemetry, no sync** — Clipped has no telemetry or cloud-sync component. Link previews still make the requests described above.
 
 If saved history can't be opened, choose **Later** to keep using Clipped for the current session. Saving stays paused until **Retry** succeeds or you choose **Start fresh**, which discards the saved history.

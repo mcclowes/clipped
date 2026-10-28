@@ -148,6 +148,11 @@ private struct GeneralSettingsTab: View {
             Section {
                 Toggle("Secure mode (password manager entries)", isOn: $settings.secureMode)
 
+                Text("Recognized password-manager entries are never saved in history, even when Secure mode is off. " +
+                    "Secure mode adds timed removal.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+
                 Picker("API keys and detected secrets", selection: $settings.secretHandling) {
                     ForEach(SecretHandling.allCases) { handling in
                         Text(handling.label).tag(handling)
