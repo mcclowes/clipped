@@ -170,10 +170,15 @@ final class ClipboardManager {
 
     // MARK: - Lifecycle
 
+    @ObservationIgnored
+    private var isTerminating = false
+
     /// Load persisted history and then start clipboard monitoring.
     /// Must be called from the AppDelegate after all dependencies have been wired.
     func bootstrap() async {
+        guard !isTerminating else { return }
         await history.loadPersistedHistory()
+        guard !isTerminating else { return }
         seedOnboardingExamplesIfNeeded()
         monitor.resetBaseline()
         monitor.startMonitoring()
@@ -197,11 +202,24 @@ final class ClipboardManager {
     }
 
     func startMonitoring() {
+        guard !isTerminating else { return }
         monitor.startMonitoring()
     }
 
     func stopMonitoring() {
         monitor.stopMonitoring()
+    }
+
+    func prepareForTermination() {
+        isTerminating = true
+        monitor.stopMonitoring()
+        monitor.onNewItem = nil
+        for task in enrichmentTasks.values {
+            task.cancel()
+        }
+        for task in secureRemovalTasks.values {
+            task.cancel()
+        }
     }
 
     // MARK: - Forwarded history mutations
@@ -290,6 +308,11 @@ final class ClipboardManager {
 
     @discardableResult
     func ingest(_ event: PasteboardMonitor.NewItemEvent) -> Bool {
+        guard !isTerminating else { return false }
+        return ingestWhileRunning(event)
+    }
+
+    private func ingestWhileRunning(_ event: PasteboardMonitor.NewItemEvent) -> Bool {
         let signpost = Signposts.clipboard.beginInterval("Ingest")
         defer { Signposts.clipboard.endInterval("Ingest", signpost) }
 
@@ -404,6 +427,7 @@ final class ClipboardManager {
             let metadata = await fetcher.fetchMetadata(for: url)
             guard let self else { return }
             defer { enrichmentTasks[itemID] = nil }
+            guard !Task.isCancelled, !isTerminating else { return }
             // Look up by ID in case the item was replaced/restored after mutation.
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
@@ -429,7 +453,7 @@ final class ClipboardManager {
             } catch {
                 return
             }
-            guard !Task.isCancelled, let self else { return }
+            guard !Task.isCancelled, let self, !isTerminating else { return }
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
             {
@@ -505,6 +529,7 @@ final class ClipboardManager {
     /// existing item to move to the top. The monitor's own write suppression means we
     /// must insert into history explicitly.
     func copyText(_ text: String) {
+        guard !isTerminating else { return }
         let item = ClipboardItem(content: .text(text), contentType: .plainText)
         performExplicitSecretAction(for: item, reason: "Copy hidden clipboard content") { [weak self] in
             self?.writeGeneratedTextItem(item)
@@ -512,7 +537,7 @@ final class ClipboardManager {
     }
 
     private func writeGeneratedTextItem(_ item: ClipboardItem) {
-        guard case let .text(text) = item.content else { return }
+        guard !isTerminating, case let .text(text) = item.content else { return }
         monitor.write { pasteboard in
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)

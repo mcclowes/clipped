@@ -240,3 +240,196 @@ struct HistoryPersistenceTests {
         #expect(texts == ["keep me"])
     }
 }
+
+private actor TerminationGate {
+    private(set) var isOpen = false
+    private var arrivals = 0
+    private var blocked: [CheckedContinuation<Void, Never>] = []
+    private var observers: [(Int, CheckedContinuation<Void, Never>)] = []
+
+    func wait() async {
+        arrivals += 1
+        let ready = observers.filter { $0.0 <= arrivals }
+        observers.removeAll { $0.0 <= arrivals }
+        for (_, continuation) in ready {
+            continuation.resume()
+        }
+        guard !isOpen else { return }
+        await withCheckedContinuation { blocked.append($0) }
+    }
+
+    func waitForEntries(_ count: Int) async {
+        guard arrivals < count else { return }
+        await withCheckedContinuation { observers.append((count, $0)) }
+    }
+
+    func open() {
+        isOpen = true
+        let waiting = blocked
+        blocked.removeAll()
+        for continuation in waiting {
+            continuation.resume()
+        }
+    }
+}
+
+@MainActor
+struct TerminationCoordinatorTests {
+    @Test("A completed flush replies without waiting for the deadline", .timeLimit(.minutes(1)))
+    func flushWins() async {
+        let flush = TerminationGate()
+        let deadline = TerminationGate()
+        let coordinator = TerminationCoordinator { await deadline.wait() }
+        let signal = AsyncStream<Void>.makeStream()
+        var replies = 0
+        coordinator.begin {
+            await flush.wait()
+        } reply: {
+            replies += 1
+            signal.continuation.yield()
+        }
+        await flush.waitForEntries(1)
+        await deadline.waitForEntries(1)
+
+        await flush.open()
+        var events = signal.stream.makeAsyncIterator()
+        await events.next()
+
+        #expect(replies == 1)
+        #expect(await deadline.isOpen == false)
+        coordinator.begin { Issue.record("A repeated quit must not start another flush") } reply: {
+            Issue.record("A repeated quit must not replace the reply")
+        }
+        await deadline.open()
+    }
+
+    @Test("The deadline replies while a flush ignores cancellation", .timeLimit(.minutes(1)))
+    func deadlineWins() async {
+        let flush = TerminationGate()
+        let deadline = TerminationGate()
+        let coordinator = TerminationCoordinator { await deadline.wait() }
+        let signal = AsyncStream<Void>.makeStream()
+        var replies = 0
+        coordinator.begin {
+            await flush.wait()
+        } reply: {
+            replies += 1
+            signal.continuation.yield()
+        }
+        await flush.waitForEntries(1)
+        await deadline.waitForEntries(1)
+
+        await deadline.open()
+        var events = signal.stream.makeAsyncIterator()
+        await events.next()
+
+        #expect(replies == 1)
+        #expect(await flush.isOpen == false)
+        await flush.open()
+    }
+
+    @Test("A successful flush cancels its sleeping deadline", .timeLimit(.minutes(1)))
+    func cancelsDeadline() async {
+        let flush = TerminationGate()
+        let sleeping = AsyncStream<Void>.makeStream()
+        let canceled = AsyncStream<Void>.makeStream()
+        let coordinator = TerminationCoordinator {
+            try await withTaskCancellationHandler {
+                sleeping.continuation.yield()
+                try await Task.sleep(for: .seconds(60))
+            } onCancel: {
+                canceled.continuation.yield()
+            }
+        }
+        var replies = 0
+        coordinator.begin { await flush.wait() } reply: { replies += 1 }
+        var started = sleeping.stream.makeAsyncIterator()
+        await started.next()
+
+        await flush.open()
+        var cancellations = canceled.stream.makeAsyncIterator()
+        await cancellations.next()
+
+        #expect(replies == 1)
+    }
+}
+
+@MainActor
+struct ClipboardTerminationTests {
+    private struct DelayedMetadata: LinkMetadataFetching {
+        let gate: TerminationGate
+
+        func fetchMetadata(for _: URL) async -> LinkMetadata {
+            await gate.wait()
+            return LinkMetadata(title: "Late title", favicon: nil)
+        }
+    }
+
+    @Test(
+        "Shutdown rejects new captures and late enrichment before the final save",
+        .bug(id: 122),
+        .timeLimit(.minutes(1))
+    )
+    func stopsLateChanges() async throws {
+        let pasteboard = MockPasteboard()
+        let manager = ClipboardManager(pasteboard: pasteboard)
+        let settings = MockSettingsManager()
+        settings.persistAcrossReboots = true
+        manager.settingsManager = settings
+        let store = MockHistoryStore()
+        manager.historyStore = store
+        await manager.loadPersistedHistory()
+        let gate = TerminationGate()
+        manager.linkMetadataFetcher = DelayedMetadata(gate: gate)
+        manager.extractImageText = { _ in
+            await gate.wait()
+            return "Late OCR"
+        }
+        let url = try #require(URL(string: "https://example.invalid/quit"))
+        let link = ClipboardItem(content: .url(url), contentType: .url)
+        let image = ClipboardItem(content: .image(Data([1]), CGSize(width: 1, height: 1)), contentType: .image)
+        #expect(manager.ingest(.init(item: link, bundleID: nil, hasConcealedType: false)))
+        #expect(manager.ingest(.init(item: image, bundleID: nil, hasConcealedType: false)))
+        await gate.waitForEntries(2)
+        manager.startMonitoring()
+
+        manager.prepareForTermination()
+        manager.prepareForTermination()
+        manager.startMonitoring()
+        let late = ClipboardItem(content: .text("Late capture"), contentType: .plainText)
+        #expect(manager.ingest(.init(item: late, bundleID: nil, hasConcealedType: false)) == false)
+        manager.copyText("Late summary")
+        await manager.flushPendingSaves()
+        let saveCount = await store.saveCallCount
+        await gate.open()
+        await manager.awaitPendingEnrichments()
+
+        #expect(manager.isMonitoring == false)
+        #expect(manager.monitor.onNewItem == nil)
+        #expect(manager.items.map(\.id) == [image.id, link.id])
+        #expect(pasteboard.changeCount == 0)
+        #expect(link.linkTitle == nil && image.extractedText == nil)
+        #expect(image.isAwaitingImageText)
+        #expect(await store.saveCallCount == saveCount)
+        #expect(await store.savedEntries.map(\.id) == [link.id])
+    }
+
+    @Test(
+        "Shutdown cancels secure-removal jobs without deleting the final snapshot",
+        .bug(id: 122),
+        .timeLimit(.minutes(1))
+    )
+    func cancelsSecureRemoval() async {
+        let manager = ClipboardManager(pasteboard: MockPasteboard())
+        manager.historyStore = MockHistoryStore()
+        manager.settingsManager = MockSettingsManager()
+        manager.secureRemovalDelay = { _ in .seconds(1) }
+        let item = ClipboardItem(content: .text("Synthetic private capture"), contentType: .plainText)
+        #expect(manager.ingest(.init(item: item, bundleID: nil, hasConcealedType: true)))
+
+        manager.prepareForTermination()
+        await manager.awaitPendingSecureRemovals()
+
+        #expect(manager.items.map(\.id) == [item.id])
+    }
+}

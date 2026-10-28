@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 
 @MainActor
@@ -33,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let servicesFactory: @MainActor () -> Services
     private lazy var services = servicesFactory()
+    private let terminationCoordinator = TerminationCoordinator()
 
     var clipboardManager: ClipboardManager {
         services.clipboardManager
@@ -154,14 +156,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Drain the debounced history save before the process exits, so the last thing the user
-    /// copied (and any just-fetched link title / OCR text) actually reaches disk.
+    /// Stop capture and give the final history save a bounded chance to finish.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !Self.isTestHost else { return .terminateNow }
 
-        Task { @MainActor in
+        screenshotWatcher.stopWatching()
+        clipboardManager.prepareForTermination()
+        terminationCoordinator.begin { [clipboardManager] in
             await clipboardManager.flushPendingSaves()
-            NSApp.reply(toApplicationShouldTerminate: true)
+        } reply: {
+            sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
     }
@@ -178,6 +182,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.observeScreenSharingPolicy()
             }
         }
+    }
+}
+
+@MainActor
+final class TerminationCoordinator {
+    nonisolated static let flushDeadline: Duration = .seconds(2)
+    private static let logger = Logger(subsystem: "com.mcclowes.clipped", category: "Termination")
+
+    private let waitForDeadline: @Sendable () async throws -> Void
+    private var hasBegun = false
+    private var replyHandler: (@MainActor () -> Void)?
+    private var flushTask: Task<Void, Never>?
+    private var deadlineTask: Task<Void, Never>?
+
+    init(waitForDeadline: @escaping @Sendable () async throws -> Void = {
+        try await Task.sleep(for: TerminationCoordinator.flushDeadline)
+    }) {
+        self.waitForDeadline = waitForDeadline
+    }
+
+    deinit {
+        flushTask?.cancel()
+        deadlineTask?.cancel()
+    }
+
+    func begin(flush: @escaping @MainActor () async -> Void, reply: @escaping @MainActor () -> Void) {
+        guard !hasBegun else { return }
+        hasBegun = true
+        replyHandler = reply
+        // Independent jobs let the deadline reply even when a store ignores cancellation.
+        flushTask = Task { [weak self] in
+            await flush()
+            self?.finish(timedOut: false)
+        }
+        deadlineTask = Task { [weak self] in
+            guard let wait = self?.waitForDeadline else { return }
+            do {
+                try await wait()
+            } catch {
+                return
+            }
+            guard !Task.isCancelled else { return }
+            self?.finish(timedOut: true)
+        }
+    }
+
+    private func finish(timedOut: Bool) {
+        guard let reply = replyHandler else { return }
+        replyHandler = nil
+        flushTask?.cancel()
+        deadlineTask?.cancel()
+        flushTask = nil
+        deadlineTask = nil
+        if timedOut {
+            Self.logger.warning("History flush exceeded the quit deadline; continuing termination")
+        }
+        reply()
     }
 }
 
