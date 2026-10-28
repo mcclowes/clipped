@@ -420,4 +420,74 @@ struct ClipboardHistoryInsertTests {
         #expect(loaded.first?.imageData == payload)
         #expect(try FileManager.default.contentsOfDirectory(atPath: images.path) == originalNames)
     }
+
+    @Test("Insertion preserves exact content equality across representations", .bug(id: 118), arguments: [false, true])
+    func contentEqualityMatrix(pinned: Bool) throws {
+        let size = CGSize(width: 1, height: 1)
+        let url = try #require(URL(string: "https://example.invalid/equality"))
+        let contents: [ClipboardContent] = [
+            .text("a"), .text("b"),
+            .richText(Data([1]), "a"), .richText(Data([1]), "b"), .richText(Data([2]), "a"),
+            .url(url),
+            .image(Data([1]), size), .image(Data([2]), size), .image(Data([1]), .zero), .image(Data(), size),
+            .svg(Data([1]), size), .svg(Data([2]), size), .svg(Data([1]), .zero), .svg(Data(), size),
+        ]
+        for existingContent in contents {
+            for incomingContent in contents {
+                let history = makeHistory()
+                let existing = item(existingContent)
+                existing.isPinned = pinned
+                if pinned {
+                    history.pinnedItems = [existing]
+                } else {
+                    history.items = [existing]
+                }
+                let incoming = item(incomingContent)
+
+                let retained = history.insert(incoming)
+
+                if existingContent == incomingContent {
+                    if pinned {
+                        #expect(retained == nil && history.items.isEmpty)
+                    } else {
+                        #expect(retained === existing && history.items.count == 1)
+                    }
+                } else {
+                    #expect(retained === incoming)
+                    #expect(history.items.count == (pinned ? 1 : 2))
+                }
+            }
+        }
+    }
+
+    @Test("Re-copy removes all matching rows and preserves the first match and other rows", .bug(id: 118))
+    func removesAllDuplicatesInOrder() throws {
+        let history = makeHistory()
+        let content = ClipboardContent.image(Data([1, 2, 3]), CGSize(width: 10, height: 10))
+        let first = item(content)
+        first.extractedText = "Retained enrichment"
+        let before = textItem("before")
+        let between = textItem("between")
+        let after = textItem("after")
+        history.items = [before, first, between, item(content), after, item(content)]
+        let incoming = item(content)
+        incoming.timestamp = Date(timeIntervalSince1970: 1000)
+
+        let retained = try #require(history.insert(incoming))
+
+        #expect(retained === first)
+        #expect(retained.extractedText == "Retained enrichment")
+        #expect(retained.timestamp == incoming.timestamp)
+        #expect(history.items.map(\.id) == [first.id, before.id, between.id, after.id])
+    }
+
+    private func item(_ content: ClipboardContent) -> ClipboardItem {
+        let type: ContentType = switch content {
+        case .text: .plainText
+        case .richText: .richText
+        case .url: .url
+        case .image, .svg: .image
+        }
+        return ClipboardItem(content: content, contentType: type)
+    }
 }

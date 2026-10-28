@@ -83,14 +83,18 @@ final class ClipboardHistory {
             return nil
         }
 
-        let retained: ClipboardItem
-        if let existing = items.first(where: { $0.content == item.content }) {
-            mergeRecopy(item, into: existing)
-            retained = existing
-        } else {
-            retained = item
+        var existing: ClipboardItem?
+        items.removeAll { candidate in
+            guard candidate.content == item.content else { return false }
+            if existing == nil {
+                existing = candidate
+            }
+            return true
         }
-        items.removeAll { $0.content == item.content }
+        let retained = existing ?? item
+        if existing != nil {
+            mergeRecopy(item, into: retained)
+        }
         items.insert(retained, at: 0)
         return retained
     }
