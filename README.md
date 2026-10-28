@@ -6,6 +6,19 @@ A lightweight, native macOS clipboard manager that lives in your menu bar, fits 
 
 Clipped keeps a searchable history of captured text, images, links, and code. No Dock icon, no clutter, just a quiet menu bar panel available whenever you need it.
 
+## Related repos and prerequisites
+
+**This repo:** Native macOS clipboard manager.
+
+**Account prerequisite:** No Marginal Utility account is required for local use.
+
+| Related repository | Relationship |
+| --- | --- |
+| [homebrew-clipped](https://github.com/mcclowes/homebrew-clipped) | Homebrew distribution; app/CLI source lives here. |
+| [marginal-utility](https://github.com/mcclowes/marginal-utility) | Hosts the product marketing page and documentation. |
+
+See the [project reference](https://github.com/mcclowes/marginal-utility/blob/main/ECOSYSTEM.md) for the full repository map. Some source repositories require access; public product homes and Homebrew taps remain the entry points for downloads and support.
+
 ## Install
 
 **Homebrew** (recommended):
