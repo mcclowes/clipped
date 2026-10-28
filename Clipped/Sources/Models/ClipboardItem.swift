@@ -79,9 +79,9 @@ final class ClipboardItem: Identifiable {
     let id: UUID
     var content: ClipboardContent
     let contentType: ContentType
-    let sourceAppName: String?
-    let sourceAppBundleID: String?
-    let timestamp: Date
+    var sourceAppName: String?
+    var sourceAppBundleID: String?
+    var timestamp: Date
     var isPinned: Bool
     /// Transient flag for items we must not persist to disk (password-manager output).
     /// Implies UI masking but also gates persistence — see `HistoryStore` / `StoredEntry`.

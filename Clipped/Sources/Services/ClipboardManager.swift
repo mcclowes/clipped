@@ -298,25 +298,25 @@ final class ClipboardManager {
             return false
         }
 
-        let item = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
+        let incoming = mutationService.apply(to: event.item, sourceAppBundleID: event.bundleID)
 
         // A mutation (e.g. trim-whitespace) can reduce content to nothing — don't store a blank row.
-        if case let .text(str) = item.content, str.isEmpty {
+        if case let .text(str) = incoming.content, str.isEmpty {
             return false
         }
 
         // Always flag password manager items as sensitive so they're never persisted to disk,
         // regardless of whether secure mode UI behavior is enabled.
         if policy.isFromPasswordManager {
-            item.isSensitive = true
+            incoming.isSensitive = true
         }
 
+        if case .image = incoming.content {
+            incoming.isAwaitingImageText = true
+        }
+
+        guard let item = history.insert(incoming) else { return false }
         let secretPendingRemoval = applySecretRetentionPolicy(to: item)
-        if case .image = item.content {
-            item.isAwaitingImageText = true
-        }
-
-        guard history.insert(item) else { return false }
 
         // Each ingest is a natural moment to evict already-expired items — no need
         // for a separate timer, since an idle clipboard has nothing to show anyway.
@@ -356,6 +356,7 @@ final class ClipboardManager {
 
     private func scheduleSecureAutoRemoval(itemID: UUID, timeout: Int) {
         let delay = secureRemovalDelay(timeout)
+        secureRemovalTasks[itemID]?.cancel()
         secureRemovalTasks[itemID] = Task { [weak self] in
             // Propagate cancellation: a cancelled sleep should NOT trigger removal (the opposite
             // of `try?`, which would fire the removal immediately on cancel).
@@ -364,7 +365,7 @@ final class ClipboardManager {
             } catch {
                 return
             }
-            guard let self else { return }
+            guard !Task.isCancelled, let self else { return }
             // Remove by id from both collections — pinning moves the item out of `history.items`.
             history.remove(id: itemID)
             secureRemovalTasks[itemID] = nil
@@ -393,7 +394,7 @@ final class ClipboardManager {
     private func scheduleLinkMetadataFetch(for url: URL, itemID: UUID) {
         // Respect the user's privacy preference — when previews are disabled we never
         // reach out to the remote origin.
-        guard settingsManager?.fetchLinkPreviews ?? true else { return }
+        guard settingsManager?.fetchLinkPreviews ?? true, enrichmentTasks[itemID] == nil else { return }
         let fetcher = linkMetadataFetcher
         enrichmentTasks[itemID] = Task { [weak self] in
             let metadata = await fetcher.fetchMetadata(for: url)
@@ -403,8 +404,8 @@ final class ClipboardManager {
             if let found = history.items.first(where: { $0.id == itemID })
                 ?? history.pinnedItems.first(where: { $0.id == itemID })
             {
-                found.linkTitle = metadata.title
-                found.linkFavicon = metadata.favicon
+                found.linkTitle = metadata.title ?? found.linkTitle
+                found.linkFavicon = metadata.favicon ?? found.linkFavicon
                 history.saveHistory()
             }
         }
@@ -414,7 +415,7 @@ final class ClipboardManager {
     private static let ocrLimiter = TaskLimiter(limit: 2)
 
     private func scheduleImageTextExtraction(for itemID: UUID, content: ClipboardContent) {
-        guard case let .image(data, _) = content else { return }
+        guard case let .image(data, _) = content, enrichmentTasks[itemID] == nil else { return }
         let extract = extractImageText
         enrichmentTasks[itemID] = Task { [weak self] in
             defer { self?.enrichmentTasks[itemID] = nil }
@@ -513,12 +514,12 @@ final class ClipboardManager {
             pasteboard.setString(text, forType: .string)
         }
 
-        let pendingRemoval = applySecretRetentionPolicy(to: item) || item.isSensitive
-        if history.insert(item) {
+        if let retained = history.insert(item) {
+            let pendingRemoval = applySecretRetentionPolicy(to: retained) || retained.isSensitive
             history.trimToMaxSize()
             if pendingRemoval {
                 scheduleSecureAutoRemoval(
-                    itemID: item.id,
+                    itemID: retained.id,
                     timeout: settingsManager?.secureTimeout ?? SettingsManager.defaultSecureTimeout
                 )
             } else {

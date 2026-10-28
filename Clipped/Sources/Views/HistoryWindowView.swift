@@ -400,6 +400,7 @@ struct SourceAppGroup: Identifiable, Hashable {
 extension HistoryCategory {
     /// Buckets `items` by their source app, ordered by item count descending then name
     /// so the busiest apps surface first. Items without a `sourceAppName` are skipped.
+    @MainActor
     static func sourceAppGroups(from items: [ClipboardItem]) -> [SourceAppGroup] {
         var counts: [String: Int] = [:]
         var bundleIDs: [String: String] = [:]

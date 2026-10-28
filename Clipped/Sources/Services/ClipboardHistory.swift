@@ -105,24 +105,48 @@ final class ClipboardHistory {
 
     // MARK: - Mutation
 
-    /// Insert a new item at the top, replacing any existing unpinned item with identical content.
+    /// Return the item retained at the top, or nil when identical content is already pinned.
     @discardableResult
-    func insert(_ item: ClipboardItem) -> Bool {
+    func insert(_ item: ClipboardItem) -> ClipboardItem? {
         // Re-copying content that's already pinned shouldn't spawn a duplicate unpinned row.
         if pinnedItems.contains(where: { $0.content == item.content }) {
-            return false
+            return nil
         }
 
-        // Carry the previous copy's enriched metadata (link preview, OCR text) onto the new item
-        // so a re-copy doesn't discard work already done for identical content.
+        let retained: ClipboardItem
         if let existing = items.first(where: { $0.content == item.content }) {
-            item.linkTitle = item.linkTitle ?? existing.linkTitle
-            item.linkFavicon = item.linkFavicon ?? existing.linkFavicon
-            item.extractedText = item.extractedText ?? existing.extractedText
+            mergeRecopy(item, into: existing)
+            retained = existing
+        } else {
+            retained = item
         }
         items.removeAll { $0.content == item.content }
-        items.insert(item, at: 0)
-        return true
+        items.insert(retained, at: 0)
+        return retained
+    }
+
+    private func mergeRecopy(_ incoming: ClipboardItem, into retained: ClipboardItem) {
+        retained.timestamp = incoming.timestamp
+        retained.sourceAppName = incoming.sourceAppName
+        retained.sourceAppBundleID = incoming.sourceAppBundleID
+        retained.isSensitive = retained.isSensitive || incoming.isSensitive
+        retained.containsSecret = retained.containsSecret || incoming.containsSecret
+        retained.isAwaitingImageText = retained.isAwaitingImageText || incoming.isAwaitingImageText
+        retained.isDeveloperContent = retained.isDeveloperContent || incoming.isDeveloperContent
+        retained.detectedCategories.formUnion(incoming.detectedCategories)
+        retained.linkTitle = incoming.linkTitle ?? retained.linkTitle
+        retained.linkFavicon = incoming.linkFavicon ?? retained.linkFavicon
+        retained.extractedText = incoming.extractedText ?? retained.extractedText
+        retained.htmlData = incoming.htmlData ?? retained.htmlData
+        if let types = incoming.customPasteboardTypes {
+            retained.customPasteboardTypes = (retained.customPasteboardTypes ?? [:]).merging(types) { _, new in new }
+        }
+        if let original = incoming.originalContent {
+            retained.originalContent = original
+            retained.mutationsApplied = incoming.mutationsApplied
+        } else if retained.mutationsApplied.isEmpty {
+            retained.mutationsApplied = incoming.mutationsApplied
+        }
     }
 
     func togglePin(_ item: ClipboardItem) {
