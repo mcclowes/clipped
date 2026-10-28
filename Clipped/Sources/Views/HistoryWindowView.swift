@@ -23,28 +23,32 @@ struct HistoryWindowView: View {
     @State private var summaryPhase: SummaryPopover.Phase?
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
+        let allItems = manager.pinnedItems + manager.items
+        let displayedItems = items(for: selectedCategory, query: searchQuery, allItems: allItems)
+        let selectedItem = selectedItemID.flatMap { id in allItems.first { $0.id == id } }
+
+        return NavigationSplitView {
+            sidebar(allItems: allItems)
         } content: {
-            itemList
+            itemList(displayedItems: displayedItems, selectedItem: selectedItem)
         } detail: {
-            detailPane
+            detailPane(selectedItem: selectedItem)
         }
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 780, minHeight: 460)
         .onChange(of: selectedCategory) {
             // Reset the selected item whenever the category changes so the detail pane
             // doesn't continue showing something that isn't in the current list.
-            selectedItemID = displayedItems.first?.id
+            selectedItemID = currentDisplayedItems.first?.id
         }
         .onChange(of: searchQuery) {
-            if let id = selectedItemID, !displayedItems.contains(where: { $0.id == id }) {
-                selectedItemID = displayedItems.first?.id
+            if let id = selectedItemID, !currentDisplayedItems.contains(where: { $0.id == id }) {
+                selectedItemID = currentDisplayedItems.first?.id
             }
         }
         .onAppear {
             if selectedItemID == nil {
-                selectedItemID = displayedItems.first?.id
+                selectedItemID = currentDisplayedItems.first?.id
             }
         }
         .task {
@@ -54,18 +58,40 @@ struct HistoryWindowView: View {
 
     // MARK: - Sidebar
 
-    private var sidebar: some View {
-        List(selection: $selectedCategory) {
+    private func sidebar(allItems: [ClipboardItem]) -> some View {
+        let appGroups = HistoryCategory.sourceAppGroups(from: allItems)
+
+        return List(selection: $selectedCategory) {
             Section("Library") {
-                sidebarRow(.all, label: "All Items", systemImage: "clock", count: totalCount)
+                sidebarRow(.all, label: "All Items", systemImage: "clock", count: allItems.count)
                 sidebarRow(.pinned, label: "Pinned", systemImage: "pin.fill", count: manager.pinnedItems.count)
             }
 
             Section("Content") {
-                sidebarRow(.text, label: "Text", systemImage: "doc.text", count: count(for: .text))
-                sidebarRow(.urls, label: "Links", systemImage: "link", count: count(for: .urls))
-                sidebarRow(.images, label: "Images", systemImage: "photo", count: count(for: .images))
-                sidebarRow(.developer, label: "Developer", systemImage: "curlybraces", count: count(for: .developer))
+                sidebarRow(
+                    .text,
+                    label: "Text",
+                    systemImage: "doc.text",
+                    count: items(for: .text, allItems: allItems).count
+                )
+                sidebarRow(
+                    .urls,
+                    label: "Links",
+                    systemImage: "link",
+                    count: items(for: .urls, allItems: allItems).count
+                )
+                sidebarRow(
+                    .images,
+                    label: "Images",
+                    systemImage: "photo",
+                    count: items(for: .images, allItems: allItems).count
+                )
+                sidebarRow(
+                    .developer,
+                    label: "Developer",
+                    systemImage: "curlybraces",
+                    count: items(for: .developer, allItems: allItems).count
+                )
             }
 
             if !appGroups.isEmpty {
@@ -127,7 +153,7 @@ struct HistoryWindowView: View {
 
     // MARK: - Item list
 
-    private var itemList: some View {
+    private func itemList(displayedItems: [ClipboardItem], selectedItem: ClipboardItem?) -> some View {
         List(selection: $selectedItemID) {
             ForEach(displayedItems) { item in
                 HistoryItemRow(item: item)
@@ -152,7 +178,7 @@ struct HistoryWindowView: View {
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Button {
-                    if let item = selectedItem {
+                    if let item = currentSelectedItem {
                         manager.togglePin(item)
                     }
                 } label: {
@@ -165,9 +191,9 @@ struct HistoryWindowView: View {
                 .help(selectedItem?.isPinned == true ? "Unpin selected item" : "Pin selected item")
 
                 Button(role: .destructive) {
-                    if let item = selectedItem {
+                    if let item = currentSelectedItem {
                         manager.removeItem(item)
-                        selectedItemID = displayedItems.first?.id
+                        selectedItemID = currentDisplayedItems.first?.id
                     }
                 } label: {
                     Label("Delete", systemImage: "trash")
@@ -218,7 +244,7 @@ struct HistoryWindowView: View {
         Button("Delete", role: .destructive) {
             manager.removeItem(item)
             if selectedItemID == item.id {
-                selectedItemID = displayedItems.first?.id
+                selectedItemID = currentDisplayedItems.first?.id
             }
         }
     }
@@ -269,7 +295,7 @@ struct HistoryWindowView: View {
     // MARK: - Detail pane
 
     @ViewBuilder
-    private var detailPane: some View {
+    private func detailPane(selectedItem: ClipboardItem?) -> some View {
         if let item = selectedItem {
             HistoryDetailView(item: item) {
                 manager.copyToClipboard(item)
@@ -298,28 +324,20 @@ struct HistoryWindowView: View {
 
     // MARK: - Data
 
-    private var totalCount: Int {
-        manager.items.count + manager.pinnedItems.count
-    }
-
-    private var appGroups: [SourceAppGroup] {
-        HistoryCategory.sourceAppGroups(from: manager.pinnedItems + manager.items)
-    }
-
-    private func count(for category: HistoryCategory) -> Int {
-        items(for: category).count
-    }
-
-    private func items(for category: HistoryCategory, query: String = "") -> [ClipboardItem] {
-        let source = category == .pinned ? manager.pinnedItems : manager.pinnedItems + manager.items
+    private func items(
+        for category: HistoryCategory,
+        query: String = "",
+        allItems: [ClipboardItem]
+    ) -> [ClipboardItem] {
+        let source = category == .pinned ? manager.pinnedItems : allItems
         return ClipboardFilter.apply(to: source, query: query, matching: category.includes)
     }
 
-    private var displayedItems: [ClipboardItem] {
-        items(for: selectedCategory, query: searchQuery)
+    private var currentDisplayedItems: [ClipboardItem] {
+        items(for: selectedCategory, query: searchQuery, allItems: manager.pinnedItems + manager.items)
     }
 
-    private var selectedItem: ClipboardItem? {
+    private var currentSelectedItem: ClipboardItem? {
         guard let id = selectedItemID else { return nil }
         return (manager.pinnedItems + manager.items).first { $0.id == id }
     }
