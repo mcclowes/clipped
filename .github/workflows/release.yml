@@ -197,7 +197,7 @@ jobs:
 
             zap trash: [
               "~/Library/Application Support/Clipped",
-              "~/Library/Preferences/com.mcclowes.Clipped.plist",
+              "~/Library/Preferences/com.mcclowes.clipped.plist",
             ]
           end
           CASKEOF
